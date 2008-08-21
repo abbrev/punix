@@ -1,0 +1,54 @@
+List of vectors used by PedroM (TI-CAS replacement OS by PpHd)
+
+Auto-ints:
+
+Int_1:	triggered at ~ 332Hz - 376Hz (HW1) or ~ 254Hz (HW2)
+	scans keys, updates key buffer
+Int_2:	triggered when the *first* unmasked key (see $600019) is *pressed*
+	only acknowledges Int2 (write any value to $60001B)
+Int_3:	Clock for int 3 ? triggered about once per second (HW1) or 1.4 seconds (HW2)
+	does nothing
+Int_4:	triggered by link hardware
+	reads link, sends data?
+Int_5:	Auto-Ints which allows the system timers. triggered at ~ 16.8Hz to 19.0 Hz (HW1) or ~ 19.2Hz (HW2) (this is programmable)
+Int_6:	ON Int (2ND / DIAMOND : off, ESC : reset)
+Int_7:	triggered on attempt to write below address 0x120 when write protection is enabled
+	fatal error (read error)
+
+Traps:
+
+BUS_ERROR:
+SPURIOUS:
+ADDRESS_ERROR:
+ILLEGAL_INSTR:
+ZERO_DIVIDE:
+CHK_INSTR:
+I_TRAPV:
+PRIVILEGE:
+TRACE:
+LINE_1010:	throws an error (fatal or ER_throwVar_reg)
+
+; If $FFF0, 
+;	~ jsr abs.l (Return address +6 / jsr to a1 ->Crash code+2 a1+(a1)
+;	Ex:	dc.w	$FFF0 dc.l JumpAdr-*
+; If $FFF2,
+;	ROM_CALL avec un word.
+;	Example: dc.w $FFF2, HeapAlloc*4
+LINE_1111:	ROM call or jump to/call address OR throw fatal error
+
+Trap_0:		idle
+Trap_1:		change interrupt mask, return old mask (security hole)
+Trap_2:		init the calc (reset)
+Trap_3:		dereference a handle to the heap (locks the handle?)
+Trap_4:		switch shell/program OR turn off calc
+Trap_5:		not defined (fatal error)
+Trap_6:		"
+Trap_7:		"
+Trap_8:		"
+Trap_10:	"
+Trap_13:	"
+Trap_14:	"
+Trap_15:	"
+Trap_9:		get address of a function or variable (any in ROM?)
+Trap_11:	not defined (display help message in status line)
+Trap_12:	go to supervisor mode and return old SR (security hole)

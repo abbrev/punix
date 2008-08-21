@@ -1,0 +1,1 @@
+LCD_MEM	30*128	0	char	# char LCD_MEM[30*128]

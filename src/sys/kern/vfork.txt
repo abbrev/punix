@@ -1,0 +1,25 @@
+vfork notes
+
+returning from a vfork (child calls either _exit or execv/execve)
+
+this is done from swtch() when switching to the vfork parent:
+
+vfork_resume()
+{
+	/* given: pp is the parent proc * */
+	pp->p_status = P_RUNNING;
+	
+	pp->p_ps &= ~PS_C; /* no error in returning to proc */
+	
+	/* in assembly, given retval (d0, the child proc's pid), pp->p_usp,
+	 * pp->p_sp, pp->p_ps, and pp->p_retaddr: */
+	set usp and sp from pp->p_usp, p_sp
+	write pp->p_retaddr and pp->p_ps onto the stack
+	return to the process!
+}
+
+vsetjmp and vlongjmp are similar to setjmp and longjmp, except they save/restore the interrupt's return address and processor status (%sr) and rte
+
+NEW! (2007-12-13)
+
+The parent process keeps its own kernel stack and allocates a new stack for the child. To set up the child's stack, the parent process builds a small trap frame (with some saved registers, %d3-%d7/%a2-%a6, possibly, the old %sr, and the return adress). Last, the parent enters the P_VFORKING state, which cannot be woken up or disturbed, and lets other processes run. When the child gets time to run, it returns (via longjmp in swtch) to the minimal trap frame and returns 0 to the user process. When the child either exits or execs, it will notice that its parent is P_VFORKING, clean itself up, and set its parent to P_RUNNING.

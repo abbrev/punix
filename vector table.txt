@@ -1,0 +1,30 @@
+68k vector table
+
+Vector	Address	Assignment
+	(Hex)
+0	000	Initial SSP
+1	004	Initial PC
+2	008	Bus error
+3	00C	Address error
+4	010	Illegal instruction
+5	014	Zero divide
+6	018	CHK instruction
+7	01C	TRAPV instruction
+8	020	Privilege violation
+9	024	Trace
+10	028	Line 1010 emulator
+11	02C	Line 1111 emulator
+12-14	030-038	Reserved by manufacturer
+15	03C	Uninitialise interrupt vector
+16-23	04C-05C	Reserved by manufacturer
+24	060	Spurious interrupt
+25	064	Level 1 interrupt autovector
+26	068	Level 2 interrupt autovector
+27	06C	Level 3 interrupt autovector
+28	070	Level 4 interrupt autovector
+29	074	Level 5 interrupt autovector
+30	078	Level 6 interrupt autovector
+31	07C	Level 7 interrupt autovector
+32-47	080-0BC	Trap instruction vectors
+48-63	0C0-0FC	Reserved by manufacturer
+64-255	100-3FC	User-assigned interrupt vectors

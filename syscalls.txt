@@ -1,0 +1,19 @@
+The way system calls work in Punix
+
+The entry point for all system calls, invoked by a "trap #0" instruction, is "_syscall" (src/sys/kern/entry.s). This is a small assembly routine that passes the system call number and user stack pointer to the C function "syscall" (src/sys/kern/syscall.c).
+
+This function gets the arguments for the system call from the user stack, gets the syscall number, and calls the respective function. On successful return from the call, syscall returns the call's return value (%d0). On error, syscall sets the carry flag in the status register (%sr) and returns the error code. The user program can know that an error occurred if carry is set. This is the general convention that BSD systems use (in contrast, Linux system calls return negative values when errors occur)
+
+On the 68k, a "trap" instruction results in the following stack layout (pardon the ASCII art):
+
+       +--------------+
+       | PC low word  |
+       +--------------+
+       | PC high word |
+       +--------------+
+%sp -> | %sr          |
+       +--------------+
+
+As shown here, the previous status register (%sr) is on the stack. When the kernel returns from the trap back to user mode (with the "rte" instruction), the processor restores the status register from the stack. This means that even C code can set or clear the carry bit by changing the value on the stack.
+
+The stack pointer (%sp) is the supervisor-mode stack pointer. The _syscall routine has to copy the user stack pointer (%usp) onto the stack so that syscall knows where the user stack is.

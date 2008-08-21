@@ -1,0 +1,3 @@
+cellrow	2	1	int	# int cellrow
+cellcol	2	1	int	# int cellcol
+#cells	60*20	0	char	# char cells[20][60]

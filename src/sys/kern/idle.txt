@@ -1,0 +1,50 @@
+; idle.asm, idles the 68k processor in the TI-89/92+/V200
+; Copyright 2003 PpHd
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+ xdef idle
+idle:
+	move.w	#$2700,SR
+	move.w	#$280,$600018
+	moveq	#$1E,d0
+	ifnd	TI89
+		bsr.s	idle_ram	; For 92+ & V200; shut dowwn flash
+	endif
+	ifd	TI89
+		move.b	d0,$600005	; Shut Down Micro-proc until an int is trigered	for 89
+		nop
+	endif
+	rte	
+
+ xref EXEC_RAM
+idle_ram:
+	;Code in ExecRam must be executed with SR = $2700.
+	lea	EXEC_RAM,a0
+	lea	__offRAM(Pc),a1
+	move.w	#(__offRAMEnd-__offRAM)/2-1,d1
+\loop		move.w	(a1)+,(a0)+
+		dbf	d1,\loop
+	jmp	EXEC_RAM
+
+__offRAM:
+	move.w	$185E00,d1		; Shut Down Flash Rom
+	move.b	d0,$600005		; Shut Down Micro-proc until an int is trigered
+	nop
+	move.w	d1,$185E00		; Enable Flash Rom
+	nop
+	nop
+	rts
+__offRAMEnd

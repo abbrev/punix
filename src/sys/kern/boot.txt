@@ -1,0 +1,10 @@
+Boot sequence
+
+initialise hardware
+initialise all variables and subsystems (call init_xxx to initialise xxx)
+start init
+ * exec /etc/init
+ * exec /bin/init
+ * exec /sbin/init
+ * exec /bin/sh (if init fails)
+ 

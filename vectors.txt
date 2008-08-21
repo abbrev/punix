@@ -1,0 +1,54 @@
+List of vectors (auto-ints and traps) to be used by Punix
+
+OSC2 is the base for timers on HW2 and higher. It runs at 2^19 Hz (524,288 KHz).
+
+Auto-ints:
+
+Int 1:	scan keyboard, update key buffer for current virtual console
+	triggered at OSC/2^11 (256 Hz)
+Int 2:	only acknowledge (write any value to $60001B)
+	triggered when first unmasked key (see $600019) is pressed
+Int 3:	nothing or clock?
+	triggered about once per second (HW1) or 1.4 seconds (HW2) ?
+Int 4:	read from and/or send to link
+	triggered by link hardware
+Int 5:	update timers
+	triggered at approx. 18 Hz (this is programmable)
+	maximum rate is OSC/2^5/2 (8192 Hz). Note: there are exactly
+	(122 + 576/8192) microseconds for each (1/8192)-second tick. Just FYI.
+Int 6:	2ND or DIAMOND: off, ESC: reset
+	triggered when ON is pressed
+Int 7:	send signal SIGSEGV?
+	triggered on attempt to write below address 0x120 when write protection
+	is enabled
+
+Traps:
+
+BUS_ERROR:	send signal SIGBUS
+SPURIOUS:	panic?
+ADDRESS_ERROR:	send signal SIGSEGV
+ILLEGAL_INSTR:	send signal SIGILL
+ZERO_DIVIDE:	send signal SIGFPE?
+CHK_INSTR:	?
+I_TRAPV:	?
+PRIVILEGE:	send signal SIGILL?
+TRACE:		send signal SIGTRACE?
+LINE_1010:	send signal SIGILL?
+LINE_1111:	floating-point emulation
+
+Trap 0:		syscall
+Trap 1:		
+Trap 2:		
+Trap 3:		
+Trap 4:		
+Trap 5:		
+Trap 6:		
+Trap 7:		
+Trap 8:		
+Trap 9:		
+Trap 10:	
+Trap 11:	
+Trap 12:	
+Trap 13:	
+Trap 14:	
+Trap 15:	

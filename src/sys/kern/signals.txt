@@ -1,0 +1,14 @@
+handle signal (in kernel space):
+	*(--(void **)usp) = return address (available in exception stack frame)
+	return address = signal_thunk
+	usp in stack frame = usp
+	...
+
+signal_thunk (in user space):
+	save sr
+	save d0
+	call user's signal handler
+	sigreturn();
+	restore d0
+	restore sr
+	return

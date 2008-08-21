@@ -1,0 +1,1 @@
+SSP_INIT=	0x4c00

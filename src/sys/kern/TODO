@@ -1,0 +1,25 @@
+Punix kernel TODO, in roughly chronological order:
+
+* finish writing process management
+	* scheduler (working but no nice/priorities)
+	* signals (some stubs are written)
+	* vfork (basic functionality works; needs to handle memory, file descriptors, etc.)
+	* exec (same as vfork; also needs to handle binary format; this depends partly on the filesystem)
+
+* write device drivers
+	* tty (working but not complete)
+	* flash (see PedroM for FlashWrite, FlashErase, etc.)
+	* link port (see PedroM)
+
+* write filesystem (log-structured filesystem)
+
+* get a working userland dev environment for "real" computers to work with kernel's conventions, eg, executable bin and lib format
+
+* write and/or adapt a small libc (look into using uClibc)
+
+* write/adapt user-land utilities/applications from BusyBox, Minix, or GNU (or possibly Uzix)
+
+* write instruction emulators to handle instructions of higher 680x0 uP's (find out the true usefulness of this)
+	* floating-point emulation
+	* bit manipulation
+	* more addressing modes

@@ -1,0 +1,11 @@
+# How should I ensure the size of proc always matches its "real" size?
+# Currently the constants in the second field are defined in mksymdefs.sh and
+# are valid as variables in arithmetic expressions in bash.
+# name	size	indirection	type
+proc	SIZEOFSTRUCTPROC*NPROC	0	struct proc	# struct proc proc[...]
+freeproc	4	1	struct proc *	# struct proc *freeproc
+allproc	4	1	struct proc *	# struct proc *allproc
+current	4	1	struct proc *	# struct proc *current
+mpid	2	1	uid_t	# uid_t mpid
+pidchecked	2	1	uid_t	# uint_t pidchecked
+insys	2	1	int	# int insys

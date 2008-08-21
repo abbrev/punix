@@ -1,0 +1,172 @@
+Filesystem on Flash notes
+2008-05-15
+
+Flash ROM is composed of 32 "pages" of 64KB each. The Punix Filesystem (PFS) will strive to wear all pages as equally as possible.
+
+Currently, in this filesystem each page contains (1) a magic number to indicate that the page was successfully erased, (2) a list of block numbers, and (3) blocks:
+
+Offset  Size             Contents
+-------+----------------+-------------------------------------------------------
+0       2                magic value
+2       1984 (496*4)     list of block numbers
+1986    62 (496/8)       pad (or allocation bitmap if it's useful)
+2048    63488 (496*128)  blocks
+
++------------------------------------+ --+
+|       magic value (2 bytes)        |   |
++------------------------------------+   |
+| list of block numbers (1984 bytes) |   |
++------------------------------------+   |
+|     pad/alloc bitmap (62 bytes)    |   |
++------------------------------------+   +-- 64 KB
+|                                    |   |
+\                                    \   |
+/        blocks (63488 bytes)        /   |
+\                                    \   |
+|                                    |   |
++------------------------------------+ --+
+
+The list of block numbers in a page ends if a value of all set bits (0xffffffff) is encountered while scanning it. This means that an empty page--and, by extension, an empty filesystem--can be scanned very quickly.
+
+When a block is obsoleted, its block number is changed to 0. This indicates that the block is dirty and cannot be used again until the entire flash page is erased (after all valid blocks are moved off the page, of course).
+
+In the filesystem code, only one "current" page at a time will be used to write new blocks (or copy old blocks). Upon mounting the filesystem, the code will search for the page that is partially used but is not full. (This can be done easily by testing the first and last block numbers in the block-number list of each page). If no such page is found, the code selects any completely free page to be the "current" page instead.
+
+To ensure that the filesystem can always "move around", the code must always ensure that the total number of free blocks is greater than or equal to the number of used blocks in the page with the least number of used blocks (possibly not counting the current page). The simplest way to ensure this is to reserve one "floating" page to be free at all times. This wastes space somewhat, but it is simple to implement.
+
+To ensure that "static" pages (pages that are full of blocks belonging to files that don't change frequently) do not cause all the other pages to wear sooner, a block from such a page should be moved occasionally to the current page. To accomplish this, the code will keep track of the "age" of each page, where age is defined (possibly) as the length of time since the last non-automatic block obsoletion. "Occasionally" means when "ticks" (the Punix equivalent to Linux's "jiffies") is equal to some particular value (say, 42).
+
+Block numbers are composed of two parts: inode number and block number (within the file). The inum is 16 bits wide, and the block number is 14 bits wide, leaving 2 bits unused in a 32-bit-wide field. The inode header (file meta-data) is found in block number 0, and inode number the inum with the bottom 2 bits masked to 0. This allows for 4 inodes to be stored in one 128-byte block (each inode occupies only 32 bytes or less). The inum field in the blkno for a file is the complete 16 bits.
+
+Inode number in a directory:
+ 15                            0
++-------------------------------+
+| 16-bit inum                   |
++-------------------------------+
+
+Inodes in a block:
+ block number:
+ 31                       18 17 |                              0
++---------------------------+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| top 14 bits of inum       |0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|
++---------------------------+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                |
+
+ inode number xxxx:xxxx:xxxx:xxyy(2) is located at 32*yy in block number xxxx:xxxx:xxxx:xx00:0000:0000:0000:0000(2)
+   +-------------------------------+
+0  | inode 0                       |
+   +-------------------------------+
+32 | inode 1                       |
+   +-------------------------------+
+64 | inode 2                       |
+   +-------------------------------+
+96 | inode 3                       |
+   +-------------------------------+
+
+ This inode storage scheme reduces the overhead of the inode header compared to storing one inode per block.
+
+Data structures:
+
+struct page {
+	unsigned short magic;
+	unsigned short alloc[31];
+	unsigned long blkno[496];
+	char block[496][128];
+};
+
+/* fields in a block number in the block number table (subject to change) */
+struct blkno_t {
+	unsigned ino     : 16;
+	unsigned blkno   : 14;
+	unsigned deleted : 1; /* deleted from FS (refcount==0) but still open */
+	unsigned pad     : 1;
+};
+
+Algorithms:
+
+Find a block number b:
+	for each page
+		for each blkno in page
+			if blkno == -1, break
+			if blkno == b, return address of block
+	return NULL
+
+Allocate a block number b:
+	if num_used_blks >= total number of blocks less one page (496 blocks)
+		return NULL // at least one page must be available
+	
+	while num_free_blks == pageinfo[min_used_page].usedblks
+		move a used block from min_used_page
+	
+	if ++currentblock >= 496
+		set currentpage to the next page that is not full (FIXME: write this)
+		set currentblock to the first free block in currentpage (FIXME: write this)
+		if min_used_page == currentblock
+			find the next min_used_page
+	
+	set (b | 0xc000) in block number table (flash write)
+	++pageinfo[currentpage].usedblks
+	--num_free_blks
+	++num_used_blks
+	//clear bit in allocation bitmap
+	return address of block on flash
+
+Mount filesystem:
+	// among other steps...
+	currentpage = NULL
+	min_used_page = 0
+	num_free_blks = 0
+	num_used_blks = 0
+	for each page
+		pageinfo[page].usedblks = pageinfo[page].dirtyblks = 0
+		if page->magic != FLASHMAGIC
+			erase page
+		
+		// count the number of used and dirty blocks
+		for each blkno in page
+			if blkno != -1
+				if blkno
+					++pageinfo[page].usedblks
+					++num_used_blks
+				else
+					++pageinfo[page].dirtyblks
+			else
+				++num_free_blks
+		if pageinfo[page].usedblks < pageinfo[min_used_page].usedblks
+			min_used_page = page
+		if pageinfo[page].usedblks == 0 && pageinfo[page].dirtyblks
+			erase page
+		if !currentpage &&
+		 pageinfo[page].usedblks + pageinfo[page].dirtyblks < 496
+			// this page is used but not full
+			currentpage = page
+		// pageinfo[page].freeblks is unnecessary as it can be computed
+	
+	if !currentpage
+		// use any completely free page as the current page
+		for each page
+			if page->blkno[0] == -1
+				currentpage = page
+				break
+		if !currentpage
+			panic("filesystem too full")
+	// also make sure we have one page free to do garbage collection
+
+Erase page p:
+	flash erase p
+	write magic value to beginning of p
+	num_free_blks += pageinfo[p].usedblks + pageinfo[p].dirtyblks
+	num_used_blks -= pageinfo[p].usedblks
+	pageinfo[p].usedblks = pageinfo[p].dirtyblks = 0
+	min_used_page = p
+
+Move a used block from page p:
+	find the first used block
+	--pageinfo[p].usedblks // must be before block allocator to work
+	--num_used_blks
+	allocate a block
+	copy block from page p to buffer
+	write buffer to new block
+	mark old block as dirty 
+	if pageinfo[p].usedblks == 0
+		erase page p
