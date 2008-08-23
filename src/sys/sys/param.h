@@ -32,11 +32,11 @@
 
 #define QUANTUM (HZ/32)
 
-#define NICEWINDOW   20
-#define CPUSCALE     64 /* give the cpu time some extra resolution */
-#define CPUTHRESHOLD (CPUSCALE * HZ/4)
-#define CPUDECAY     13 / 16
-#define CPUPRIWEIGHT NICEWINDOW / CPUTHRESHOLD
+#define CPUSCALE      64 /* give the cpu time some extra resolution */
+#define CPUMAX        (CPUSCALE * HZ/4)
+#define CPUDECAY      (CPUSCALE * 13 / 16)
+#define CPUPRIWEIGHT  1
+#define NICEPRIWEIGHT ((CPUMAX - QUANTUM * CPUSCALE) / 20)
 
 /*
  * priorities

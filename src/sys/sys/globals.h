@@ -7,6 +7,7 @@ struct globals {
 	char exec_ram[60];
 	struct timespec _walltime;
 	int _runrun;
+	int _istick;
 	int _ioport;
 	int _cputime;
 	int _updlock;
@@ -92,6 +93,7 @@ extern int updlock;
 #define G (*(struct globals *)0x5c00)
 #define walltime G._walltime
 #define runrun   G._runrun
+#define istick   G._istick
 #define ioport   G._ioport
 #define cputime  G._cputime
 #define updlock  G._updlock

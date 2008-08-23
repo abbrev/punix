@@ -114,6 +114,7 @@ struct proc {
 	int p_nice;
 	int p_cputime;	/* amount of cpu time we are using (decaying time) */
 	int p_pri;	/* run priority, calculated from cpuusage and nice */
+	int p_basepri;	/* base priority */
 	
 	/* execution state */
 	jmp_buf p_ssav;	/* for swapping procs */

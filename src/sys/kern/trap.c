@@ -106,8 +106,10 @@ out:
 				psignal(&P, SIGVTALRM);
 		
 		/* preempt a running user process */
-		if (runrun)
+		if (runrun) {
+			++istick;
 			swtch();
+		}
 		
 		if (issig())
 			psig();

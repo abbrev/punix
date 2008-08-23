@@ -122,8 +122,8 @@ STARTUP(int issig(void))
 		P.p_sig &= ~(1 << (n-1));
 	}
 	
-	return 0;
 #endif
+	return 0;
 }
 
 /*
@@ -132,27 +132,27 @@ STARTUP(int issig(void))
  *
  * This should be called only when the proc's priority is known to have changed.
  */
-STARTUP(int setpri(struct proc *pp))
+STARTUP(int setpri(struct proc *p))
 {
-	int p;
-	p = PUSER + pp->p_nice + pp->p_cputime * CPUPRIWEIGHT;
-	if (p > 127)
-		p = 127;
-	if (p < P.p_pri)
+	int pri;
+	pri = p->p_basepri + (p->p_nice * NICEPRIWEIGHT + p->p_cputime * CPUPRIWEIGHT) / CPUSCALE;
+	if (pri > 127)
+		pri = 127;
+	if (pri < P.p_pri)
 		++runrun;
-	pp->p_pri = p;
-	return p;
+	p->p_pri = pri;
+	return pri;
 }
 
 /* exponentially decay the cpu time of each process */
 STARTUP(void decaycputimes())
 {
-	struct proc *pp;
+	struct proc *p;
 	
-	for EACHPROC(pp) {
-		if (pp->p_status != P_FREE) {
-			pp->p_cputime = pp->p_cputime * CPUDECAY;
-			setpri(pp);
+	for EACHPROC(p) {
+		if (p->p_status != P_FREE) {
+			p->p_cputime = p->p_cputime * CPUDECAY;
+			setpri(p);
 		}
 	}
 }
@@ -167,19 +167,26 @@ STARTUP(static struct proc *nextready())
 {
 	struct proc *p;
 	struct proc *bestp = NULL;
+	int minnice = 20;
 	int bestpri = 128;
 	
-	for EACHPROC(p) {
-		if (p->p_status != P_RUNNING)
-			continue;
-		
-		if (p->p_pri < bestpri) {
-			bestpri = p->p_pri;
-			bestp = p;
+	do {
+		for EACHPROC(p) {
+			if (p->p_status != P_RUNNING)
+				continue;
+			if (p->p_nice >= minnice + 20)
+				continue;
+			if (p->p_nice < minnice)
+				minnice = p->p_nice;
+			
+			if (p->p_pri < bestpri) {
+				bestpri = p->p_pri;
+				bestp = p;
+			}
 		}
-	}
+	} while (bestp && bestp->p_nice >= minnice + 20);
 	
-	return p;
+	return bestp;
 }
 
 STARTUP(void swtch())
@@ -195,31 +202,32 @@ STARTUP(void swtch())
 	++*(long *)(0x4c00+0xf00-4);
 	
 	/*
-	 * When a process switches voluntarily (not during a clock tick), we
-	 * keep track of this by adding one-half of a clock tick to its cpu
-	 * time. This is based on the theory that a process will use, on
-	 * average, half of a clock tick when it voluntarily switches.
-	 * To balance the accounting, we subtract one-half clock tick from the
-	 * cpu time of the next process coming in if it doesn't get a full
-	 * first clock tick.
-	 * Doing this will (hopefully) more correctly account for the cpu usage
-	 * of processes which always switch (sleep) before the first clock tick
-	 * of their time slice. The correct solution, of course, requires using
-	 * a high-precision clock that tells us exactly how much cpu time the
+	 * When a process switches between clock ticks, we keep track of this
+	 * by adding one-half of a clock tick to its cpu time. This is based
+	 * on the theory that a process will use, on average, half of a clock
+	 * tick when it switches between ticks. To balance the accounting, we
+	 * subtract one-half clock tick from the cpu time of the next process
+	 * coming in if it doesn't get a full first clock tick. Doing this will
+	 * (hopefully) more correctly account for the cpu usage of processes
+	 * which always switch (sleep) before the first clock tick of their
+	 * time slice. The correct solution, of course, requires using a
+	 * high-precision clock that tells us exactly how much cpu time the
 	 * process uses, but we don't have a high-resolution clock. :(
 	 */
 	
 	t = 0;
 	
-	if (cputime < 2 * QUANTUM) {
-		/* we voluntarily switched, so add one-half clock tick to our
+	if (!istick) {
+		/* we switched between ticks, so add one-half clock tick to our
 		 * cpu time and subtract one from the next proc's cpu time */
 		++cputime;
 		--t;
 	}
 	
 	P.p_cputime += cputime * CPUSCALE / 2;
-	while (P.p_cputime >= CPUTHRESHOLD)
+	P.p_basepri = PUSER;
+	setpri(CURRENT);
+	while (P.p_cputime >= CPUMAX)
 		decaycputimes();
 	
 	while (!(p = nextready())) {
@@ -232,6 +240,7 @@ STARTUP(void swtch())
 	
 	cputime = t;
 	runrun = 0;
+	istick = 0;
 	
 	if (p == &P)
 		return;
@@ -250,11 +259,11 @@ STARTUP(void swtch())
 }
 
 /* sleep until event */
-/* FIXME: set the proc's priority to pri when it is awakened */
-STARTUP(void slp(void *event, int pri))
+STARTUP(void slp(void *event, int basepri))
 {
 	P.p_waitfor = event;
 	P.p_status = P_SLEEPING;
+	P.p_basepri = basepri;
 	swtch();
 	
 	if (issig()) {
@@ -265,6 +274,7 @@ STARTUP(void slp(void *event, int pri))
 
 STARTUP(int tsleep(void *event, int pri, int to))
 {
+	return 0;
 }
 
 #if 0
@@ -389,8 +399,10 @@ STARTUP(void wakeup(void *event))
 	struct proc *p;
 	
 	for EACHPROC(p) {
-		if (p->p_status == P_SLEEPING && p->p_waitfor == event)
+		if (p->p_status == P_SLEEPING && p->p_waitfor == event) {
 			p->p_status = P_RUNNING;
+			setpri(p);
+		}
 	}
 }
 
