@@ -47,6 +47,7 @@ struct globals {
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
 	
+	int contrast;
 	/* dev_vt static variables */
 	int xon;
 	int privflag;

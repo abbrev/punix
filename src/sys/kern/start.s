@@ -130,21 +130,17 @@ the_beginning:
 	bhi	BOOT_ERROR
 .endif
 	
+	move.w	#0x4C00/8,0x600010		| Set 4C00 as VRAM for HW1
+	clr.b	0x700017			| Set 4C00 as VRAM for HW2
+	
 
 |***************************************************************
 | Init the Operating System
 |***************************************************************
 
-	bra.s	0f
-	.long	0xdeadbeef		| clever, huh?
-0:
 /*
  * Initialise global variables
  */
-	move.w	#0x4C00/8,0x600010		| Set 4C00 as VRAM for HW1
-	clr.b	0x700017			| Set 4C00 as VRAM for HW2
-|	^^^ SetLCDMEM is basically these two instructions
-	
 	| XXX clear screen
 	movea	#0x4c00,%a0
 	move	#30*128/4-1,%d0

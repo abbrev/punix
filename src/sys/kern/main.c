@@ -49,6 +49,7 @@ STARTUP(void kmain())
 	
 	linkinit();
 	audioinit();
+	lcdinit();
 #if 0
 	vtinit();
 #endif

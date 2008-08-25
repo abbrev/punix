@@ -27,8 +27,8 @@ defspl	5 | audio (link port)
 |defspl	6 | on key
 defspl	7 | block everything (except memory write error)
 
-| void stop();
-.global stop
-stop:
+| void halt();
+.global halt
+halt:
 	stop	#0x2700
 	rts
