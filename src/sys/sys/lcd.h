@@ -22,9 +22,9 @@
 
 /* #include "lcdglo.h" */
 
-#define LCD_MEM		((char *)0x4c00)
+#define LCD_MEM		((volatile char *)0x4c00)
 #define LCD_INCY	30
-#define CONTRASTPORT	(*(char *)0x60001d)
+#define CONTRASTPORT	(*(volatile char *)0x60001d)
 #define CONTRASTMAX	31
 
 #ifdef	TI89

@@ -11,8 +11,8 @@
 #include "globals.h"
 
 #define SAMPLESPERBYTE 4
-#define INT5RATE (*(unsigned char *)0x600015)
-#define INT5VAL  (*(unsigned char *)0x600017)
+#define INT5RATE (*(volatile unsigned char *)0x600015)
+#define INT5VAL  (*(volatile unsigned char *)0x600017)
 
 /* ioport is the "reference count" of the IO port. When it is zero, the port
  * is available for any purpose. */
