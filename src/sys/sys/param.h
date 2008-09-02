@@ -33,7 +33,7 @@
 #define QUANTUM (HZ/32)
 
 #define CPUSCALE      64 /* give the cpu time some extra resolution */
-#define CPUMAX        (CPUSCALE * HZ/4)
+#define CPUMAX        (CPUSCALE * HZ / 4)
 #define CPUDECAY      (CPUSCALE * 13 / 16)
 #define CPUPRIWEIGHT  1
 #define NICEPRIWEIGHT ((CPUMAX - QUANTUM * CPUSCALE) / 20)

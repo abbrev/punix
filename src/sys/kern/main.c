@@ -94,6 +94,10 @@ STARTUP(void kmain())
 	P.p_uid = P.p_ruid = P.p_svuid = 0;
 	P.p_gid = P.p_rgid = P.p_svgid = 0;
 	P.p_status = P_RUNNING;
-	P.p_nice = P.p_pri = 0; /* XXX */
+	P.p_cputime = 0;
+	P.p_nice = NZERO;
+	P.p_basepri = PUSER;
+	setpri(&P);
 	cputime = 0;
+	setrun(&P);
 }

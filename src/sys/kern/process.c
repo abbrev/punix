@@ -135,9 +135,9 @@ STARTUP(int issig(void))
 STARTUP(int setpri(struct proc *p))
 {
 	int pri;
-	pri = p->p_basepri + (p->p_nice * NICEPRIWEIGHT + p->p_cputime * CPUPRIWEIGHT) / CPUSCALE;
-	if (pri > 127)
-		pri = 127;
+	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT + p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
+	if (pri > 255)
+		pri = 255;
 	if (pri < P.p_pri)
 		++runrun;
 	p->p_pri = pri;
@@ -151,7 +151,7 @@ STARTUP(void decaycputimes())
 	
 	for EACHPROC(p) {
 		if (p->p_status != P_FREE) {
-			p->p_cputime = p->p_cputime * CPUDECAY;
+			p->p_cputime = p->p_cputime * CPUDECAY / CPUSCALE;
 			setpri(p);
 		}
 	}
@@ -167,24 +167,17 @@ STARTUP(static struct proc *nextready())
 {
 	struct proc *p;
 	struct proc *bestp = NULL;
-	int minnice = 20;
-	int bestpri = 128;
+	int bestpri = 255;
 	
-	do {
-		for EACHPROC(p) {
-			if (p->p_status != P_RUNNING)
-				continue;
-			if (p->p_nice >= minnice + 20)
-				continue;
-			if (p->p_nice < minnice)
-				minnice = p->p_nice;
-			
-			if (p->p_pri < bestpri) {
-				bestpri = p->p_pri;
-				bestp = p;
-			}
+	for EACHPROC(p) {
+		if (p->p_status != P_RUNNING)
+			continue;
+		
+		if (p->p_pri < bestpri) {
+			bestpri = p->p_pri;
+			bestp = p;
 		}
-	} while (bestp && bestp->p_nice >= minnice + 20);
+	}
 	
 	return bestp;
 }
