@@ -365,3 +365,76 @@ STARTUP(void sys_getppid())
 {
 	P.p_retval = P.p_pptr->p_pid;
 }
+
+STARTUP(void sys_nice())
+{
+	struct a {
+		int inc;
+	} *ap = (struct a *)P.p_arg;
+	
+	int n;
+	if (inc < 0 && !suser())
+		return;
+	n = P.p_nice + n;
+	if (n < 0)
+		n = 0;
+	if (n > 2*NZERO - 1)
+		n = 2*NZERO - 1;
+	P.p_retval = P.p_nice = n;
+}
+
+STARTUP(static void dokill(pid_t pid, int sig))
+{
+	struct proc *p;
+	int pid;
+	int f;
+	int priv;
+	
+	f = 0;
+	pid = ap->pid;
+	priv = 0;
+	if (a == -1 && P.p_uid == 0) {
+		++priv;
+		pid = 0;
+	}
+	
+	for EACHPROC(p) {
+		if (p->p_status == P_FREE)
+			continue;
+		if (pid != 0 && p->p_pid != pid)
+			continue;
+		if (pid == 0 && ((p->p_pgrp != P.p_pgrp && priv == 0) || p <= &G.proc[1]))
+			continue;
+		if (P.p_uid != 0 && P.p_uid != p->p_uid)
+			continue;
+		++f;
+		psignal(p, ap->sig);
+	}
+	if (!f)
+		P.p_error = ESRCH;
+}
+
+STARTUP(void sys_kill())
+{
+	struct a {
+		pid_t pid;
+		int sig;
+	} *ap = (struct a *)P.p_arg;
+	
+	dokill(ap->pid, ap->sig);
+}
+
+STARTUP(void sys_killpg())
+{
+	struct a {
+		pid_t pgrp;
+		int sig;
+	} *ap = (struct a *)P.p_arg;
+	
+	if (pgrp < 1) {
+		P.p_error = EINVAL;
+		return;
+	}
+	
+	dokill(-ap->pgrp, ap->sig);
+}

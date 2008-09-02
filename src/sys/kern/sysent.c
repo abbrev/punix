@@ -45,6 +45,7 @@ void sys_setreuid();
 void sys_setregid();
 void sys_getgroups();
 void sys_setgroups();
+void sys_nice();
 
 void sys_execve();
 
@@ -103,20 +104,20 @@ STARTUP(struct sysent sysent[]) = {
 	{1, sys_close},
 	{0, sys_NONE}, /* sys_wait4 */
 	{0, sys_NONE},
-	{0, sys_link},
-	{0, sys_unlink},		/* 10 */
+	{4, sys_link},
+	{2, sys_unlink},		/* 10 */
 	{4, sys_NONE},
-	{0, sys_chdir},
-	{0, sys_fchdir},
-	{0, sys_mknod},
-	{0, sys_chmod},
-	{0, sys_chown},
+	{2, sys_chdir},
+	{1, sys_fchdir},
+	{4, sys_mknod},
+	{3, sys_chmod},
+	{4, sys_chown},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{4, sys_lseek},
 	{0, sys_getpid},	/* 20 */
-	{0, sys_mount},
-	{0, sys_umount},
+	{0, sys_mount},		/* XXX */
+	{0, sys_umount},	/* XXX */
 	{0, sys_NONE},
 	{0, sys_getuid},
 	{0, sys_geteuid},
@@ -125,16 +126,16 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},		/* 30 */
-	{0, sys_sigaction},
-	{0, sys_sigprocmask},
-	{0, sys_access},
-	{0, sys_sigpending},
-	{0, sys_sigaltstack},
+	{5, sys_sigaction},
+	{5, sys_sigprocmask},
+	{3, sys_access},
+	{1, sys_nice},
+	{2, sys_sigpending},
 	{0, sys_sync},
-	{0, sys_kill},
-	{0, sys_stat},
+	{2, sys_kill},
+	{4, sys_stat},
 	{0, sys_getlogin},
-	{0, sys_lstat},		/* 40 */
+	{4, sys_lstat},		/* 40 */
 	{1, sys_dup},
 	{0, sys_pipe},
 	{0, sys_setlogin},	/* ??? */
@@ -151,12 +152,12 @@ STARTUP(struct sysent sysent[]) = {
 	{4, sys_ioctl},
 	{3, sys_reboot},
 	{0, sys_NONE},
-	{0, sys_symlink},
-	{0, sys_readlink},
+	{4, sys_symlink},
+	{6, sys_readlink},
 	{6, sys_execve},
 	{1, sys_umask},		/* 60 */
-	{0, sys_chroot},
-	{0, sys_fstat},
+	{2, sys_chroot},
+	{3, sys_fstat},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
@@ -173,31 +174,31 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{0, sys_getgroups},
-	{0, sys_setgroups},	/* 80 */
+	{3, sys_getgroups},
+	{4, sys_setgroups},	/* 80 */
 	{0, sys_getpgrp},
 	{0, sys_setpgrp},
 	{0, sys_setitimer},
 	{0, sys_NONE}, /* sys_wait3 */
 	{0, sys_NONE},
-	{0, sys_getitimer},
+	{3, sys_getitimer},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_getdtablesize},
 	{2, sys_dup2},		/* 90 */
 	{0, sys_NONE},
-	{0, sys_fcntl},
-	{0, sys_select},
+	{4, sys_fcntl},
+	{9, sys_select},
 	{0, sys_NONE},
-	{0, sys_fsync},
-	{0, sys_NONE},
-	{0, sys_NONE},
+	{1, sys_fsync},
+	{2, sys_getpriority},
+	{3, sys_setpriority},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},		/* 100 */
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{1, sys_sigreturn},
+	{0, sys_sigreturn},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
@@ -210,34 +211,34 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{0, sys_gettimeofday},
-	{0, sys_getrusage},
+	{4, sys_gettimeofday},
+	{3, sys_getrusage},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},		/* 120 */
 	{0, sys_NONE},
-	{0, sys_settimeofday},
-	{0, sys_fchown},
-	{0, sys_fchmod},
+	{4, sys_settimeofday},
+	{3, sys_fchown},
+	{2, sys_fchmod},
 	{0, sys_NONE},
 	{2, sys_setreuid},
 	{2, sys_setregid},
-	{0, sys_rename},
-	{0, sys_truncate},
-	{0, sys_ftruncate},	/* 130 */
-	{0, sys_flock},
+	{4, sys_rename},
+	{4, sys_truncate},
+	{3, sys_ftruncate},	/* 130 */
+	{2, sys_flock},
 	{0, sys_NONE},
 	{1, sys_NONE},
-	{0, sys_shutdown},
+	{2, sys_shutdown},
 	{0, sys_NONE},
-	{0, sys_mkdir},
-	{0, sys_rmdir},
-	{0, sys_utime},
+	{3, sys_mkdir},
+	{2, sys_rmdir},
+	{4, sys_utime},
+	{4, sys_utimes},
+	{4, sys_adjtime},	/* 140 */
 	{0, sys_NONE},
-	{0, sys_adjtime},	/* 140 */
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{1, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
@@ -247,7 +248,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},		/* 150 */
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{1, sys_NONE},
+	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
@@ -259,6 +260,7 @@ STARTUP(struct sysent sysent[]) = {
 
 const int nsysent = sizeof(sysent) / sizeof(struct sysent);
 
+#if 0
 STARTUP(const char *sysname[]) = {
 	"NONE",		/* 0 */
 	"exit",
@@ -392,3 +394,4 @@ STARTUP(const char *sysname[]) = {
 	"NONE",
 	"NONE",		/* 130 */
 };
+#endif
