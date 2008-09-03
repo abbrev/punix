@@ -4,9 +4,10 @@
 /* $Id: punix.h,v 1.7 2008/01/25 20:03:42 fredfoobar Exp $ */
 
 #include <sys/types.h>
+#include "proc.h"
 
 #define OS_NAME	"Punix"
-#define OS_VERSION	"0.5"
+#define OS_VERSION	"0.6"
 
 #define STARTUP(x) \
 	x __attribute__ ((section ("_st1"))); \
@@ -55,5 +56,8 @@ int passc(int ch);
 int cpass();
 
 void kprintf(const char *, ...);
+
+int inferior(struct proc *);
+struct proc *pfind(int pid);
 
 #endif /* _SYS_PUNIX_H_ */

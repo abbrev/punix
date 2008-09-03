@@ -1,6 +1,8 @@
+#include "punix.h"
+
 int kputchar(int c);
 
-int kputs(char *s)
+STARTUP(int kputs(char *s))
 {
 	register char *i;
 	for (i = s; *i; ++i)

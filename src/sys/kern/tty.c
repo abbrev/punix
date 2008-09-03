@@ -36,27 +36,6 @@ STARTUP(void ttychars(struct tty *tp))
 	tp->t_termios.c_cc[VKILL] = CKILL;
 }
 
-STARTUP(void ttyclose(struct tty *tp))
-{
-	tp->t_pgrp = 0;
-	wflushtty(tp);
-	tp->t_state = 0;
-}
-
-STARTUP(void ttyioctl(dev_t dev, int cmd, void *cmarg))
-{
-}
-
-STARTUP(void wflushtty(struct tty *tp))
-{
-	int x = spl5();
-	while (tp->t_outq.q_count && tp->t_state & ISOPEN) {
-		slp(&tp->t_outq, TTOPRI);
-	}
-	flushtty(tp);
-	splx(x);
-}
-
 STARTUP(void flushtty(struct tty *tp))
 {
 	int x;
@@ -71,6 +50,27 @@ STARTUP(void flushtty(struct tty *tp))
 	qclear(&tp->t_rawq);
 	tp->t_delct = 0;
 	splx(x);
+}
+
+STARTUP(void wflushtty(struct tty *tp))
+{
+	int x = spl5();
+	while (tp->t_outq.q_count && tp->t_state & ISOPEN) {
+		slp(&tp->t_outq, TTOPRI);
+	}
+	flushtty(tp);
+	splx(x);
+}
+
+STARTUP(void ttyclose(struct tty *tp))
+{
+	tp->t_pgrp = 0;
+	wflushtty(tp);
+	tp->t_state = 0;
+}
+
+STARTUP(void ttyioctl(dev_t dev, int cmd, void *cmarg))
+{
 }
 
 /* XXX: rewrite this! */

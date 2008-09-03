@@ -67,4 +67,6 @@ do { \
 	} \
 } while (0)
 
+#define EACHFILE(fp) ((fp) = &G.file[0]; (fp) < &G.file[NFILE]; ++(fp))
+
 #endif	/* _SYS_FILE_H_ */

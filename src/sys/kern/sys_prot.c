@@ -149,6 +149,15 @@ STARTUP(void sys_setgid())
 		P.p_error = EPERM;
 }
 
+STARTUP(int suser())
+{
+        if (P.p_uid == 0)
+                return 1;
+
+        P.p_error = EPERM;
+        return 0;
+}
+
 /* XXX not in POSIX.1 */
 STARTUP(void sys_setgroups())
 {

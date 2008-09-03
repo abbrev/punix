@@ -199,11 +199,11 @@ STARTUP(void flstrategy(struct buf *bp))
 	fbp = getfblk(bp->b_blkno);
 	
 	if (bp->b_flags & B_READ) {
-		flread(fbp, bp);
+		flread((char *)fbp, bp);
 	} else if (bp->b_flags & B_WRITE) {
-		flwrite(fbp, bp);
+		flwrite((char *)fbp, bp);
 	} else if (bp->b_flags & B_DELETE) {
-		fldelete(fbp, bp);
+		fldelete((char *)fbp, bp);
 	}
 }
 

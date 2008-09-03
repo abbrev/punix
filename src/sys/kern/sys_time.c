@@ -2,6 +2,7 @@
 #include <sys/time.h>
 
 #include <errno.h>
+#include <utime.h>
 
 #include "punix.h"
 #include "param.h"
@@ -37,7 +38,7 @@ expire:
 		itp->it_value = itp->it_interval;
 		itp->it_value.tv_nsec += nsec;
 		if (itp->it_value.tv_nsec < 0) {
-			itp->it_value.tv_nsec += 1000000000;
+			itp->it_value.tv_nsec += 1000000000L;
 			itp->it_value.tv_sec--;
 		}
 	} else {
@@ -127,9 +128,12 @@ STARTUP(static int itimerfix(struct timespec *tv))
 	return 0;
 }
 
-STARTUP(int realitexpire(struct proc *p))
+long hzto(struct timespec *tv);
+
+STARTUP(int realitexpire(void *vp))
 {
 	int x;
+	struct proc *p = (struct proc *)vp;
 	struct itimerspec *tp = &p->p_itimer[ITIMER_REAL];
 	
 	x = spl1();
@@ -184,14 +188,16 @@ STARTUP(void sys_setitimer())
 	
 	copyin(&aitv, ap->value, sizeof(aitv));
 	
-	if (itimerfix(&aitv.it_value) || itimerfix(&aitv.it_interval)) {
+	itv.it_interval.tv_sec = aitv.it_interval.tv_sec;
+	itv.it_interval.tv_nsec = 1000 * aitv.it_interval.tv_usec;
+	itv.it_value.tv_sec = aitv.it_value.tv_sec;
+	itv.it_value.tv_nsec = 1000 * aitv.it_value.tv_usec;
+	
+	if (itimerfix(&itv.it_value) || itimerfix(&itv.it_interval)) {
 		P.p_error = EINVAL;
 		return;
 	}
 	
-	itv = *(struct itimerspec *)&aitv;
-	itv.it_interval.tv_nsec *= 1000;
-	itv.it_value.tv_nsec *= 1000;
 #if 1
 	/* round the timer's value up to the next whole tick so it doesn't
 	 * signal earlier than it should */
@@ -216,4 +222,15 @@ STARTUP(void sys_setitimer())
 	}
 	
 	splx(x);
+}
+
+/* XXX: should this go in a different file? */
+STARTUP(void sys_utime())
+{
+	struct a {
+		const char *path;
+		const struct utimebuf *times;
+	} *ap = (struct a *)P.p_arg;
+	
+	P.p_error = ENOSYS;
 }

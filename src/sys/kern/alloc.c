@@ -141,6 +141,7 @@ int badblock(struct filsys *fp, long bn, dev_t dev)
  */
 struct inode *ialloc(dev_t dev)
 {
+	return NULL;
 #if 0
 	struct filsys *fp;
 	struct buf *bp;
@@ -279,7 +280,7 @@ struct filsys *getfs(dev_t dev)
  * the mount table to initiate modified
  * super blocks.
  */
-update()
+void update()
 {
 	register struct inode *ip;
 	register struct mount *mp;

@@ -63,7 +63,6 @@
 #include "punix.h"
 #include "process.h"
 #include "filsys.h"
-#include "file.h"
 #include "inode.h"
 #include "buf.h"
 #include "dev.h"
@@ -71,14 +70,14 @@
 #include "globals.h"
 
 
-STARTUP(struct file *getf(int f))
+STARTUP(struct file *getf(int fd))
 {
-	struct file *fp;
+	struct file *fp = NULL;
 	
-	if ((unsigned)f >= NOFILE || (fp = P.p_ofile[f])) {
+	if ((unsigned)fd < NOFILE)
+		fp = P.p_ofile[fd];
+	if (!fp)
 		P.p_error = EBADF;
-		return NULL;
-	}
 	
 	return fp;
 }
@@ -181,26 +180,19 @@ bad:
 	return 1;
 }
 
-STARTUP(int suser())
-{
-	if (P.p_uid == 0)
-		return 1;
-	
-	P.p_error = EPERM;
-	return 0;
-}
-
-/* allocate a process file descriptor */
+/* allocate a file descriptor */
 /* start searching at 'd' */
 STARTUP(int ufalloc(int d))
 {
 	/* look for lowest free fd */
 	for (; d < NOFILE; ++d) {
 		if (P.p_ofile[d] == NULL) {
-			P.p_retval = d; /* do we need this? */
+			P.p_retval = d;
 			P.p_oflag[d] = 0;
+#if 0
 			if (d > P.p_lastfile)
 				P.p_lastfile = d;
+#endif
 			return d;
 		}
 	}
@@ -209,8 +201,8 @@ STARTUP(int ufalloc(int d))
 	return -1;
 }
 
-/* allocate a user file descriptor and a file structure */
-/* NOTE! this returns the fd, instead of the fp as in V6 */
+/* allocate a file descriptor and a file structure */
+/* NOTE! this returns the fd instead of the fp as in V6 */
 STARTUP(int falloc())
 {
 	struct file *fp;
@@ -219,13 +211,14 @@ STARTUP(int falloc())
 	if ((fd = ufalloc(0)) < 0)
 		return -1;
 	
-	for (fp = &G.file[0]; fp < &G.file[NFILE]; ++fp)
+	for EACHFILE(fp) {
 		if (fp->f_count == 0) {
 			P.p_ofile[fd] = fp;
 			++fp->f_count;
 			fp->f_offset = 0;
 			return fd;
 		}
+	}
 	kprintf("no file\n");
 	P.p_error = ENFILE;
 	return -1;

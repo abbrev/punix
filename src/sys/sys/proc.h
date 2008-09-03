@@ -61,6 +61,7 @@
 #include <time.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <limits.h>
 #include <stdint.h>
 #include <setjmp.h>
@@ -109,6 +110,7 @@ struct stackframe {
 struct proc {
 	struct proc *p_next;
 	char p_status;	/* stopped, ready, running, zombie, etc. */
+	int p_flag;
 	
 	/* scheduling */
 	int p_nice;
@@ -134,6 +136,9 @@ struct proc {
 	size_t p_stacksize;
 	size_t p_textsize;
 	size_t p_datasize;
+	
+	struct rusage p_rusage;
+	struct rlimit p_rlimit[7]; /* CONSTANT */
 	
 	/* id */
 	pid_t p_pid;		/* process id */
@@ -213,17 +218,22 @@ struct proc {
 	char p_name[16];	/* name of the process */
 	
 	/* zombie */
-	short p_xstat;		/* exit status */
+	int p_xstat;		/* exit status */
 };
 
+/* states for p_status */
 /* are these all good? */
 #define P_FREE		0	/* slot is empty */
 #define	P_FORKING	1	/* process is blocked by child */
 #define P_RUNNING	2
 #define P_SLEEPING	3	/* waiting for an event */
 #define P_STOPPED	4	/**/
-#define P_TRACED	5
-#define P_ZOMBIE	6
-#define P_VFORKING	7
+#define P_ZOMBIE	5
+#define P_VFORKING	6
+
+/* flags for p_flag */
+#define P_TRACED  001 /* process is being traced */
+#define P_WAITED  002 /* set if parent received this proc's status already */
+#define P_TIMEOUT 004 /* tsleep timeout */
 
 #endif /* _SYS_PROC_H_ */

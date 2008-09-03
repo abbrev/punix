@@ -52,6 +52,7 @@ STARTUP(void trace())
 STARTUP(void hardclock(unsigned short ps))
 {
 	struct callout *c1, *c2;
+	int itimerdecr(struct itimerspec *itp, long nsec);
 	
 	/* nsec cannot get up to or over 1e9 (one second); we just have to wait
 	 * for the RTC to catch up to us */
@@ -59,6 +60,14 @@ STARTUP(void hardclock(unsigned short ps))
 		walltime.tv_nsec += TICK;
 		if (walltime.tv_nsec < 0)
 			walltime.tv_nsec = 0;
+	}
+	
+	if ((walltime.tv_sec % 5) == 0 && walltime.tv_nsec < TICK) {
+		struct proc *p;
+		int n = 0;
+		for EACHPROC(p)
+			if (p->p_status == P_RUNNING) ++n;
+		loadav(G.loadavg, n);
 	}
 	
 	/* do call-outs */

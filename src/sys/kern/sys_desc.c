@@ -71,20 +71,6 @@
 #include "queue.h"
 #include "globals.h"
 
-#if 0
-STARTUP(static struct file *getf(f))
-{
-	struct file *fp;
-	
-	if ((unsigned)f >= NOFILE || (fp = P.p_ofile[f])) {
-		P.p_error = EBADF;
-		return NULL;
-	}
-	
-	return fp;
-}
-#endif
-
 STARTUP(void sys_getdtablesize())
 {
 	P.p_retval = NOFILE;
@@ -100,7 +86,6 @@ STARTUP(static void rdwr(int mode))
 {
 	struct rdwra *ap = (struct rdwra *)P.p_arg;
 	struct file *fp;
-	struct inode *ip;
 	
 	GETF(fp, ap->fd);
 	
@@ -118,7 +103,6 @@ STARTUP(static void rdwr(int mode))
 			P.p_error = EINTR;
 			return;
 		} else {
-			P.p_error = 0;
 			goto out;
 		}
 	}
@@ -129,7 +113,7 @@ STARTUP(static void rdwr(int mode))
 		else
 			writep(fp);
 	} else {
-		ip = fp->f_inode;
+		struct inode *ip = fp->f_inode;
 		P.p_offset = fp->f_offset;
 		
 		if (!(ip->i_mode & IFCHR))
@@ -157,9 +141,9 @@ STARTUP(void sys_read(void))
 /* FIXME: write is just a quick hack to produce results */
 STARTUP(void sys_write())
 {
+#if 1
 	struct rdwra *ap = (struct rdwra *)P.p_arg;
 	
-#if 1
 	int kputchar(int c);
 	char *buf;
 	size_t count;
@@ -270,8 +254,10 @@ STARTUP(void sys_close())
 	GETF(fp, ap->fd);
 	P.p_ofile[ap->fd] = NULL;
 	
+#if 0
 	while (P.p_lastfile >= 0 && P.p_ofile[P.p_lastfile] == NULL)
 		--P.p_lastfile;
+#endif
 	
 	closef(fp);
 }

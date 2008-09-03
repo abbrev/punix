@@ -117,7 +117,7 @@ STARTUP(void audiointr())
 	
 	if (!G.audiosamples) {
 		if ((G.audiosamp = getc(&G.audioq)) < 0)
-			G.audiosamp = 0; /* play silence anyway */
+			return;
 		
 		G.audiosamples = SAMPLESPERBYTE;
 	}

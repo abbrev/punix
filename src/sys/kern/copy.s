@@ -9,10 +9,10 @@
 
 .section _st1, "x"
 
-/* copyout(void *dest, void *src, size_t count) */
+/* int copyout(void *dest, void *src, size_t count) */
 copyout:
 
-/* copyin(void *dest, void *src, size_t count) */
+/* int copyin(void *dest, void *src, size_t count) */
 copyin:
 	move.l	4(%sp),%a0	| dest
 	move.l	8(%sp),%a1	| src

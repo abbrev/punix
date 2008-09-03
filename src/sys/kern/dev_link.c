@@ -88,6 +88,10 @@ STARTUP(void linkwrite(dev_t dev))
 	}
 }
 
+/*
+ * FIXME: do rxon() to resume receiving when buffer has room to accept more
+ * data and txon() to resume transmitting when buffer has more data.
+ */
 STARTUP(void linkintr())
 {
 	int status;

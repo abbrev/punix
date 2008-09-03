@@ -28,6 +28,8 @@
 #include "inode.h"
 #include "globals.h"
 #include "process.h"
+#include "link.h"
+#include "audio.h"
 
 int kputs(char *);
 
@@ -63,14 +65,13 @@ STARTUP(void kmain())
 	
 	kputs(OS_NAME " v" OS_VERSION "\n");
 	kputs(
-			"Copyright 2005-2008 Christopher Williams\n"
-			"Email: abbrev@gmail.com\n"
-			"Some portions copyright 2003, 2005 PpHd\n"
-			"\n"
-			"This program comes with ABSOLUTELY NO WARRANTY.\n"
-			"You may redistribute copies of this program\n"
-			"under the terms of the GNU General Public License.\n"
-			"\n");
+	 "Copyright 2005-2008 Christopher Williams <abbrev@gmail.com>\n"
+	 "Some portions copyright 2003, 2005 PpHd\n"
+	 "\n"
+	 "This program comes with ABSOLUTELY NO WARRANTY.\n"
+	 "You may redistribute copies of this program\n"
+	 "under the terms of the GNU General Public License.\n"
+	 "\n");
 	
 	/* initialize core (setup heap and memory resources) */
 	
@@ -97,6 +98,11 @@ STARTUP(void kmain())
 	P.p_cputime = 0;
 	P.p_nice = NZERO;
 	P.p_basepri = PUSER;
+	
+	/* FIXME: move this to an appropriate place */
+	for (i = 0; i < 7; ++i)
+		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
+	
 	setpri(&P);
 	cputime = 0;
 	setrun(&P);

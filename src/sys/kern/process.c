@@ -459,3 +459,26 @@ retry:
 	
 	return G.mpid;
 }
+
+/*
+ * Is p an inferior of the current process?
+ */
+STARTUP(int inferior(struct proc *p))
+{
+
+        for (; p != &P; p = p->p_pptr)
+                if (!p->p_pptr)
+                        return 0;
+        return 1;
+}
+
+/* find the process with the given process id, or NULL if none is found */
+STARTUP(struct proc *pfind(pid_t pid))
+{
+	struct proc *p;
+	for EACHPROC(p)
+		if (p->p_status != P_FREE && p->p_pid == pid)
+			return p;
+	
+	return NULL;
+}

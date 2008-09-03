@@ -12,6 +12,7 @@ struct globals {
 	int _cputime;
 	int _updlock;
 	int lowestpri;
+	unsigned long loadavg[3];
 	
 	int audiosamp; /* current samples */
 	int audiosamples; /* number of samples within that byte */
@@ -42,7 +43,7 @@ struct globals {
 	struct proc proc[NPROC];
 	struct proc *freeproc;
 	struct proc *current;
-	struct file *file[NFILE];
+	struct file file[NFILE];
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];

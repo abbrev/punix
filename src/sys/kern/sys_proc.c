@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 
 #include "setjmp.h"
 #include "proc.h"
@@ -114,7 +115,7 @@ STARTUP(void sys_execve())
 	/*
 	 * XXX: this version does not load the binary from a file, allocate
 	 * memory, or any of that fun stuff (as these capabilities have not
-	 * been implemented in Punix yet.
+	 * been implemented in Punix yet).
 	 */
 	
 	
@@ -215,7 +216,7 @@ STARTUP(void sys_exit())
 	if (P.p_pid == 1)
 		panic("process 1 exited");
 	
-	CURRENT->p_xstat = ap->status;
+	CURRENT->p_xstat = ap->status << 8;
 	/* clean up resources used by proc */
 	/*
 	 * we probably don't need to free memory allocations, as we probably
@@ -246,6 +247,7 @@ STARTUP(void sys_vfork())
 	struct proc *cp = NULL;
 	pid_t pid;
 	void *sp = NULL;
+	void setup_env(jmp_buf env, struct trapframe *tfp, long *sp);
 	
 	goto nomem; /* XXX: remove this once vfork is completely written */
 	
@@ -285,29 +287,76 @@ nomem:
 	P.p_error = ENOMEM;
 }
 
-STARTUP(static int wait4(
+STARTUP(static void dowait4(
 		pid_t pid,
 		int *status,
 		int options,
 		struct rusage *rusage))
 {
-	/* struct proc *p; */
+	struct proc *p;
+	int nfound = 0;
+	int s;
+	struct rusage r;
+	int error;
 	
-	/* FIXME: write this */
+loop:
+	for EACHPROC(p)
+	if (p->p_pptr == &P) {
+		if (pid > 0) {
+			if (p->p_pid != pid) continue;
+		} else if (pid == 0) {
+			if (p->p_pgrp != P.p_pgrp) continue;
+		} else if (pid < (pid_t)-1) {
+			if (p->p_pgrp != -pid) continue;
+		}
+		++nfound;
+		if ((P.p_sigaction[SIGCHLD].sa_flags & SA_NOCLDWAIT)
+		    || P.p_sigaction[SIGCHLD].sa_handler == SIG_IGN) {
+			continue;
+		}
+		if ((options & WCONTINUED) && p->p_status == P_RUNNING && (p->p_flag & P_WAITED)) {
+			/* return with this proc */
+			p->p_status &= ~P_WAITED;
+			goto found;
+		}
+		if ((options & WUNTRACED) && p->p_status == P_STOPPED && !(p->p_flag & P_WAITED)) {
+			/* return with this proc */
+			p->p_status |= P_WAITED;
+			goto found;
+		}
+		if (p->p_status == P_ZOMBIE) {
+			/* FIXME: free this proc for use by new processes */
+			goto found;
+		}
+	}
 	
-	/* wait here while no child is a zombie or stopped */
+	if (!nfound) {
+		P.p_error = ECHILD;
+		return;
+	}
+	if (options & WNOHANG) {
+		return;
+	}
+	error = tsleep(&P, PWAIT|PCATCH, 0);
+	if (!error) goto loop;
+	return;
 	
+found:
+	P.p_retval = p->p_pid;
 	if (status) {
-		/* fill in status */
+		if (copyout(status, &p->p_xstat, sizeof(s)))
+			P.p_error = EFAULT;
 	}
 	
 	if (rusage) {
 		/* fill in rusage */
+		if (copyout(rusage, &p->p_rusage, sizeof(r)))
+			P.p_error = EFAULT;
 	}
 	
-	P.p_error = ECHILD;
-	
-	return P.p_error;
+	if (p->p_status == P_ZOMBIE) {
+		/* FIXME: free this proc */
+	}
 }
 
 /* first arg is the same as wait */
@@ -328,13 +377,13 @@ struct wait4a {
 STARTUP(void sys_wait())
 {
 	struct wait3a *ap = (struct wait3a *)P.p_arg;
-	wait4(-1, ap->status, 0, NULL);
+	dowait4(-1, ap->status, 0, NULL);
 }
 
 STARTUP(void sys_waitpid())
 {
 	struct wait4a *ap = (struct wait4a *)P.p_arg;
-	wait4(ap->pid, ap->status, ap->options, NULL);
+	dowait4(ap->pid, ap->status, ap->options, NULL);
 }
 
 /*
@@ -346,13 +395,13 @@ STARTUP(void sys_waitpid())
 STARTUP(void sys_wait3())
 {
 	struct wait3a *ap = (struct wait3a *)P.p_arg;
-	wait4(-1, ap->status, ap->options, ap->rusage);
+	dowait4(-1, ap->status, ap->options, ap->rusage);
 }
 
 STARTUP(void sys_wait4())
 {
 	struct wait4a *ap = (struct wait4a *)P.p_arg;
-	wait4(ap->pid, ap->status, ap->options, ap->rusage);
+	dowait4(ap->pid, ap->status, ap->options, ap->rusage);
 }
 #endif
 
@@ -366,75 +415,315 @@ STARTUP(void sys_getppid())
 	P.p_retval = P.p_pptr->p_pid;
 }
 
+STARTUP(static void donice(struct proc *p, int n))
+{
+
+        if (P.p_uid && P.p_ruid &&
+            P.p_uid != p->p_uid && P.p_ruid != p->p_uid) {
+                P.p_error = EPERM;
+                return;
+        }
+        if (n > PRIO_MAX)
+                n = PRIO_MAX;
+        if (n < PRIO_MIN)
+                n = PRIO_MIN;
+        if (n < p->p_nice && !suser()) {
+                P.p_error = EACCES;
+                return;
+        }
+        p->p_nice = n;
+}
+
 STARTUP(void sys_nice())
 {
 	struct a {
 		int inc;
 	} *ap = (struct a *)P.p_arg;
 	
-	int n;
-	if (inc < 0 && !suser())
-		return;
-	n = P.p_nice + n;
-	if (n < 0)
-		n = 0;
-	if (n > 2*NZERO - 1)
-		n = 2*NZERO - 1;
-	P.p_retval = P.p_nice = n;
+	donice(&P, P.p_nice + ap->inc);
+	P.p_retval = P.p_nice - NZERO;
 }
 
-STARTUP(static void dokill(pid_t pid, int sig))
+STARTUP(void sys_getpriority())
 {
+	struct a {
+		int which;
+		id_t who;
+	} *ap = (struct a *)P.p_arg;
 	struct proc *p;
-	int pid;
-	int f;
-	int priv;
+	pid_t pgrp;
+	uid_t uid;
+	int nice = PRIO_MAX + 1;
 	
-	f = 0;
-	pid = ap->pid;
-	priv = 0;
-	if (a == -1 && P.p_uid == 0) {
-		++priv;
-		pid = 0;
+	switch (ap->which) {
+	case PRIO_PROCESS:
+		if (ap->who == 0) /* current process */
+			p = &P;
+		else
+			p = pfind(ap->who);
+		
+		if (p)
+			nice = p->p_nice;
+		break;
+	case PRIO_PGRP:
+		pgrp = ap->who;
+		if (pgrp == 0) /* current process group */
+			pgrp = P.p_pgrp;
+		
+		for EACHPROC(p) {
+			if (p->p_pgrp == pgrp && p->p_nice < nice)
+				nice = p->p_nice;
+		}
+		break;
+	case PRIO_USER:
+		uid = ap->who;
+		if (uid == 0) /* current user */
+			uid = P.p_uid;
+		
+		for EACHPROC(p) {
+			if (p->p_uid == uid && p->p_nice < nice)
+				nice = p->p_nice;
+		}
+		break;
+	default:
+		P.p_error = EINVAL;
 	}
 	
-	for EACHPROC(p) {
-		if (p->p_status == P_FREE)
-			continue;
-		if (pid != 0 && p->p_pid != pid)
-			continue;
-		if (pid == 0 && ((p->p_pgrp != P.p_pgrp && priv == 0) || p <= &G.proc[1]))
-			continue;
-		if (P.p_uid != 0 && P.p_uid != p->p_uid)
-			continue;
-		++f;
-		psignal(p, ap->sig);
-	}
-	if (!f)
+	if (nice <= PRIO_MAX)
+		P.p_retval = nice - NZERO;
+	else
 		P.p_error = ESRCH;
+}
+
+STARTUP(void sys_setpriority())
+{
+	struct a {
+		int which;
+		id_t who;
+		int value;
+	} *ap = (struct a *)P.p_arg;
+	struct proc *p;
+	pid_t pgrp;
+	uid_t uid;
+	int found = 0;
+	
+	switch (ap->which) {
+	case PRIO_PROCESS:
+		if (ap->who == 0) /* current process */
+			p = &P;
+		else
+			p = pfind(ap->who);
+		
+		if (p) {
+			++found;
+			donice(p, ap->value);
+		}
+		break;
+	case PRIO_PGRP:
+		pgrp = ap->who;
+		if (pgrp == 0) /* current process group */
+			pgrp = P.p_pgrp;
+		
+		for EACHPROC(p) {
+			if (p->p_pgrp == pgrp) {
+				++found;
+				donice(p, ap->value);
+			}
+		}
+		break;
+	case PRIO_USER:
+		uid = ap->who;
+		if (uid == 0) /* current user */
+			uid = P.p_uid;
+		
+		for EACHPROC(p) {
+			if (p->p_uid == uid) {
+				++found;
+				donice(p, ap->value);
+			}
+		}
+		break;
+	default:
+		P.p_error = EINVAL;
+	}
+	
+	if (!found)
+		P.p_error = ESRCH;
+}
+
+STARTUP(void sys_getrlimit())
+{
+	struct a {
+		int resource;
+		struct rlimit *rlp;
+	} *ap = (struct a *)P.p_arg;
+	
+	switch (ap->resource) {
+	case RLIMIT_CPU:
+	case RLIMIT_DATA:
+	case RLIMIT_NOFILE:
+	case RLIMIT_CORE:
+	case RLIMIT_FSIZE:
+	case RLIMIT_STACK:
+	case RLIMIT_AS:
+		if (copyout(ap->rlp, &P.p_rlimit[ap->resource], sizeof(struct rlimit)))
+			P.p_error = EFAULT;
+		break;
+	default:
+		P.p_error = EINVAL;
+	}
+}
+
+STARTUP(void sys_setrlimit())
+{
+	struct a {
+		int resource;
+		const struct rlimit *rlp;
+	} *ap = (struct a *)P.p_arg;
+	
+	/* FIXME: write this! */
+	switch (ap->resource) {
+	case RLIMIT_CPU:
+		break;
+	case RLIMIT_DATA:
+		break;
+	case RLIMIT_NOFILE:
+		break;
+	case RLIMIT_CORE:
+	case RLIMIT_FSIZE:
+	case RLIMIT_STACK:
+	case RLIMIT_AS:
+	default:
+		P.p_error = EINVAL;
+	}
+}
+
+STARTUP(void sys_getrusage())
+{
+	struct a {
+		int who;
+		struct rusage *r_usage;
+	} *ap = (struct a *)P.p_arg;
+	
+	P.p_error = ENOSYS;
+	return;
+	
+	if (!ap->r_usage) {
+		P.p_error = EFAULT;
+		return;
+	}
+	
+	switch (ap->who) {
+	case RUSAGE_SELF:
+		if (copyout(ap->r_usage, &P.p_rusage, sizeof(struct rusage)))
+			P.p_error = EFAULT;
+		break;
+	case RUSAGE_CHILDREN:
+		break;
+	default:
+		P.p_error = EINVAL;
+	}
+}
+
+#if 1
+STARTUP(int cansignal(struct proc *p, int signum))
+{
+	if (P.p_uid == 0                /* c effective root */
+	    || P.p_ruid == p->p_ruid    /* c real = t real */
+	    || P.p_uid == p->p_ruid     /* c effective = t real */
+	    || P.p_ruid == p->p_uid     /* c real = t effective */
+	    || P.p_uid == p->p_uid      /* c effective = t effective */
+	    || (signum == SIGCONT && inferior(p)))
+		return 1;
+	return 0;
+}
+#else
+#define cansignal(p, s) (1)
+#endif
+
+STARTUP(static void killpg1(int sig, pid_t pgrp, int all))
+{
+        register struct proc *p;
+        int f, error = 0;
+
+        if (!all && pgrp == 0) {
+                /*
+                 * Zero process id means send to my process group.
+                 */
+                pgrp = P.p_pgrp;
+                if (pgrp == 0) {
+			P.p_error = ESRCH;
+                        return;
+		}
+        }
+	f = 0;
+        for EACHPROC(p) {
+                if ((p->p_pgrp != pgrp && !all) || p->p_pptr == NULL ||
+                    /*(p->p_flag&SSYS) || */(all && p == &P))
+                        continue;
+                if (!cansignal(p, sig)) {
+                        if (!all)
+                                error = EPERM;
+                        continue;
+                }
+                ++f;
+                if (sig)
+                        psignal(p, sig);
+        }
+        P.p_error = error ? error : (f == 0 ? ESRCH : 0);
 }
 
 STARTUP(void sys_kill())
 {
-	struct a {
-		pid_t pid;
-		int sig;
-	} *ap = (struct a *)P.p_arg;
-	
-	dokill(ap->pid, ap->sig);
+        struct a {
+                int     pid;
+                int     sig;
+        } *ap = (struct a *)P.p_arg;
+        struct proc *p;
+
+        if (ap->sig < 0 || ap->sig >= NSIG) {
+                P.p_error = EINVAL;
+		return;
+        }
+        if (ap->pid > 0) {
+
+                /* kill single process */
+                p = pfind(ap->pid);
+                if (p == 0) {
+                        P.p_error = ESRCH;
+			return;
+                }
+                if (!cansignal(p, ap->sig))
+                        P.p_error = EPERM;
+                else if (ap->sig)
+                        psignal(p, ap->sig);
+		return;
+        }
+        switch (ap->pid) {
+        case -1:                /* broadcast signal */
+                killpg1(ap->sig, 0, 1);
+                break;
+        case 0:                 /* signal own process group */
+                killpg1(ap->sig, 0, 0);
+                break;
+        default:                /* negative explicit process group */
+                killpg1(ap->sig, -ap->pid, 0);
+                break;
+        }
 }
 
 STARTUP(void sys_killpg())
 {
-	struct a {
-		pid_t pgrp;
-		int sig;
-	} *ap = (struct a *)P.p_arg;
-	
-	if (pgrp < 1) {
-		P.p_error = EINVAL;
-		return;
-	}
-	
-	dokill(-ap->pgrp, ap->sig);
+        register struct a {
+                int     pgrp;
+                int     sig;
+        } *ap = (struct a *)P.p_arg;
+        register int error = 0;
+
+        if (ap->sig < 0 || ap->sig >= NSIG) {
+                error = EINVAL;
+                goto out;
+        }
+        killpg1(ap->sig, ap->pgrp, 0);
+out:
 }

@@ -30,6 +30,7 @@ void sys_umask();
 void sys_fstat();
 void sys_ioctl();
 void sys_fcntl();
+void sys_utime();
 
 void sys_getpid();
 void sys_getppid();
@@ -46,6 +47,8 @@ void sys_setregid();
 void sys_getgroups();
 void sys_setgroups();
 void sys_nice();
+void sys_getpriority();
+void sys_setpriority();
 
 void sys_execve();
 
@@ -91,7 +94,6 @@ void sys_getdtablesize();
 #define sys_shutdown	sys_NONE
 #define sys_mkdir	sys_NONE
 #define sys_rmdir	sys_NONE
-#define sys_utime	sys_NONE
 #define sys_adjtime	sys_NONE
 
 STARTUP(struct sysent sysent[]) = {
@@ -234,7 +236,7 @@ STARTUP(struct sysent sysent[]) = {
 	{3, sys_mkdir},
 	{2, sys_rmdir},
 	{4, sys_utime},
-	{4, sys_utimes},
+	{4, sys_NONE},
 	{4, sys_adjtime},	/* 140 */
 	{0, sys_NONE},
 	{0, sys_NONE},

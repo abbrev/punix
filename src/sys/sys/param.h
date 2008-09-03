@@ -55,6 +55,9 @@
 #define	PSLEP	40
 #define	PUSER	50
 
+#define PRIMASK 0xff
+#define PCATCH  0x100
+
 #if 0
 /*
  * signals
