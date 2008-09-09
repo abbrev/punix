@@ -11,6 +11,6 @@ struct utimbuf {
 	time_t	modtime;	/* Modification time. */
 };
 
-extern int	utime(const char *__filename, const struct utimbuf *__buf);
+extern int	utime(const char *__path, const struct utimbuf *__times);
 
 #endif
