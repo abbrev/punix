@@ -11,7 +11,7 @@ SYS	= ${INCLUDE}/sys
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYS} -I${STDINC} -D__KERNEL__
+	-I${SYS} -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYS},--defsym,${CALC}= #-l
@@ -24,10 +24,10 @@ LDFLAGS	= --outputbin --flash-os #--optimize-branches --optimize-relocs \
 OBJ	=  start.o vectors.o main.o entry.o version.o calc.o
 # syscalls
 OBJ	+= syscall.o sysent.o sys_desc.o sys_proc.o sys_prot.o sys_time.o
-OBJ	+= sys_inode.o pipe.o
+OBJ	+= pipe.o
 # devices
 OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o #dev_vt.o
-OBJ	+= dev_tty.o
+OBJ	+= dev_tty.o dev_fd.o
 # helper routines
 OBJ	+= drawcell.o smallfont.o kputs.o kputchar.o scrollcell.o
 OBJ	+= copy.o fio.o
@@ -79,8 +79,6 @@ sysent.o: sysent.c ${SYS}/sysent.h
 main.o: main.c ${SYS}/proc.h ${STDINC}/assert.h
 sys_desc.o: sys_desc.c ${SYS}/proc.h ${SYS}/punix.h ${SYS}/file.h \
 		${SYS}/process.h
-sys_inode.o: sys_inode.c ${SYS}/inode.h ${SYS}/punix.h ${SYS}/file.h \
-		${SYS}/process.h # just guessing the dependencies for now
 sys_proc.o: sys_proc.c ${SYS}/proc.h ${SYS}/punix.h ${SYS}/process.h 
 sys_prot.o: sys_prot.c
 sys_time.o: sys_time.c

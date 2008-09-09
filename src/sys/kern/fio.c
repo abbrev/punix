@@ -82,10 +82,6 @@ STARTUP(struct file *getf(int fd))
 	return fp;
 }
 
-STARTUP(void closei(struct inode *ip, int rw))
-{
-}
-
 /* Internal close routine. Decrement reference count on file structure
  * and call special file close routines on last closef. */
 STARTUP(void closef(struct file *fp))
@@ -113,18 +109,20 @@ STARTUP(void closef(struct file *fp))
 	
 	switch (ip->i_mode & IFMT) {
 	case IFCHR:
-		cdevsw[major].d_close(dev, rw);
+		cdevsw[major].d_close(fp, rw);
 		break;
 	case IFBLK:
-		bdevsw[major].d_close(dev, rw);
+		bdevsw[major].d_close(fp, rw);
 	}
 }
 
-STARTUP(void openi(struct inode *ip, int rw))
+STARTUP(void openf(struct file *fp, int rw))
 {
 	dev_t dev;
 	int major;
+	struct inode *ip;
 	
+	ip = fp->f_inode;
 	dev = ip->i_dev;
 	major = MAJOR(dev);
 	
@@ -132,12 +130,12 @@ STARTUP(void openi(struct inode *ip, int rw))
 	case IFCHR:
 		if (major >= nchrdev)
 			goto bad;
-		cdevsw[major].d_open(dev, rw);
+		cdevsw[major].d_open(fp, rw);
 		break;
 	case IFBLK:
 		if (major >= nchrdev)
 			goto bad;
-		bdevsw[major].d_open(dev, rw);
+		bdevsw[major].d_open(fp, rw);
 	}
 	
 	return;

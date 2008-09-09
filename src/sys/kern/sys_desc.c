@@ -211,7 +211,7 @@ STARTUP(static void open1(struct inode *ip, int mode, int trf))
 	fp = P.p_ofile[fd];
 	fp->f_flag = mode & (FREAD|FWRITE);
 	fp->f_inode = ip;
-	openi(ip, mode & FWRITE);
+	openf(fp, mode & FWRITE);
 	if (P.p_error == 0)
 		return;
 	P.p_ofile[fd] = NULL;
