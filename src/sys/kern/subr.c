@@ -1,3 +1,5 @@
+#include <errno.h>
+
 #include "punix.h"
 #include "proc.h"
 #include "queue.h"
@@ -7,6 +9,10 @@
 /* put the character for the user's read call */
 STARTUP(int passc(int ch))
 {
+	if (!P.p_base) {
+		P.p_error = EFAULT;
+		return -1;
+	}
 	*P.p_base++ = ch;
 	++P.p_offset;
 	--P.p_count;
@@ -20,6 +26,10 @@ STARTUP(int cpass())
 	
 	if (P.p_count == 0)
 		return -1;
+	if (!P.p_base) {
+		P.p_error = EFAULT;
+		return -1;
+	}
 	ch = *P.p_base++;
 	++P.p_offset;
 	--P.p_count;

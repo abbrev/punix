@@ -63,7 +63,11 @@ STARTUP(void kmain())
 	  ++horline)
 		*horline = 0xffff;
 	
+#if 1
+	kputs(OS_NAME " build " BUILD "\n");
+#else
 	kputs(OS_NAME " v" OS_VERSION "\n");
+#endif
 	kputs(
 	 "Copyright 2005-2008 Christopher Williams <abbrev@gmail.com>\n"
 	 "Some portions copyright 2003, 2005 PpHd\n"

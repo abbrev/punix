@@ -59,9 +59,9 @@ STARTUP(void iomove(void *cp, int n, int flag))
  * the inode pointed at by the argument.
  * The actual read arguments are found
  * in the variables:
- *      u_base          core address for destination
- *      u_offset        byte offset in file
- *      u_count         number of bytes to read
+ *      p_base          core address for destination
+ *      p_offset        byte offset in file
+ *      p_count         number of bytes to read
  */
 STARTUP(void readi(struct inode *ip))
 {
