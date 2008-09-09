@@ -11,16 +11,20 @@
 #include "inode.h"
 #include "globals.h"
 
-STARTUP(void devttyopen(dev_t dev, int rw))
+/* FIXME! this probably needs to make a new inode for the tty device. even if all open files are closed, we still need to be able to open the controlling tty */
+STARTUP(void devttyopen(struct file *fp, int rw))
 {
-	if (!P.p_ttyp)
+	if (!P.p_ttyp) {
 		P.p_error = ENXIO;
+		return;
+	}
 }
 
-STARTUP(void devttyclose(dev_t dev, int rw))
+STARTUP(void devttyclose(struct file *fp, int rw))
 {
 }
 
+/* FIXME: we also have to be able to read from/write to the (previous) controlling tty even when the process detaches from its controlling tty */
 STARTUP(void devttyread(dev_t dev))
 {
 	cdevsw[MAJOR(dev)].d_read(dev);
@@ -33,5 +37,6 @@ STARTUP(void devttywrite(dev_t dev))
 
 STARTUP(void devttyioctl(dev_t dev, int cmd, void *cmarg, int flag))
 {
+	/* FIXME: handle the TIOCNOTTY ioctl command */
 	cdevsw[MAJOR(dev)].d_ioctl(dev, cmd, cmarg, flag);
 }

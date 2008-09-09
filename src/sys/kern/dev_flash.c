@@ -114,7 +114,7 @@ struct flashblock {
 /* Find the block numbered 'blkno' and return a pointer to the data portion.
  * Return NULL if this block number doesn't exist.
  */
-STARTUP(static char *getfblk(long blkno))
+STARTUP(static struct flashblock *getfblk(long blkno))
 {
 	int page, block;
 	struct flashblock *fbp;
@@ -183,12 +183,12 @@ STARTUP(static void fldelete(char *addr, struct buf *bp))
 	 * used and the block number is the same. */
 }
 
-STARTUP(void flopen())
+STARTUP(void flopen(struct file *fp))
 {
 	/* XXX: flush the cache? */
 }
 
-STARTUP(void flclose())
+STARTUP(void flclose(struct file *fp))
 {
 }
 

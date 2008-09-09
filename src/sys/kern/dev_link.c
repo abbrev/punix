@@ -22,22 +22,6 @@ STARTUP(static void rxoff()) { LINK_CONTROL &= ~LC_TRIGRX; }
 STARTUP(static void txon())  { LINK_CONTROL |=  LC_TRIGTX; }
 STARTUP(static void txoff()) { LINK_CONTROL &= ~LC_TRIGTX; }
 
-STARTUP(void linkopen(dev_t dev, int rw))
-{
-	if (ioport) {
-		P.p_error = EBUSY;
-		return;
-	}
-	
-	++ioport; /* block other uses of the IO port */
-	
-	qclear(&G.linkreadq);
-	qclear(&G.linkwriteq);
-	
-	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
-	/* XXX: anything more? */
-}
-
 STARTUP(static void flush())
 {
 	int x = spl5();
@@ -47,45 +31,6 @@ STARTUP(static void flush())
 		slp(&G.linkwriteq);
 	}
 	splx(x);
-}
-
-STARTUP(void linkclose(dev_t dev, int flag))
-{
-	flush();
-	qclear(&G.linkreadq); /* discard any unread data */
-	ioport = 0; /* free the IO port for other uses */
-}
-
-STARTUP(void linkread(dev_t dev))
-{
-	/* read up to p_count bytes from the rx queue to p_base */
-	int ch;
-	size_t count = P.p_count;
-	
-	for (; P.p_count; --P.p_count) {
-		while ((ch = getc(&G.linkreadq)) < 0) {
-			if (count == P.p_count)
-				slp(&G.linkreadq, PPIPE);
-			else /* we got some data already, so just return */
-				return;
-		}
-		*P.p_base++ = ch;
-	}
-}
-
-STARTUP(void linkwrite(dev_t dev))
-{
-	int ch;
-	
-	for (; P.p_count; --P.p_count) {
-		ch = *P.p_base++;
-		while (putc(ch, &G.linkwriteq) < 0) {
-			int x = spl5();
-			G.linklowat = QSIZE - 32; /* XXX constant */
-			slp(&G.linkwriteq, PPIPE);
-			splx(x);
-		}
-	}
 }
 
 /*
@@ -144,6 +89,61 @@ STARTUP(void linkintr())
 				spl3(); /* let other ints occur while we do wakeup */
 				wakeup(&G.linkwriteq);
 			}
+		}
+	}
+}
+
+STARTUP(void linkopen(struct file *fp, int rw))
+{
+	if (ioport) {
+		P.p_error = EBUSY;
+		return;
+	}
+	
+	++ioport; /* block other uses of the IO port */
+	
+	qclear(&G.linkreadq);
+	qclear(&G.linkwriteq);
+	
+	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
+	/* XXX: anything more? */
+}
+
+STARTUP(void linkclose(struct file *fp, int flag))
+{
+	flush();
+	qclear(&G.linkreadq); /* discard any unread data */
+	ioport = 0; /* free the IO port for other uses */
+}
+
+STARTUP(void linkread(dev_t dev))
+{
+	/* read up to p_count bytes from the rx queue to p_base */
+	int ch;
+	size_t count = P.p_count;
+	
+	for (; P.p_count; --P.p_count) {
+		while ((ch = getc(&G.linkreadq)) < 0) {
+			if (count == P.p_count)
+				slp(&G.linkreadq, PPIPE);
+			else /* we got some data already, so just return */
+				return;
+		}
+		*P.p_base++ = ch;
+	}
+}
+
+STARTUP(void linkwrite(dev_t dev))
+{
+	int ch;
+	
+	for (; P.p_count; --P.p_count) {
+		ch = *P.p_base++;
+		while (putc(ch, &G.linkwriteq) < 0) {
+			int x = spl5();
+			G.linklowat = QSIZE - 32; /* XXX constant */
+			slp(&G.linkwriteq, PPIPE);
+			splx(x);
 		}
 	}
 }

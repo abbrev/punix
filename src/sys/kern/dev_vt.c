@@ -1102,8 +1102,9 @@ STARTUP(void vtinput(int ch, struct tty *tp))
 		vtoutput(ch, tp);
 }
 
-STARTUP(void vtopen(dev_t dev, int rw))
+STARTUP(void vtopen(struct file *fp, int rw))
 {
+	dev_t dev = fp->f_inode->i_dev;
 	int minor = MINOR(dev);
 	struct tty *tp;
 	
@@ -1123,7 +1124,7 @@ STARTUP(void vtopen(dev_t dev, int rw))
 	ttyopen(dev, tp);
 }
 
-STARTUP(void vtclose(dev_t dev, int rw))
+STARTUP(void vtclose(struct file *fp, int rw))
 {
 }
 

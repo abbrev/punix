@@ -4,7 +4,7 @@
  * 
  * $Id: dev_misc.c,v 1.3 2008/04/18 02:20:09 fredfoobar Exp $
  * 
- * This implements /dev/null, /dev/zero, /dev/random, and /dev/full.
+ * This implements /dev/null, /dev/zero, /dev/full, and /dev/random.
  */
 
 #include <errno.h>
@@ -23,12 +23,9 @@
 /* device minor values */
 #define DEVNULL   0
 #define DEVZERO   1
-#define DEVRANDOM 2
-#define DEVFULL   3
-/* following are not implemented */
-#define DEVSTDIN  4
-#define DEVSTDOUT 5
-#define DEVSTDERR 6
+#define DEVFULL   2
+#define DEVRANDOM 3
+#define DEVLAST   3
 
 /*
  * a simple linear congruential pseudo-random number generator
@@ -46,10 +43,15 @@ STARTUP(void srand(unsigned s))
 	G.prngseed = s;
 }
 
-STARTUP(void miscopen(dev_t dev, int rw))
+STARTUP(void miscopen(struct file *fp, int rw))
 {
-	/* this should support DEVTTY, DEVSTDIN, DEVSTDOUT, and DEVSTDERR by
-	 * somehow re-routing to the real device. */
+	dev_t dev = fp->f_inode->i_dev;
+	int minor = MINOR(dev);
+	
+	if (minor > DEVLAST) {
+		P.p_error = ENXIO;
+		return;
+	}
 }
 
 STARTUP(void miscread(dev_t dev))
@@ -57,13 +59,17 @@ STARTUP(void miscread(dev_t dev))
 	int minor = MINOR(dev);
 	
 	switch (minor) {
-	case DEVFULL:
 	case DEVZERO:
+	case DEVFULL:
+		if (!P.p_base) {
+			P.p_error = EFAULT;
+			return;
+		}
 		memset(P.p_base, 0, P.p_count);
 		P.p_count = 0;
 		break;
 	case DEVRANDOM:
-		while (passc(rand() >> 7) >= 0) /* XXX constant */
+		while (passc((unsigned char)(rand() >> 7)) >= 0) /* XXX constant */
 			;
 		break;
 	}

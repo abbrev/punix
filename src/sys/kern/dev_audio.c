@@ -44,65 +44,12 @@ STARTUP(static void stopaudio())
 	INT5VAL = 0x00;
 }
 
-STARTUP(void audioopen(dev_t dev, int rw))
-{
-	if (ioport) {
-		P.p_error = EBUSY;
-		return;
-	}
-	
-	++ioport; /* one reference for being open */
-	
-	qclear(&G.audioq);
-	putc(0, &G.audioq);
-	startaudio();
-}
-
 STARTUP(static void dspsync())
 {
 	int x = spl5();
 	G.audiolowat = 0; /* wait until the audio queue is empty */
 	slp(&G.audioq);
 	splx(x);
-}
-
-STARTUP(void audioclose(dev_t dev, int flag))
-{
-	dspsync();
-	stopaudio();
-	ioport = 0; /* no longer open */
-}
-
-/* there is no reading from the audio device */
-STARTUP(void audioread(dev_t dev))
-{
-}
-
-/* write audio samples to the audio queue */
-STARTUP(void audiowrite(dev_t dev))
-{
-	int ch;
-	int x;
-	
-	for (; P.p_count; ++P.p_base, --P.p_count) {
-		ch = *P.p_base;
-		while (putc(ch, &G.audioq) < 0) {
-			if (!G.audioplay) /* playback is halted */
-				return;
-			
-			x = spl5(); /* prevent the audio int from trying to wake
-			             * us up before we go to sleep */
-			
-			/* FIXME: Set the low water value according to the
-			 * amount of data we're trying to write, within upper
-			 * and lower limits, of course. */
-			
-			G.audiolowat = QSIZE - 32; /* XXX constant */
-			
-			slp(&G.audioq, PAUDIO);
-			splx(x);
-		}
-	}
 }
 
 /* produce the sound! */
@@ -135,6 +82,59 @@ STARTUP(void audiointr())
 		G.audiolowat = -1;
 		spl4(); /* let other audio ints occur while we do wakeup */
 		wakeup(&G.audioq);
+	}
+}
+
+STARTUP(void audioopen(struct file *fp, int rw))
+{
+	if (ioport) {
+		P.p_error = EBUSY;
+		return;
+	}
+	
+	++ioport; /* one reference for being open */
+	
+	qclear(&G.audioq);
+	putc(0, &G.audioq);
+	startaudio();
+}
+
+STARTUP(void audioclose(struct file *fp, int flag))
+{
+	dspsync();
+	stopaudio();
+	ioport = 0; /* no longer open */
+}
+
+/* there is no reading from the audio device */
+STARTUP(void audioread(dev_t dev))
+{
+}
+
+/* write audio samples to the audio queue */
+STARTUP(void audiowrite(dev_t dev))
+{
+	int ch;
+	int x;
+	
+	for (; P.p_count; ++P.p_base, --P.p_count) {
+		ch = *P.p_base;
+		while (putc(ch, &G.audioq) < 0) {
+			if (!G.audioplay) /* playback is halted */
+				return;
+			
+			x = spl5(); /* prevent the audio int from trying to wake
+				    * us up before we go to sleep */
+			
+			/* FIXME: Set the low water value according to the
+			* amount of data we're trying to write, within upper
+			* and lower limits, of course. */
+			
+			G.audiolowat = QSIZE - 32; /* XXX constant */
+			
+			slp(&G.audioq, PAUDIO);
+			splx(x);
+		}
 	}
 }
 
