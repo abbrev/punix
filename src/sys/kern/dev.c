@@ -19,8 +19,8 @@ STARTUP(void nulldev())
 }
 
 /* FIXME: move these to their appropriate home */
-extern void flopen(dev_t, int);
-extern void flclose(dev_t, int);
+extern void flopen(struct file *, int);
+extern void flclose(struct file *, int);
 extern void flstrategy(struct buf *);
 extern const struct devtab fltab;
 
@@ -31,25 +31,27 @@ const struct bdevsw bdevsw[] = {
 
 const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
 
-void vtopen(dev_t, int), vtclose(dev_t, int);
+void vtopen(struct file *, int), vtclose(struct file *, int);
 void vtread(dev_t), vtwrite(dev_t);
 void vtioctl(dev_t, int, ...);
 
-void devttyopen(dev_t, int), devttyclose(dev_t, int);
+void devttyopen(struct file *fp, int), devttyclose(struct file *fp, int);
 void devttyread(dev_t), devttywrite(dev_t);
 void devttyioctl(dev_t, int, ...);
 
-void linkopen(dev_t, int), linkclose(dev_t, int);
+void linkopen(struct file *fp, int), linkclose(struct file *fp, int);
 void linkread(dev_t), linkwrite(dev_t);
 void linkioctl(dev_t, int, ...);
 
-void audioopen(dev_t, int), audioclose(dev_t, int);
+void audioopen(struct file *fp, int), audioclose(struct file *fp, int);
 void audioread(dev_t), audiowrite(dev_t);
 void audioioctl(dev_t, int, ...);
 
-void miscopen(dev_t, int), miscclose(dev_t, int);
+void miscopen(struct file *fp, int), miscclose(struct file *fp, int);
 void miscread(dev_t), miscwrite(dev_t);
 void miscioctl(dev_t, int, ...);
+
+void devfdopen(struct file *fp, int rw);
 
 /* eventually put the following devices into cdevsw:
  * USB port (for HW3)
@@ -62,6 +64,7 @@ const struct cdevsw cdevsw[] = {
 { devttyopen, devttyclose, devttyread, devttywrite, devttyioctl }, /* tty */
 { linkopen,   linkclose,   linkread,   linkwrite,   linkioctl   }, /* link */
 { audioopen,  audioclose,  audioread,  nulldev,     audioioctl  }, /* audio */
+{ devfdopen,  nulldev,     nulldev,    nulldev,     nulldev     }, /* fd */
 { 0, 0, 0, 0, 0 }
 };
 
