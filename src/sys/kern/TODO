@@ -1,8 +1,7 @@
 Punix kernel TODO, in roughly chronological order:
 
 * finish writing process management
-	* scheduler (working but no nice/priorities)
-	* signals (some stubs are written)
+	* signals (somewhat working but needs to be finished)
 	* vfork (basic functionality works; needs to handle memory, file descriptors, etc.)
 	* exec (same as vfork; also needs to handle binary format; this depends partly on the filesystem)
 

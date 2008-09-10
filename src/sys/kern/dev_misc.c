@@ -43,9 +43,8 @@ STARTUP(void srand(unsigned s))
 	G.prngseed = s;
 }
 
-STARTUP(void miscopen(struct file *fp, int rw))
+STARTUP(void miscopen(dev_t dev, int rw))
 {
-	dev_t dev = fp->f_inode->i_dev;
 	int minor = MINOR(dev);
 	
 	if (minor > DEVLAST) {

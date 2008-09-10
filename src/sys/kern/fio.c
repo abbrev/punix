@@ -109,10 +109,10 @@ STARTUP(void closef(struct file *fp))
 	
 	switch (ip->i_mode & IFMT) {
 	case IFCHR:
-		cdevsw[major].d_close(fp, rw);
+		cdevsw[major].d_close(dev, rw);
 		break;
 	case IFBLK:
-		bdevsw[major].d_close(fp, rw);
+		bdevsw[major].d_close(dev, rw);
 	}
 }
 
@@ -128,14 +128,39 @@ STARTUP(void openf(struct file *fp, int rw))
 	
 	switch (ip->i_mode & IFMT) {
 	case IFCHR:
+		if (major == 255) {
+			/* file descriptor pseudo-device in /dev/fd/ */
+			int fd = MINOR(dev);
+			struct inode *ip2;
+			struct file *fp2;
+			
+			fp2 = getf(fd);
+			if (!fp2 || fp == fp2) {
+				/* this fd is not open or this file is the one
+				 * we just opened */
+				goto bad;
+			}
+			ip = fp2->f_inode;
+			
+			/*
+			 * redirect this file entry so it points to the inode of the
+			 * corresponding open file
+			 */
+			iput(ip); /* put the old inode */
+			++ip2->i_count;
+			fp->f_inode = ip2;
+			/* XXX: do we have to set/check file permissions too? */
+			
+			break;
+		}
 		if (major >= nchrdev)
 			goto bad;
-		cdevsw[major].d_open(fp, rw);
+		cdevsw[major].d_open(dev, rw);
 		break;
 	case IFBLK:
 		if (major >= nchrdev)
 			goto bad;
-		bdevsw[major].d_open(fp, rw);
+		bdevsw[major].d_open(dev, rw);
 	}
 	
 	return;

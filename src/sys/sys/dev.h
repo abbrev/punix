@@ -12,8 +12,8 @@
  */
 struct	bdevsw
 {
-	void	(*d_open)(struct file *fp, int rw);
-	void	(*d_close)(struct file *fp, int rw);
+	void	(*d_open)(dev_t dev, int rw);
+	void	(*d_close)(dev_t dev, int rw);
 	void	(*d_strategy)(struct buf *);
 	const struct devtab *d_tab;
 };
@@ -35,8 +35,8 @@ extern const int nblkdev;
  */
 struct	cdevsw
 {
-	void	(*d_open)(struct file *fp, int rw);
-	void	(*d_close)(struct file *fp, int rw);
+	void	(*d_open)(dev_t dev, int rw);
+	void	(*d_close)(dev_t dev, int rw);
 	void	(*d_read)(dev_t dev);
 	void	(*d_write)(dev_t dev);
 	void	(*d_ioctl)(dev_t, int cmd, ...);

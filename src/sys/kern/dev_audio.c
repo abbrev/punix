@@ -85,7 +85,7 @@ STARTUP(void audiointr())
 	}
 }
 
-STARTUP(void audioopen(struct file *fp, int rw))
+STARTUP(void audioopen(dev_t dev, int rw))
 {
 	if (ioport) {
 		P.p_error = EBUSY;
@@ -99,7 +99,7 @@ STARTUP(void audioopen(struct file *fp, int rw))
 	startaudio();
 }
 
-STARTUP(void audioclose(struct file *fp, int flag))
+STARTUP(void audioclose(dev_t dev, int flag))
 {
 	dspsync();
 	stopaudio();

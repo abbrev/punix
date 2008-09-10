@@ -183,12 +183,12 @@ STARTUP(static void fldelete(char *addr, struct buf *bp))
 	 * used and the block number is the same. */
 }
 
-STARTUP(void flopen(struct file *fp))
+STARTUP(void flopen(dev_t dev))
 {
 	/* XXX: flush the cache? */
 }
 
-STARTUP(void flclose(struct file *fp))
+STARTUP(void flclose(dev_t dev))
 {
 }
 

@@ -93,7 +93,7 @@ STARTUP(void linkintr())
 	}
 }
 
-STARTUP(void linkopen(struct file *fp, int rw))
+STARTUP(void linkopen(dev_t dev, int rw))
 {
 	if (ioport) {
 		P.p_error = EBUSY;
@@ -109,7 +109,7 @@ STARTUP(void linkopen(struct file *fp, int rw))
 	/* XXX: anything more? */
 }
 
-STARTUP(void linkclose(struct file *fp, int flag))
+STARTUP(void linkclose(dev_t dev, int flag))
 {
 	flush();
 	qclear(&G.linkreadq); /* discard any unread data */

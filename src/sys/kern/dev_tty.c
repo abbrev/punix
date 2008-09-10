@@ -12,7 +12,7 @@
 #include "globals.h"
 
 /* FIXME! this probably needs to make a new inode for the tty device. even if all open files are closed, we still need to be able to open the controlling tty */
-STARTUP(void devttyopen(struct file *fp, int rw))
+STARTUP(void devttyopen(dev_t dev, int rw))
 {
 	if (!P.p_ttyp) {
 		P.p_error = ENXIO;
@@ -20,7 +20,7 @@ STARTUP(void devttyopen(struct file *fp, int rw))
 	}
 }
 
-STARTUP(void devttyclose(struct file *fp, int rw))
+STARTUP(void devttyclose(dev_t dev, int rw))
 {
 }
 

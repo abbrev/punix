@@ -1102,9 +1102,17 @@ STARTUP(void vtinput(int ch, struct tty *tp))
 		vtoutput(ch, tp);
 }
 
-STARTUP(void vtopen(struct file *fp, int rw))
+/* NB: there is no vtxint routine */
+
+STARTUP(void vtrint(dev_t dev))
 {
-	dev_t dev = fp->f_inode->i_dev;
+	int ch = 0; /* XXX: how to get the value from Int_1? */
+	
+	vtinput(ch, &G.vt[MINOR(dev)]);
+}
+
+STARTUP(void vtopen(dev_t dev, int rw))
+{
 	int minor = MINOR(dev);
 	struct tty *tp;
 	
@@ -1124,7 +1132,7 @@ STARTUP(void vtopen(struct file *fp, int rw))
 	ttyopen(dev, tp);
 }
 
-STARTUP(void vtclose(struct file *fp, int rw))
+STARTUP(void vtclose(dev_t dev, int rw))
 {
 }
 
@@ -1147,13 +1155,4 @@ STARTUP(void vtwrite(dev_t dev))
 
 STARTUP(void vtioctl(dev_t dev, int cmd, void *cmarg, int rw))
 {
-}
-
-/* NB: there is no vtxint routine */
-
-STARTUP(void vtrint(dev_t dev))
-{
-	int ch = 0; /* XXX: how to get the value from Int_1? */
-	
-	vtinput(ch, &G.vt[MINOR(dev)]);
 }

@@ -27,7 +27,7 @@ OBJ	+= syscall.o sysent.o sys_desc.o sys_proc.o sys_prot.o sys_time.o
 OBJ	+= pipe.o
 # devices
 OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o #dev_vt.o
-OBJ	+= dev_tty.o dev_fd.o
+OBJ	+= dev_tty.o
 # helper routines
 OBJ	+= drawcell.o smallfont.o kputs.o kputchar.o scrollcell.o
 OBJ	+= copy.o fio.o
