@@ -6,15 +6,14 @@ CALC	= TI92P
 PUNIXBASE	= ../../..
 
 STDINC	= ${PUNIXBASE}/include
-INCLUDE	= ${PUNIXBASE}/src/sys
-SYS	= ${INCLUDE}/sys
+SYSINC	= ${PUNIXBASE}/src/sys/h
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYS} -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
+	-I${SYSINC} -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
 
 AS	= ${TIGCC}/bin/tigcc
-ASFLAGS	= -c -Wa,--warn,-I${SYS},--defsym,${CALC}= #-l
+ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
 
 LD	= ${TIGCC}/bin/tigcc
 LDFLAGS	= --outputbin --flash-os #--optimize-branches --optimize-relocs \
@@ -45,7 +44,7 @@ punix-9x.tib:	${OBJ}
 
 obj:	${OBJ}
 
-${OBJ}: Makefile ../sys/globals.h ../sys/punix.h
+${OBJ}: Makefile ${SYSINC}/globals.h ${SYSINC}/punix.h
 
 ########################################
 # source dependencies
@@ -54,39 +53,39 @@ ${OBJ}: Makefile ../sys/globals.h ../sys/punix.h
 start.o: start.s
 vectors.o: vectors.s
 version.o: version.s
-entry.o: entry.s ${SYS}/signal.inc
-drawcell.o: drawcell.s ${SYS}/lcd.inc
+entry.o: entry.s ${SYSINC}/signal.inc
+drawcell.o: drawcell.s ${SYSINC}/lcd.inc
 calc.o: calc.s
 #switchthread.o:
 m68k.o: m68k.s
 string.o: string.s
 setjmp.o: setjmp.s
-#${SYS}/lcd.inc: ${SYS}/lcdglo.inc
-#${SYS}/lcd.h: ${SYS}/lcdglo.h
-#${SYS}/cell.h: ${SYS}/cellglo.h ${SYS}/lcd.h
-#${SYS}/cell.inc: ${SYS}/cellglo.inc ${SYS}/lcd.inc
-${SYS}/proc.h: ${SYS}/file.h ${STDINC}/sys/types.h \
+#${SYSINC}/lcd.inc: ${SYSINC}/lcdglo.inc
+#${SYSINC}/lcd.h: ${SYSINC}/lcdglo.h
+#${SYSINC}/cell.h: ${SYSINC}/cellglo.h ${SYSINC}/lcd.h
+#${SYSINC}/cell.inc: ${SYSINC}/cellglo.inc ${SYSINC}/lcd.inc
+${SYSINC}/proc.h: ${SYSINC}/file.h ${STDINC}/sys/types.h \
 	${STDINC}/time.h ${STDINC}/signal.h
-${SYS}/process.h: ${SYS}/proc.h
+${SYSINC}/process.h: ${SYSINC}/proc.h
 
 md5.o: md5.c
 qsort.o: qsort.c
 unpack.o: unpack.c
 kputs.o: kputs.c
-kputchar.o: kputchar.c ${SYS}/cell.h ${SYS}/scrollcell.h ${SYS}/drawcell.h
-syscall.o: syscall.c ${SYS}/sysent.h ${SYS}/process.h
-sysent.o: sysent.c ${SYS}/sysent.h
-main.o: main.c ${SYS}/proc.h ${STDINC}/assert.h
-sys_desc.o: sys_desc.c ${SYS}/proc.h ${SYS}/punix.h ${SYS}/file.h \
-		${SYS}/process.h
-sys_proc.o: sys_proc.c ${SYS}/proc.h ${SYS}/punix.h ${SYS}/process.h 
+kputchar.o: kputchar.c ${SYSINC}/cell.h ${SYSINC}/scrollcell.h ${SYSINC}/drawcell.h
+syscall.o: syscall.c ${SYSINC}/sysent.h ${SYSINC}/process.h
+sysent.o: sysent.c ${SYSINC}/sysent.h
+main.o: main.c ${SYSINC}/proc.h ${STDINC}/assert.h
+sys_desc.o: sys_desc.c ${SYSINC}/proc.h ${SYSINC}/punix.h ${SYSINC}/file.h \
+		${SYSINC}/process.h
+sys_proc.o: sys_proc.c ${SYSINC}/proc.h ${SYSINC}/punix.h ${SYSINC}/process.h 
 sys_prot.o: sys_prot.c
 sys_time.o: sys_time.c
-panic.o: panic.c ${SYS}/punix.h
-process.o: process.c ${SYS}/proc.h ${SYS}/process.h \
-		${STDINC}/assert.h ${SYS}/setjmp.h
+panic.o: panic.c ${SYSINC}/punix.h
+process.o: process.c ${SYSINC}/proc.h ${SYSINC}/process.h \
+		${STDINC}/assert.h ${SYSINC}/setjmp.h
 hanoi.o: hanoi.c
-abort.o: abort.c ${SYS}/punix.h
+abort.o: abort.c ${SYSINC}/punix.h
 assert.o: assert.c
 kprintf.o: kprintf.c
 fio.o: fio.c
@@ -100,12 +99,12 @@ dev_link.o: dev_link.c
 dev_audio.o: dev_audio.c
 dev_flash.o: dev_flash.c
 
-#${SYS}/cellglo.h ${SYS}/cellglo.inc ${SYS}/glo.h ${SYS}/glo.inc \
-${SYS}/lcdglo.h ${SYS}/lcdglo.inc ${SYS}/procglo.h ${SYS}/procglo.inc \
-${SYS}/vectorsglo.h ${SYS}/vectorsglo.inc ${SYS}/heapglo.h ${SYS}/heapglo.inc: \
-${SYS}/cellglo.def ${SYS}/glo.def ${SYS}/lcdglo.def \
-${SYS}/procglo.def ${SYS}/vectorsglo.def ${SYS}/heapglo.def
-#	make -C ${SYS}
+#${SYSINC}/cellglo.h ${SYSINC}/cellglo.inc ${SYSINC}/glo.h ${SYSINC}/glo.inc \
+${SYSINC}/lcdglo.h ${SYSINC}/lcdglo.inc ${SYSINC}/procglo.h ${SYSINC}/procglo.inc \
+${SYSINC}/vectorsglo.h ${SYSINC}/vectorsglo.inc ${SYSINC}/heapglo.h ${SYSINC}/heapglo.inc: \
+${SYSINC}/cellglo.def ${SYSINC}/glo.def ${SYSINC}/lcdglo.def \
+${SYSINC}/procglo.def ${SYSINC}/vectorsglo.def ${SYSINC}/heapglo.def
+#	make -C ${SYSINC}
 
 ########################################
 # Data (images, fonts)
@@ -120,4 +119,4 @@ fonts/smallfont.pbm: fonts/smallfont.ppm
 clean:
 	rm -f *.bin *.o punix-9x.tib
 	make -C fonts clean
-	#make -C ${SYS} clean
+	#make -C ${SYSINC} clean
