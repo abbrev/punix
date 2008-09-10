@@ -216,7 +216,7 @@ STARTUP(void sys_exit())
 	if (P.p_pid == 1)
 		panic("process 1 exited");
 	
-	CURRENT->p_xstat = ap->status << 8;
+	CURRENT->p_waitstat = ap->status << 8;
 	/* clean up resources used by proc */
 	/*
 	 * we probably don't need to free memory allocations, as we probably
@@ -344,7 +344,7 @@ loop:
 found:
 	P.p_retval = p->p_pid;
 	if (status) {
-		if (copyout(status, &p->p_xstat, sizeof(s)))
+		if (copyout(status, &p->p_waitstat, sizeof(s)))
 			P.p_error = EFAULT;
 	}
 	

@@ -217,8 +217,7 @@ struct proc {
 	
 	char p_name[16];	/* name of the process */
 	
-	/* zombie */
-	int p_xstat;		/* exit status */
+	int p_waitstat;		/* status for wait() */
 };
 
 /* states for p_status */
