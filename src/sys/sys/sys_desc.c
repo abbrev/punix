@@ -176,6 +176,14 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	int i;
 	int inomode;
 	
+	fd = falloc();
+	if (fd < 0)
+		return;
+	fp = P.p_ofile[fd];
+	fp->f_flag = flags & O_RDWR;
+	fp->f_type = DTYPE_INODE;
+	mode = mode & 077777 & ~ISVTX;
+	
 	/* eliminate invalid flag combinations */
 	
 	inomode = INO_SOUGHT;

@@ -62,7 +62,7 @@
 #include "file.h"
 #include "punix.h"
 #include "process.h"
-#include "filsys.h"
+#include "fs.h"
 #include "inode.h"
 #include "buf.h"
 #include "dev.h"
@@ -171,10 +171,10 @@ bad:
 
 STARTUP(int canaccess(struct inode *ip, int mode))
 {
-	extern struct filsys *getfs(dev_t); /* XXX put this in a header */
+	extern struct fs *getfs(dev_t); /* XXX put this in a header */
 	
 	if (mode == IWRITE) {
-		if (getfs(ip->i_dev)->s_ronly) {
+		if (getfs(ip->i_dev)->fs_ronly) {
 			P.p_error = EROFS;
 			return 1;
 		}

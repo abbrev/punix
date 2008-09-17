@@ -102,8 +102,8 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, unsigned short *sr))
 		swtch();
 	
 	/* XXX */
-	if (issig())
-		psig();
+	if (issignal(&P))
+		postsig(&P);
 	
 	return retval;
 }

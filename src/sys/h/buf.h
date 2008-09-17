@@ -14,8 +14,10 @@
 #define	B_DELWRI  01000	/* don't write till block leaves available list */
 
 #define	B_COPY    02000	/* this is a copy of the flash block */
-#define B_DELETE  04000	/* delete this block number */
-#define B_WIP    010000	/* write this block in place */
+#define B_DELETE  04000	/* mark this block as "deleted" but in use */
+#define B_FREE   010000 /* free this flash block */
+#define B_NEWB   020000	/* write this block to a new flash block */
+#define B_CLEAR  040000 /* clear natively (set all bits for flash) */
 
 /*
  * Each buffer in the pool is usually doubly linked into 2 lists:

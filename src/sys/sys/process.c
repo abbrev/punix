@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "punix.h"
 #include "setjmp.h"
@@ -34,96 +35,6 @@ STARTUP(void setrun(struct proc *p))
 	p->p_status = P_RUNNING;
 	if (p->p_pri < P.p_pri)
 		++runrun;
-}
-
-/* handle a signal */
-STARTUP(void sendsig(struct proc *p, int sig))
-{
-	/* FIXME: write this! */
-	/* the basic idea behind this is to simulate a subroutine call in
-	 * userland and to make it return to a stub that calls the sigreturn()
-	 * system call. */
-	/* This is one of those problems I'll have to sleep on before I get it
-	 * right. */
-}
-
-STARTUP(void psignal(struct proc *p, int sig))
-{
-#if 0 /* not ready yet (some of these fields don't exist in struct proc) */
-	if ((unsigned)sig >= NSIG)
-		return;
-	if (sig)
-		p->p_sig |= 1 << (sig-1);
-	if (p->p_pri > PUSER)
-		p->p_pri = PUSER;
-	if (p->p_stat == P_SLEEPING && p->p_pri > PZERO)
-		setrun(p);
-#endif
-}
-
-STARTUP(void gsignal(int pgrp, int sig))
-{
-	struct proc *p;
-	
-	if (pgrp == 0)
-		return;
-	for EACHPROC(p)
-		if (p->p_pgrp == pgrp)
-			psignal(p, sig);
-}
-
-STARTUP(void psig(void))
-{
-#if 0 /* not ready yet (some of these fields don't exist in struct proc) */
-	int n, p;
-	
-#if 0
-	if (!P.p_fpsaved) {
-		savfp(&P.p_fps);
-		P.p_fpsaved = 1;
-	}
-#endif
-	if (P.p_flag & STRC)
-		stop();
-	n = fsig(&P);
-	if (n == 0)
-		return;
-	P.p_sig &= ~(1 << (n-1));
-	if ((p = P.p_signal[n]) != 0) {
-		P.p_error = 0;
-		if (n != SIGILL && n != SIGTRAP)
-			P.p_signal[n] = 0;
-		sendsig(p, n);
-		return;
-	}
-	switch (n) {
-		case SIGQUIT:
-		case SIGILL:
-		case SIGTRAP:
-		case SIGABRT:
-		case SIGBUS:
-		case SIGFPE:
-		case SIGSEGV:
-			if (core())
-				n += 0200;
-	}
-	exit(n);
-#endif
-}
-
-STARTUP(int issig(void))
-{
-#if 0 /* not ready yet (some of these fields don't exist in struct proc) */
-	int n;
-	while (P.p_sig) {
-		n = fsig(P);
-		if ((P.p_signal[n] & 1) == 0 || (P.p_flag & STRC))
-			return n;
-		P.p_sig &= ~(1 << (n-1));
-	}
-	
-#endif
-	return 0;
 }
 
 /*
@@ -265,12 +176,17 @@ STARTUP(void slp(void *event, int basepri))
 	}
 }
 
-STARTUP(int tsleep(void *event, int pri, int to))
+STARTUP(void unsleep(struct proc *p))
 {
-	return 0;
+	int x = spl7();
+	
+	if (p->p_waitfor)
+		p->p_waitfor = 0;
+	
+	splx(x);
 }
 
-#if 0
+#if 1
 /* following is from 2.11BSD */
 
 /*
@@ -279,8 +195,9 @@ STARTUP(int tsleep(void *event, int pri, int to))
  * is stopped just unsleep so it will remain stopped.
 */
 
-STARTUP(static void endtsleep(struct proc *p))
+STARTUP(static void endtsleep(void *vp))
 {
+	struct proc *p = (struct proc *)vp;
 	int s;
 	
 	s = spl7();
@@ -308,14 +225,14 @@ STARTUP(static void endtsleep(struct proc *p))
  * interrupted and EINTR returned to the user process.
 */
 
-STARTUP(int tsleep(void *event, int pri, int timo))
+STARTUP(int tsleep(void *event, int basepri, long timo))
 {
 	struct proc *p = &P;
-	struct proc **qp;
 	int s;
-	int sig, catch = priority & PCATCH;
+	int sig, catch = basepri & PCATCH;
 
-	s = splhigh();
+	s = spl7();
+#if 0
 	if (panicstr) {
 /*
  * After a panic just give interrupts a chance then just return.  Don't
@@ -329,16 +246,16 @@ STARTUP(int tsleep(void *event, int pri, int timo))
 		splx(s);
 		return;
 	}
+#endif
 #ifdef	DIAGNOSTIC
 	if (event == NULL || p->p_status != P_RUNNING)
 		panic("tsleep");
 #endif
 	p->p_waitfor = event;
+#if 0
 	p->p_slptime = 0;
-	p->p_pri = priority & PRIMASK;
-	qp = &slpque[HASH(ident)];
-	p->p_link = *qp;
-	*qp =p;
+#endif
+	p->p_basepri = basepri & PRIMASK;
 	if (timo)
 		timeout(endtsleep, p, timo);
 /*
@@ -346,25 +263,25 @@ STARTUP(int tsleep(void *event, int pri, int timo))
  * CURSIG as we could stop there and a wakeup or a SIGCONT (or both) could
  * occur while we were stopped.  A SIGCONT would cause us to be marked SSLEEP
  * without resuming us thus we must be ready for sleep when CURSIG is called.
- * If the wakeup happens while we're stopped p->p_wchan will be 0 upon 
+ * If the wakeup happens while we're stopped p->p_waitfor will be 0 upon 
  * return from CURSIG.
 */
 	if (catch) {
 		p->p_flag |= P_SINTR;
-		if (sig = CURSIG(p)) {
-			if (p->p_wchan)
+		if ((sig = CURSIG(p))) {
+			if (p->p_waitfor)
 				unsleep(p);
-			p->p_stat = SRUN;
+			p->p_status = P_RUNNING;
 			goto resume;
 		}
-		if (p->p_wchan == 0) {
+		if (p->p_waitfor == 0) {
 			catch = 0;
 			goto resume;
 		}
 	} else
 		sig = 0;
-	p->p_stat = SSLEEP;
-	u.u_ru.ru_nvcsw++;
+	p->p_status = P_SLEEPING;
+	++P.p_rusage.ru_nvcsw;
 	swtch();
 resume:
 	splx(s);
@@ -374,9 +291,9 @@ resume:
 		if (sig == 0)
 			return EWOULDBLOCK;
 	} else if (timo)
-		untimeout(endtsleep, (caddr_t)p);
+		untimeout(endtsleep, (void *)p);
 	if (catch && (sig != 0 || (sig = CURSIG(p)))) {
-		if	(u.u_sigintr & sigmask(sig))
+		if (P.p_sigintr & sigmask(sig))
 			return EINTR;
 		return ERESTART;
 	}

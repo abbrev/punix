@@ -93,9 +93,10 @@ STARTUP(static void getit(int which, struct itimerval *value))
 	
 	splx(x);
 	
-	itv = *(struct itimerval *)&tv;
-	itv.it_interval.tv_usec /= 1000;
-	itv.it_value.tv_usec /= 1000;
+	itv.it_interval.tv_sec = tv.it_interval.tv_sec;
+	itv.it_interval.tv_usec = tv.it_interval.tv_nsec / 1000;
+	itv.it_value.tv_sec = tv.it_value.tv_sec;
+	itv.it_value.tv_usec = tv.it_value.tv_nsec / 1000;
 	
 	copyout(value, &itv, sizeof(itv));
 }
@@ -232,5 +233,6 @@ STARTUP(void sys_utime())
 		const struct utimebuf *times;
 	} *ap = (struct a *)P.p_arg;
 	
+	(void)ap;
 	P.p_error = ENOSYS;
 }

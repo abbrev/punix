@@ -14,7 +14,7 @@
 #include "inode.h"
 /*
 #include "mount.h"
-#include "filsys.h"
+#include "fs.h"
 #include "conf.h"
 */
 #include "buf.h"
@@ -22,7 +22,6 @@
 #include "proc.h"
 #include "globals.h"
 
-struct inode *iget(dev_t dev, ino_t ino);
 void iput(struct inode *p);
 /*void iupdat(int *p, int *tm);*/
 void itrunc(struct inode *ip);
@@ -54,7 +53,7 @@ STARTUP(void iexpand(struct inode *ip, struct dinode *dp))
  *	system is not in the mount table.
  *	"cannot happen"
  */
-STARTUP(struct inode *iget(dev_t dev, ino_t ino))
+STARTUP(struct inode *iget(dev_t dev, struct fs *fs, ino_t ino))
 {
 	struct inode *ip;
 	struct inode *oip;
@@ -96,6 +95,7 @@ loop:
 		return NULL;
 	}
 	ip->i_dev = dev;
+	ip->i_fs = fs;
 	ip->i_number = ino;
 	ip->i_flag = ILOCKED;
 	++ip->i_count;
@@ -159,7 +159,7 @@ STARTUP(void iupdat(struct inode *ip, time_t *ta, time_t *tm))
 	int i;
 	
 	if (ip->i_flag & (IUPD | IACC | ICHG)) {
-		if (getfs(ip->i_dev)->s_ronly)
+		if (getfs(ip->i_dev)->fs_ronly)
 			return;
 		
 		bp = bread(ip->i_dev, itod(ip->i_number));

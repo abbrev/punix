@@ -6,6 +6,9 @@
  *	@(#)inode.h	1.4 (2.11BSD GTE) 1995/12/24
  */
 
+#ifndef _INODE_H_
+#define _INODE_H_
+
 /* flags for namei() */
 enum { INO_SOUGHT, INO_CREATE, INO_DELETE };
 
@@ -65,7 +68,7 @@ int	ninode;			/* the number of slots in the table */
 
 extern struct	inode *rootdir;		/* pointer to inode of root directory */
 
-struct	inode *iget(dev_t dev, ino_t ino);
+struct	inode *iget(dev_t dev, struct fs *, ino_t ino);
 void iput(struct inode *);
 
 struct	inode *getinode();
@@ -144,3 +147,5 @@ struct	inode *namei();
 	} \
 }
 #endif /* 0 */
+
+#endif

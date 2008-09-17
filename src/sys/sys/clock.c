@@ -53,7 +53,7 @@ STARTUP(long hzto(struct timespec *tv))
  * This arranges for func(arg) to be called in time/HZ seconds.
  * The callout array is sorted in order of times as a delta list.
  */
-STARTUP(int timeout(int (*func)(void *), void *arg, long time))
+STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 {
 	struct callout *c1, *c2;
 	long t;
@@ -94,7 +94,7 @@ STARTUP(int timeout(int (*func)(void *), void *arg, long time))
 /*
  * remove a pending callout
  */
-STARTUP(void untimeout(int (*func)(void *), void *arg))
+STARTUP(void untimeout(void (*func)(void *), void *arg))
 {
 	struct callout *cp;
 	int x;

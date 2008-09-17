@@ -1,7 +1,9 @@
 #include <termios.h>
 
-#include "tty.h"
 #include "callout.h"
+#include "queue.h"
+#include "inode.h"
+#include "tty.h"
 
 struct globals {
 	char exec_ram[60];
@@ -48,6 +50,7 @@ struct globals {
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
 	
+	struct flashblock *currentfblock;
 	int contrast;
 	/* dev_vt static variables */
 	int xon;

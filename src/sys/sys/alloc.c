@@ -4,7 +4,7 @@
 #include "proc.h"
 #include "buf.h"
 #include "dev.h"
-#include "filsys.h"
+#include "fs.h"
 #include "inode.h"
 #include "mount.h"
 #include "queue.h"
@@ -31,44 +31,44 @@ typedef	struct fblk *FBLKP;
 struct buf *alloc(dev_t dev)
 {
 	long bno;
-	struct filsys *fp;
+	struct fs *fp;
 	struct buf *bp;
 	
 	fp = getfs(dev);
-	while (fp->s_flock)
-		slp(&fp->s_flock, PINOD);
+	while (fp->fs_flock)
+		slp(&fp->fs_flock, PINOD);
 	do {
-		if (fp->s_nfree <= 0)
+		if (fp->fs_nfree <= 0)
 			goto nospace;
-		if (fp->s_nfree > NICFREE) {
+		if (fp->fs_nfree > NICFREE) {
 			prdev("Bad free count", dev);
 			goto nospace;
 		}
-		bno = fp->s_free[--fp->s_nfree];
+		bno = fp->fs_free[--fp->fs_nfree];
 		if (bno == 0)
 			goto nospace;
 	} while (badblock(fp, bno, dev));
-	if (fp->s_nfree <= 0) {
-		++fp->s_flock;
+	if (fp->fs_nfree <= 0) {
+		++fp->fs_flock;
 		bp = bread(dev, bno);
 		if ((bp->b_flags&B_ERROR) == 0) {
-			fp->s_nfree = ((FBLKP)(bp->b_un.b_addr))->df_nfree;
-			memcpy(fp->s_free, ((FBLKP)(bp->b_un.b_addr))->df_free,
-			       sizeof(fp->s_free));
+			fp->fs_nfree = ((FBLKP)(bp->b_un.b_addr))->df_nfree;
+			memcpy(fp->fs_free, ((FBLKP)(bp->b_un.b_addr))->df_free,
+			       sizeof(fp->fs_free));
 		}
 		brelse(bp);
-		fp->s_flock = 0;
-		wakeup((caddr_t)&fp->s_flock);
-		if (fp->s_nfree <= 0)
+		fp->fs_flock = 0;
+		wakeup((caddr_t)&fp->fs_flock);
+		if (fp->fs_nfree <= 0)
 			goto nospace;
 	}
 	bp = getblk(dev, bno);
 	clrbuf(bp);
-	fp->s_fmod = 1;
+	fp->fs_fmod = 1;
 	return bp;
 	
 nospace:
-	fp->s_nfree = 0;
+	fp->fs_nfree = 0;
 	prdev("no space", dev);
 	u.u_error = ENOSPC;
 	return NULL;
@@ -81,32 +81,32 @@ nospace:
  */
 void free(dev_t dev, long bno)
 {
-	struct filsys *fp;
+	struct fs *fp;
 	struct buf *bp;
 	
 	fp = getfs(dev);
-	fp->s_fmod = 1;
-	while (fp->s_flock)
-		slp(&fp->s_flock, PINOD);
+	fp->fs_fmod = 1;
+	while (fp->fs_flock)
+		slp(&fp->fs_flock, PINOD);
 	if (badblock(fp, bno, dev))
 		return;
-	if(fp->s_nfree <= 0) {
-		fp->s_nfree = 1;
-		fp->s_free[0] = 0;
+	if(fp->fs_nfree <= 0) {
+		fp->fs_nfree = 1;
+		fp->fs_free[0] = 0;
 	}
-	if (fp->s_nfree >= NICFREE) {
-		++fp->s_flock;
+	if (fp->fs_nfree >= NICFREE) {
+		++fp->fs_flock;
 		bp = getblk(dev, bno);
-		((FBLKP)(bp->b_un.b_addr))->df_nfree = fp->s_nfree;
-		memcpy(((FBLKP)(bp->b_un.b_addr))->df_free, fp->s_free,
-			sizeof(fp->s_free));
-		fp->s_nfree = 0;
+		((FBLKP)(bp->b_un.b_addr))->df_nfree = fp->fs_nfree;
+		memcpy(((FBLKP)(bp->b_un.b_addr))->df_free, fp->fs_free,
+			sizeof(fp->fs_free));
+		fp->fs_nfree = 0;
 		bwrite(bp);
-		fp->s_flock = 0;
-		wakeup(&fp->s_flock);
+		fp->fs_flock = 0;
+		wakeup(&fp->fs_flock);
 	}
-	fp->s_free[fp->s_nfree++] = bno;
-	fp->s_fmod = 1;
+	fp->fs_free[fp->fs_nfree++] = bno;
+	fp->fs_fmod = 1;
 }
 
 /*
@@ -118,9 +118,9 @@ void free(dev_t dev, long bno)
  *
  * bad block on dev x/y -- not in range
  */
-int badblock(struct filsys *fp, long bn, dev_t dev)
+int badblock(struct fs *fp, long bn, dev_t dev)
 {
-	if (bn < fp->s_isize || bn >= fp->s_fsize) {
+	if (bn < fp->fs_isize || bn >= fp->fs_fsize) {
 		prdev("bad block", dev);
 		return 1;
 	}
@@ -143,7 +143,7 @@ struct inode *ialloc(dev_t dev)
 {
 	return NULL;
 #if 0
-	struct filsys *fp;
+	struct fs *fp;
 	struct buf *bp;
 	struct inode *ip;
 	int i;
@@ -152,11 +152,11 @@ struct inode *ialloc(dev_t dev)
 	daddr_t adr;
 	
 	fp = getfs(dev);
-	while (fp->s_ilock)
-		slp(&fp->s_ilock, PINOD);
+	while (fp->fs_ilock)
+		slp(&fp->fs_ilock, PINOD);
 loop:
-	if (fp->s_ninode > 0) {
-		ino = fp->s_inode[--fp->s_ninode];
+	if (fp->fs_ninode > 0) {
+		ino = fp->fs_inode[--fp->fs_ninode];
 		if (ino < ROOTINO)
 			goto loop;
 		ip = iget(dev, ino);
@@ -165,7 +165,7 @@ loop:
 		if (ip->i_mode == 0) {
 			for (i=0; i<NADDR; ++i)
 				ip->i_un.i_addr[i] = 0;
-			fp->s_fmod = 1;
+			fp->fs_fmod = 1;
 			return(ip);
 		}
 		/*
@@ -175,9 +175,9 @@ loop:
 		iput(ip);
 		goto loop;
 	}
-	fp->s_ilock++;
+	fp->fs_ilock++;
 	ino = 1;
-	for(adr = SUPERB+1; adr < fp->s_isize; adr++) {
+	for(adr = SUPERB+1; adr < fp->fs_isize; adr++) {
 		bp = bread(dev, adr);
 		if (bp->b_flags & B_ERROR) {
 			brelse(bp);
@@ -191,20 +191,20 @@ loop:
 			for EACHINODE(ip)
 				if (dev==ip->i_dev && ino==ip->i_number)
 					goto cont;
-			fp->s_inode[fp->s_ninode++] = ino;
-			if(fp->s_ninode >= NICINOD)
+			fp->fs_inode[fp->fs_ninode++] = ino;
+			if(fp->fs_ninode >= NICINOD)
 				break;
 		cont:
 			ino++;
 			dp++;
 		}
 		brelse(bp);
-		if(fp->s_ninode >= NICINOD)
+		if(fp->fs_ninode >= NICINOD)
 			break;
 	}
-	fp->s_ilock = 0;
-	wakeup((caddr_t)&fp->s_ilock);
-	if(fp->s_ninode > 0)
+	fp->fs_ilock = 0;
+	wakeup((caddr_t)&fp->fs_ilock);
+	if(fp->fs_ninode > 0)
 		goto loop;
 	prdev("Out of inodes", dev);
 	u.u_error = ENOSPC;
@@ -222,15 +222,15 @@ loop:
 void ifree(dev_t dev, ino_t ino)
 {
 #if 0
-	register struct filsys *fp;
+	register struct fs *fp;
 
 	fp = getfs(dev);
-	if (fp->s_ilock)
+	if (fp->fs_ilock)
 		return;
-	if (fp->s_ninode >= NICINOD)
+	if (fp->fs_ninode >= NICINOD)
 		return;
-	fp->s_inode[fp->s_ninode++] = ino;
-	fp->s_fmod = 1;
+	fp->fs_inode[fp->fs_ninode++] = ino;
+	fp->fs_fmod = 1;
 #endif
 }
 
@@ -252,17 +252,17 @@ void ifree(dev_t dev, ino_t ino)
  * panic: no fs -- the device is not mounted.
  *	this "cannot happen"
  */
-struct filsys *getfs(dev_t dev)
+struct fs *getfs(dev_t dev)
 {
 	struct mount *mp;
 	
 	for EACHMOUNT(mp) {
 		if (mp->m_filsys != NULL && mp->m_dev == dev) {
-			struct filsys *fp = mp->m_filsys;
-			if (fp->s_nfree > NICFREE || fp->s_ninode > NICINOD) {
+			struct fs *fp = mp->m_filsys;
+			if (fp->fs_nfree > NICFREE || fp->fs_ninode > NICINOD) {
 				prdev("bad count", dev);
-				fp->s_nfree = 0;
-				fp->s_ninode = 0;
+				fp->fs_nfree = 0;
+				fp->fs_ninode = 0;
 			}
 			return fp;
 		}
@@ -285,7 +285,7 @@ void update()
 	register struct inode *ip;
 	register struct mount *mp;
 	register struct buf *bp;
-	struct filsys *fp;
+	struct fs *fp;
 	
 	if (updlock)
 		return;
@@ -295,8 +295,8 @@ void update()
 	for EACHMOUNT(mp)
 		if (mp->m_filsys != NULL) {
 			fp = mp->m_filsys;
-			if (fp->s_fmod == 0 || fp->s_ilock != 0 ||
-			    fp->s_flock != 0 || fp->s_ronly != 0)
+			if (fp->fs_fmod == 0 || fp->fs_ilock != 0 ||
+			    fp->fs_flock != 0 || fp->fs_ronly != 0)
 				continue;
 			
 			bp = getblk(mp->m_dev, SUPERB);
@@ -304,8 +304,8 @@ void update()
 			if (bp->b_flags & B_ERROR)
 				continue;
 			
-			fp->s_fmod = 0;
-			fp->s_time = walltime.tv_sec;
+			fp->fs_fmod = 0;
+			fp->fs_time = walltime.tv_sec;
 			memcpy(bp->b_addr, fp, BSIZE);
 			bwrite(bp);
 		}

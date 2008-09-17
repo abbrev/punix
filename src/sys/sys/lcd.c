@@ -1,12 +1,5 @@
 #include "punix.h"
 #include "lcd.h"
-#include "proc.h"
-#include "buf.h"
-#include "dev.h"
-#include "filsys.h"
-#include "inode.h"
-#include "mount.h"
-#include "queue.h"
 #include "globals.h"
 
 /* input: cont = contrast level between 0 and CONTRASTMAX, inclusive

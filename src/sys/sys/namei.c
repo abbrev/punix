@@ -1,10 +1,15 @@
 #include <sys/time.h>
 #include <errno.h>
 
+#include "punix.h"
+#include "queue.h"
+#include "buf.h"
+#include "dev.h"
 #include "proc.h"
 #include "inode.h"
+#include "globals.h"
 
-enum { INO_SOUGHT, INO_CREATE, INO_DELETE };
+/*enum { INO_SOUGHT, INO_CREATE, INO_DELETE };*/
 
 struct inode *namei(char *path, int flag)
 {
@@ -72,11 +77,9 @@ cloop:
 	 * Set up to search a directory.
 	 */
 	
-	P.p_offset[1] = 0;
-	P.p_offset[0] = 0;
-	P.p_segflg = 1;
+	P.p_offset = 0;
 	eo = 0;
-	P.p_count = ldiv(dp->i_size1, DIRSIZ+2);
+	P.p_count = dp->i_size / (DIRSIZ+2);
 	bp = NULL;
 	
 eloop:
@@ -94,7 +97,7 @@ eloop:
 				goto out;
 			P.p_pdir = dp;
 			if (eo)
-				P.p_offset[1] = eo - DIRSIZ - 2;
+				P.p_offset = eo - DIRSIZ - 2;
 			else
 				dp->i_flag |= IUPD;
 			
@@ -110,10 +113,10 @@ eloop:
 	 * Release previous if it exists.
 	 */
 	
-	if ((P.p_offset[1] & 0777) == 0) {
+	if ((P.p_offset & 0777) == 0) {
 		if (bp)
 			brelse(bp);
-		bp = bread(dp->i_dev, bmap(dp, ldiv(P.p_offset[1], 512)));
+		bp = bread(dp->i_dev, bmap(dp, P.p_offset / 512));
 	}
 	
 	/*
@@ -122,16 +125,16 @@ eloop:
 	 * If they do not match, go back to eloop.
 	 */
 	
-	bcopy(bp->b_addr+(P.p_offset[1]&0777), &P.p_dent, (DIRSIZ+2)/2);
-	P.p_offset[1] += DIRSIZ+2;
+	bcopy(bp->b_addr+(P.p_offset&0777), &P.p_dent, (DIRSIZ+2)/2);
+	P.p_offset += DIRSIZ+2;
 	--P.p_count;
-	if (P.p_dent.u_ino == 0) {
+	if (P.p_dent.d_ino == 0) {
 		if (eo == 0)
-			eo = P.p_offset[1];
+			eo = P.p_offset;
 		goto eloop;
 	}
 	for (cp = &P.p_dbuf[0]; cp < &P.p_dbuf[DIRSIZ]; ++cp)
-		if(*cp != cp[P.p_dent.u_name - P.p_dbuf])
+		if(*cp != cp[P.p_dent.d_name - P.p_dbuf])
 			goto eloop;
 	
 	/*
@@ -149,7 +152,7 @@ eloop:
 	}
 	bp = dp->i_dev;
 	iput(dp);
-	dp = iget(bp, P.p_dent.u_ino);
+	dp = iget(bp, P.p_dent.d_ino);
 	if (dp == NULL)
 		return NULL;
 	goto cloop;

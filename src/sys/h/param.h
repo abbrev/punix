@@ -30,6 +30,9 @@
 #define	NCARGS	5120		/* # characters in exec arglist */
 #endif
 
+#define MAXSYMLINKS 6
+#define MAXPATHLEN 256
+
 #define QUANTUM (HZ/32)
 
 #define CPUSCALE      64 /* give the cpu time some extra resolution */
@@ -58,34 +61,6 @@
 #define PRIMASK 0xff
 #define PCATCH  0x100
 
-#if 0
-/*
- * signals
- * dont change
- */
-
-#define	NSIG	17
-/*
- * No more than 16 signals (1-16) because they are
- * stored in bits in a word.
- */
-#define	SIGHUP	1	/* hangup */
-#define	SIGINT	2	/* interrupt (rubout) */
-#define	SIGQUIT	3	/* quit (FS) */
-#define	SIGINS	4	/* illegal instruction */
-#define	SIGTRC	5	/* trace or breakpoint */
-#define	SIGIOT	6	/* iot */
-#define	SIGEMT	7	/* emt */
-#define	SIGFPT	8	/* floating exception */
-#define	SIGKIL	9	/* kill, uncatchable termination */
-#define	SIGBUS	10	/* bus error */
-#define	SIGSEG	11	/* segmentation violation */
-#define	SIGSYS	12	/* bad system call */
-#define	SIGPIPE	13	/* end of pipe */
-#define	SIGCLK	14	/* alarm clock */
-#define	SIGTRM	15	/* Catchable termination */
-#endif
-
 /*
  * fundamental constants of the implementation--
  * cannot be changed easily
@@ -106,7 +81,7 @@
 #define	NODEV	(dev_t)(-1)
 #define	ROOTINO	((ino_t)2)	/* i number of all roots */
 #define	SUPERB	1		/* block number of the super block */
-#define	DIRSIZ	14		/* max characters per directory */
+#define	DIRSIZ(d)	16		/* max characters per directory */
 #define	NICINOD	100		/* number of superblock inodes */
 #define	NICFREE	50		/* number of superblock free blocks */
 #define	INFSIZE	138		/* size of per-proc info for users */

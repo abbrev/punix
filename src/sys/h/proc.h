@@ -159,7 +159,9 @@ struct proc {
 #else
 	struct sigaction p_sigaction[NSIG];
 #endif
-	sigset_t p_sigmask;	/* correct type ? */
+	sigset_t p_sig;		/* currently posted signals */
+	sigset_t p_sigmask[NSIG];	/* correct type ? */
+	sigset_t p_cursigmask;
 	sigset_t p_sigonstack;	/* signals to take on sigstack */
 	sigset_t p_sigintr;	/* signals that interrupt syscalls */
 	stack_t p_sigstk;	/* signal stack */
@@ -173,7 +175,7 @@ struct proc {
 	uint32_t p_retval;
 	int p_error;
 	
-	/* files */
+	/* file descriptors */
 	struct file *p_ofile[NOFILE];	/* file structures for open files */
 	char p_oflag[NOFILE];	/* flags of open files */
 	int p_lastfile;
@@ -181,6 +183,8 @@ struct proc {
 	struct inode *p_rdir;	/* root directory */
 	struct tty *p_ttyp;	/* controlling tty pointer */
 	dev_t p_ttydev;		/* controlling tty device */
+	
+	mode_t p_cmask;		/* file creation mask */
 	
 	/* for I/O */
 	char *p_base;
@@ -190,9 +194,6 @@ struct proc {
 	const char *p_dirp; /* need this? */
 	struct inode *p_pdir;
 	struct direct p_dent;
-	
-	
-	mode_t p_cmask;		/* file creation mask */
 	
 #if 0
 	/* FIXME */
@@ -215,6 +216,12 @@ struct proc {
 	
 	void *p_waitfor;
 	
+	struct nameicache {		/* last successful directory search */
+		off_t nc_prevoffset;	/* offset at which last entry found */
+		ino_t nc_inumber;	/* inum of cached directory  */
+		dev_t nc_dev;		/* dev of cached directory */
+	} p_ncache;
+	
 	char p_name[16];	/* name of the process */
 	
 	int p_waitstat;		/* status for wait() */
@@ -234,5 +241,6 @@ struct proc {
 #define P_TRACED  001 /* process is being traced */
 #define P_WAITED  002 /* set if parent received this proc's status already */
 #define P_TIMEOUT 004 /* tsleep timeout */
+#define P_SINTR   010 /* a signal can interrupt sleep */
 
 #endif /* _SYS_PROC_H_ */

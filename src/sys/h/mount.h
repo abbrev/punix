@@ -7,7 +7,7 @@
 struct mount
 {
 	dev_t   m_dev;          /* device mounted */
-	struct filsys *m_filsys;     /* pointer to superblock */
+	struct fs *m_filsys;     /* pointer to superblock */
 	struct inode *m_inodp;  /* pointer to mounted on inode */
 } mount[NMOUNT];
 

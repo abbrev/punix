@@ -20,10 +20,10 @@ LDFLAGS	= --outputbin --flash-os #--optimize-branches --optimize-relocs \
 #          --omit-bss-init
 
 # core
-OBJ	=  start.o vectors.o main.o entry.o version.o calc.o
+OBJ	=  start.o vectors.o main.o entry.o version.o calc.o signal.o
 # syscalls
 OBJ	+= syscall.o sysent.o sys_desc.o sys_proc.o sys_prot.o sys_time.o
-OBJ	+= pipe.o
+OBJ	+= pipe.o sys_sig.o
 # devices
 OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o #dev_vt.o
 OBJ	+= dev_tty.o

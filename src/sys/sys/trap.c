@@ -107,6 +107,7 @@ out:
 	}
 	
 	if (USERMODE(ps)) {
+		int sig;
 #if 0
 		++P.p_ru.ru_utime;
 #endif
@@ -120,8 +121,8 @@ out:
 			swtch();
 		}
 		
-		if (issig())
-			psig();
+		while ((sig = CURSIG(&P)))
+			postsig(sig);
 	} else {
 #if 0
 		if (&P)

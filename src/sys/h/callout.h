@@ -4,10 +4,10 @@
 struct callout {
 	long c_time;
 	void *c_arg;
-	int (*c_func)(void *);
+	void (*c_func)(void *);
 };
 
-int timeout(int (*func)(void *), void *arg, long time);
-void untimeout(int (*func)(void *), void *arg);
+int timeout(void (*func)(void *), void *arg, long time);
+void untimeout(void (*func)(void *), void *arg);
 
 #endif

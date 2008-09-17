@@ -3,8 +3,6 @@
 
 #include "proc.h"
 
-extern void slp(void *, int);
-
 void swtch();
 void psignal(struct proc *p, int sig);
 void slp(void *event, int pri);

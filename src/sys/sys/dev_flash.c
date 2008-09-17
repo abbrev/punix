@@ -3,17 +3,21 @@
 #include <stdio.h>
 #include <stdint.h>
 */
+#include <string.h>
 
 #include "punix.h"
 #include "buf.h"
+#include "flash.h"
 #include "dev.h"
+#include "globals.h"
 
 #define SECTORSIZE 32768
 #define NUMSECTORS 32
 
 #define FBFREE  (-1)
 #define FBUSED  (-2)
-#define FBDIRTY (-3) /* or deleted */
+#define FBDEL   (-4) /* deleted but still open */
+#define FBDIRTY (-8) /* obsolete */
 
 extern long __ld_program_size;
 
@@ -98,94 +102,125 @@ short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"),
                  size_t size asm("%d3"));
 short FlashErase(const void *dest asm("%a2"));
 
-/* BLOCKSIZE and LOGSIZE are the size of the FS block and log, respectively, in
- * 2-byte (WORD) units */
-#define LOGSIZE (BLOCKSIZE + sizeof(struct flashblock)/2)
-
 const struct devtab fltab;
 
 /* extern short archive[][SECTORSIZE]; */
 
-struct flashblock {
-	short status;
-	long blockno;
-} __attribute__((packed));
+/* XXX: the '- 1' at the end is because sectors are not evenly divisible by
+ * flash blocks */
+#define BLOCKSPERSECTOR (2 * SECTORSIZE / sizeof(struct flashblock) - 1)
 
-/* Find the block numbered 'blkno' and return a pointer to the data portion.
+/* Find the block numbered 'blkno' and return a pointer to the flashblock.
  * Return NULL if this block number doesn't exist.
  */
 STARTUP(static struct flashblock *getfblk(long blkno))
 {
-	int page, block;
+	int sector, block;
 	struct flashblock *fbp;
 	
 	/* search for the block. */
 	/* FIXME: cache the blkno=>addr mapping for faster future reference. */
-	for (page = 0; page < NUMSECTORS; ++page) {
-		for (block = 0; block < SECTORSIZE/LOGSIZE; ++block) {
-			fbp = (struct flashblock *)&archive[page*SECTORSIZE +
-			 block*LOGSIZE];
+	for (sector = 0; sector < NUMSECTORS; ++sector) {
+		for (block = 0; block < BLOCKSPERSECTOR; ++block) {
+			fbp = (struct flashblock *)&archive[sector][block*sizeof(struct flashblock)/2];
 			
 			if (fbp->status == FBUSED && fbp->blockno == blkno)
-					return fbp + 1;
+					return fbp;
 		}
 	}
 	return NULL;
 }
 
-STARTUP(static char *findunused(long blkno))
-{
-	/* FIXME: find an unused slot for a block and set its status and block
-	 * number */
-	return NULL;
-}
-
-STARTUP(static void flread(char *addr, struct buf *bp))
+STARTUP(static void flread(struct flashblock *fbp, struct buf *bp))
 {
 	bp->b_flags |= B_DONE;
 	
-	if (addr) {
+	if (fbp) {
 		bp->b_flags &= ~B_COPY; /* this is not a copy */
-		bp->b_addr = addr;
+		bp->b_addr = fbp->data;
 	} else {
+		int n = 0;
 		bp->b_flags |= B_COPY; /* this is a copy */
-		/* FIXME: zero out the buffer */
+		/* FIXME: allocate a block buffer */
+		
+		/* clear the buffer according to the bit B_CLEAR */
+		if (bp->b_flags & B_CLEAR)
+			n = -1; /* flash native clear state */
+		memset(fbp->data, n, BLOCKSIZE);
 	}
 }
 
-STARTUP(static void flwrite(char *addr, struct buf *bp))
+STARTUP(static void flwrite(struct flashblock *fbp, struct buf *bp))
 {
-	char *newaddr = NULL;
-	/* this is where it gets interesting... */
+	unsigned short *startdiff, *enddiff, *diffp;
+	int newblock = bp->b_flags & B_NEWB;
+	unsigned short *cp;
+	struct flashblock *cfbp, *newfbp;
+	unsigned short *writep;
+	int len;
 	
-	/* we need to find a free block entry, hopefully in a sector with the
-	 * least number of dirty blocks */
+	if (!(bp->b_flags & B_COPY)) return;
 	
-	if (addr) {
-		if (!(bp->b_flags & B_COPY)) /* it's already in flash! */
-			return;
-		if (bp->b_flags & B_WIP) /* write this block in place */
-			newaddr = addr;
+	cfbp = getfblk(bp->b_blkno);
+	if (cfbp) {
+		cp = cfbp->data;
+		/* find the first byte that is different */
+		for (startdiff = fbp->data; !newblock && startdiff < &fbp->data[BLOCKSIZE/2]; ++startdiff, ++cp) {
+			if (*cp == *startdiff) continue;
+			if ((*cp & *startdiff) != *startdiff)
+				newblock = 1;
+			break;
+		}
+		/* find the last byte that is different */
+		for (diffp = enddiff = startdiff; !newblock && diffp < &fbp->data[BLOCKSIZE/2]; ++diffp, ++cp) {
+			if (*cp == *diffp) continue;
+			enddiff = diffp;
+			if ((*cp & *diffp) != *diffp)
+				newblock = 1;
+		}
+	} else {
+		newblock = 1;
+		newfbp = G.currentfblock;
 	}
+	if (newblock) {
+		startdiff = fbp->data;
+		enddiff = &fbp->data[BLOCKSIZE / 2 - 1];
+		newfbp = G.currentfblock;
+	} else {
+		newfbp = cfbp;
+	}
+	writep = newfbp->data + (startdiff - fbp->data);
+	len = enddiff - startdiff + 1;
 	
-	if (!newaddr && !(newaddr = findunused(bp->b_blkno)))
-		return;
-	
-	FlashWrite(bp->b_addr, newaddr, BLOCKSIZE);
+	FlashWrite(startdiff, writep, len);
+	if (newblock) {
+		/*
+		 * write the new flash block header
+		 * obsolete the old flash block
+		 * update G.currentfblock
+		 */
+	}
 }
 
-STARTUP(static void fldelete(char *addr, struct buf *bp))
+STARTUP(static void fldelete(struct flashblock *fbp, struct buf *bp))
 {
-	if (!addr)
+	unsigned short status;
+	if (!fbp)
 		return;
 	
-	/* FIXME: delete this block by changing its status, but only if it is
-	 * used and the block number is the same. */
+	if (bp->b_flags & B_FREE) {
+		status = FBDIRTY; /* completely delete this block */
+	} else {
+		status = FBDEL; /* keep block around until flash closes */
+	}
+	
+	FlashWrite(&fbp->status, &status, sizeof(status));
 }
 
 STARTUP(void flopen(dev_t dev))
 {
 	/* XXX: flush the cache? */
+	/* FIXME: init the cache and G.currentfblock */
 }
 
 STARTUP(void flclose(dev_t dev))
@@ -198,12 +233,12 @@ STARTUP(void flstrategy(struct buf *bp))
 	
 	fbp = getfblk(bp->b_blkno);
 	
-	if (bp->b_flags & B_READ) {
-		flread((char *)fbp, bp);
+	if ((bp->b_flags & B_DELETE) || (bp->b_flags & B_FREE)) {
+		fldelete(fbp, bp);
+	} else if (bp->b_flags & B_READ) {
+		flread(fbp, bp);
 	} else if (bp->b_flags & B_WRITE) {
-		flwrite((char *)fbp, bp);
-	} else if (bp->b_flags & B_DELETE) {
-		fldelete((char *)fbp, bp);
+		flwrite(fbp, bp);
 	}
 }
 
@@ -228,7 +263,7 @@ int FlashInit(FILE *flashfile)
 	return 0;
 }
 
-/* size is in bytes */
+/* size is in words (2 bytes) */
 STARTUP(int FlashWrite(const short *src, short *dest, size_t size))
 {
 	int sector1, sector2;
@@ -248,8 +283,6 @@ STARTUP(int FlashWrite(const short *src, short *dest, size_t size))
 	/* check that dest is in ROM */
 	if (dest < &flashrom[0][0] || &flashrom[NUMSECTORS][0] <= dest)
 		return 1;
-	
-	size = (size + 1) / 2;
 	
 	/* check that the block starts and ends in the same sector */
 	sector1 = (dest - &flashrom[0][0]) / SECTORSIZE;
