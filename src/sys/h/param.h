@@ -1,3 +1,6 @@
+#ifndef _PARAM_H_
+#define _PARAM_H_
+
 /*
  * tunable variables
  */
@@ -22,6 +25,7 @@
 #define	NCLIST	100		/* max total clist size */
 #define	HZ	256		/* XXX: Ticks/second of the clock */
 #define TICK	(1000000000L / HZ) /* nanoseconds/tick of the clock */
+#define HEAPSIZE 512
 
 #define	TIMEZONE (5*60)		/* Minutes westward from Greenwich */
 #define	DSTFLAG	1		/* Daylight Saving Time applies in this locality */
@@ -81,7 +85,6 @@
 #define	NODEV	(dev_t)(-1)
 #define	ROOTINO	((ino_t)2)	/* i number of all roots */
 #define	SUPERB	1		/* block number of the super block */
-#define	DIRSIZ(d)	16		/* max characters per directory */
 #define	NICINOD	100		/* number of superblock inodes */
 #define	NICFREE	50		/* number of superblock free blocks */
 #define	INFSIZE	138		/* size of per-proc info for users */
@@ -124,6 +127,8 @@ typedef	long		daddr_t;
 typedef char *		caddr_t;
 #endif
 
+#define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
+
 #define itod(x) (x<<16)
 #define itoo(x) 0
 
@@ -136,4 +141,10 @@ typedef char *		caddr_t;
 #if 0
 #define	INTPRI	0340		/* Priority bits */
 #define	BASEPRI(ps)	((ps & INTPRI) != 0)
+#endif
+
+#define DEV_BSIZE  128
+#define DEV_BSHIFT 7
+#define DEV_BMASK  0x7f
+
 #endif

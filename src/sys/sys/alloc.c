@@ -16,130 +16,15 @@
 
 typedef	struct fblk *FBLKP;
 
-#if 0 /* re-write these to work with the Punix flash fs */
+/* FIXME: rewrite ialloc for PFS */
 /*
- * alloc will obtain the next available
- * free disk block from the free list of
- * the specified device.
- * The super block has up to NICFREE remembered
- * free blocks; the last of these is read to
- * obtain NICFREE more . . .
- *
- * no space on dev x/y -- when
- * the free list is exhausted.
- */
-struct buf *alloc(dev_t dev)
-{
-	long bno;
-	struct fs *fp;
-	struct buf *bp;
-	
-	fp = getfs(dev);
-	while (fp->fs_flock)
-		slp(&fp->fs_flock, PINOD);
-	do {
-		if (fp->fs_nfree <= 0)
-			goto nospace;
-		if (fp->fs_nfree > NICFREE) {
-			prdev("Bad free count", dev);
-			goto nospace;
-		}
-		bno = fp->fs_free[--fp->fs_nfree];
-		if (bno == 0)
-			goto nospace;
-	} while (badblock(fp, bno, dev));
-	if (fp->fs_nfree <= 0) {
-		++fp->fs_flock;
-		bp = bread(dev, bno);
-		if ((bp->b_flags&B_ERROR) == 0) {
-			fp->fs_nfree = ((FBLKP)(bp->b_un.b_addr))->df_nfree;
-			memcpy(fp->fs_free, ((FBLKP)(bp->b_un.b_addr))->df_free,
-			       sizeof(fp->fs_free));
-		}
-		brelse(bp);
-		fp->fs_flock = 0;
-		wakeup((caddr_t)&fp->fs_flock);
-		if (fp->fs_nfree <= 0)
-			goto nospace;
-	}
-	bp = getblk(dev, bno);
-	clrbuf(bp);
-	fp->fs_fmod = 1;
-	return bp;
-	
-nospace:
-	fp->fs_nfree = 0;
-	prdev("no space", dev);
-	u.u_error = ENOSPC;
-	return NULL;
-}
-
-/*
- * place the specified disk block
- * back on the free list of the
- * specified device.
- */
-void free(dev_t dev, long bno)
-{
-	struct fs *fp;
-	struct buf *bp;
-	
-	fp = getfs(dev);
-	fp->fs_fmod = 1;
-	while (fp->fs_flock)
-		slp(&fp->fs_flock, PINOD);
-	if (badblock(fp, bno, dev))
-		return;
-	if(fp->fs_nfree <= 0) {
-		fp->fs_nfree = 1;
-		fp->fs_free[0] = 0;
-	}
-	if (fp->fs_nfree >= NICFREE) {
-		++fp->fs_flock;
-		bp = getblk(dev, bno);
-		((FBLKP)(bp->b_un.b_addr))->df_nfree = fp->fs_nfree;
-		memcpy(((FBLKP)(bp->b_un.b_addr))->df_free, fp->fs_free,
-			sizeof(fp->fs_free));
-		fp->fs_nfree = 0;
-		bwrite(bp);
-		fp->fs_flock = 0;
-		wakeup(&fp->fs_flock);
-	}
-	fp->fs_free[fp->fs_nfree++] = bno;
-	fp->fs_fmod = 1;
-}
-
-/*
- * Check that a block number is in the
- * range between the I list and the size
- * of the device.
- * This is used mainly to check that a
- * garbage file system has not been mounted.
- *
- * bad block on dev x/y -- not in range
- */
-int badblock(struct fs *fp, long bn, dev_t dev)
-{
-	if (bn < fp->fs_isize || bn >= fp->fs_fsize) {
-		prdev("bad block", dev);
-		return 1;
-	}
-	return 0;
-}
-#endif
-
-/*
- * Allocate an unused I node
- * on the specified device.
- * Used with file creation.
- * The algorithm keeps up to
- * NICINOD spare I nodes in the
- * super block. When this runs out,
- * a linear search through the
- * I list is instituted to pick
+ * Allocate an unused I node on the specified device.
+ * Used with file creation. The algorithm keeps up to
+ * NICINOD spare I nodes in the super block. When this runs out,
+ * a linear search through the I list is instituted to pick
  * up NICINOD more.
  */
-struct inode *ialloc(dev_t dev)
+STARTUP(struct inode *ialloc(dev_t dev))
 {
 	return NULL;
 #if 0
@@ -212,14 +97,13 @@ loop:
 #endif
 }
 
+/* FIXME: rewrite ifree for PFS */
 /*
- * Free the specified I node
- * on the specified device.
- * The algorithm stores up
- * to NICINOD I nodes in the super
+ * Free the specified I node on the specified device.
+ * The algorithm stores up to NICINOD I nodes in the super
  * block and throws away any more.
  */
-void ifree(dev_t dev, ino_t ino)
+STARTUP(void ifree(dev_t dev, ino_t ino))
 {
 #if 0
 	register struct fs *fp;
@@ -252,7 +136,7 @@ void ifree(dev_t dev, ino_t ino)
  * panic: no fs -- the device is not mounted.
  *	this "cannot happen"
  */
-struct fs *getfs(dev_t dev)
+STARTUP(struct fs *getfs(dev_t dev))
 {
 	struct mount *mp;
 	
@@ -280,7 +164,7 @@ struct fs *getfs(dev_t dev)
  * the mount table to initiate modified
  * super blocks.
  */
-void update()
+STARTUP(void update())
 {
 	register struct inode *ip;
 	register struct mount *mp;

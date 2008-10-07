@@ -4,7 +4,7 @@
 struct flashblock {
 	short status;
 	long blockno;
-	unsigned short data[BLOCKSIZE/2];
+	char data[BLOCKSIZE];
 } __attribute__((packed));
 
 #endif

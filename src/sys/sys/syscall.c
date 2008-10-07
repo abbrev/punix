@@ -65,6 +65,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, unsigned short *sr))
 #if 0
 	kprintf("SYS_%s (%d) ", sysname[callno], callno);
 #endif
+
 	callp = &sysent[callno];
 	
 #if USPARGS

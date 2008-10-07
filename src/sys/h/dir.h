@@ -7,6 +7,9 @@
 
 #define DIRBLKSIZ 128
 
+#define DIRSIZ(dp) \
+    ((((sizeof(struct direct) - (MAXNAMLEN+1)) + (dp)->d_namlen+1) + 7) &~ 7)
+
 struct direct {
 	ino_t d_ino;
 	unsigned char d_reclen; /* specially-encoded record length */

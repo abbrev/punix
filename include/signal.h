@@ -99,7 +99,7 @@ struct sigvec {
 #define SIG_UNBLOCK	1	/* remove signals in set from current set */
 #define SIG_SETMASK	2	/* copy set to current set */
 
-typedef struct {
+typedef struct sigaltstack {
 	void	*ss_sp;		/* base of stack */
 	size_t	ss_size;	/* number of bytes in stack */
 	int	ss_flags;

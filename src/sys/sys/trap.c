@@ -67,7 +67,7 @@ STARTUP(void hardclock(unsigned short ps))
 		int n = 0;
 		for EACHPROC(p)
 			if (p->p_status == P_RUNNING) ++n;
-		loadav(G.loadavg, n);
+		//loadav(G.loadavg, n);
 	}
 	
 	/* do call-outs */

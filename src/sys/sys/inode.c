@@ -277,3 +277,22 @@ STARTUP(void wdir(struct inode *ip))
 	writei(P.p_pdir);
 	iput(P.p_pdir);
 }
+
+/* note! this duplicates plock */
+STARTUP(void ilock(struct inode *ip))
+{
+	while (ip->i_flag & ILOCKED) {
+		ip->i_flag |= IWANT;
+		slp(ip, PINOD);
+	}
+	ip->i_flag |= ILOCKED;
+}
+
+STARTUP(void iunlock(struct inode *ip))
+{
+	ip->i_flag &= ~ILOCKED;
+	if (ip->i_flag & IWANT) {
+		ip->i_flag &= ~IWANT;
+		wakeup(ip);
+	}
+}

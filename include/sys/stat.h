@@ -41,6 +41,14 @@ struct stat {
 #define S_IFSOCK	0070000	/* socket */
 /* <x] */
 
+/* file modes */
+
+#define S_ISUID		0004000	/* set user ID on execution */
+#define S_ISGID		0002000	/* set group ID on execution */
+/* [XSI] [x> */
+#define S_ISVTX		0001000	/* on directories, restricted deletion flag */
+/* <x] */
+
 /* Read, write, execute/search by owner. */
 #define S_IRWXU	(S_IRUSR | S_IWUSR | S_IXUSR)
 #define S_IRUSR		0000400	/* read permission, owner */
@@ -56,12 +64,6 @@ struct stat {
 #define S_IROTH		0000004	/* read permission, others */
 #define S_IWOTH		0000002	/* write permission, others */
 #define S_IXOTH		0000001	/* execute/search permission, others */
-
-#define S_ISUID		0004000	/* set user ID on execution */
-#define S_ISGID		0002000	/* set group ID on execution */
-/* [XSI] [x> */
-#define S_ISVTX		0001000	/* on directories, restricted deletion flag */
-/* <x] */
 
 #define S_ISBLK(m)	((m)&S_IFMT == S_IFBLK)
 #define S_ISCHR(m)	((m)&S_IFMT == S_IFCHR)

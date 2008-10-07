@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 */
+#include <string.h>
 
 #include "punix.h"
 #include "process.h"
@@ -19,28 +20,29 @@
 
 #define DEBUG()
 
-struct buffer {
-	int used;
-	char data[BLOCKSIZE];
-};
-
 struct buf avbuflist; /* list of buf */
 static struct buffer buffers[NBUF];
 
-struct buffer *bufalloc()
+STARTUP(char *bufalloc())
 {
 	struct buffer *bfp;
 	for (bfp = &buffers[0]; bfp < &buffers[NBUF]; ++bfp) {
 		if (!bfp->used) {
 			bfp->used = 1;
-			return bfp;
+			return bfp->data;
 		}
 	}
-	return 0;
+	return NULL;
+}
+
+STARTUP(void buffree(char *cp))
+{
+	struct buffer *bfp = (struct buffer *)cp;
+	bfp->used = 0;
 }
 
 /* FIXME: finish this */
-void brelse(struct buf *bp)
+STARTUP(void brelse(struct buf *bp))
 {
 	int sps;
 	
@@ -56,10 +58,10 @@ void brelse(struct buf *bp)
 	bp->b_prev->b_next = bp->b_next;
 }
 
-struct buf *incore(dev_t dev, long blkno)
+STARTUP(struct buf *incore(dev_t dev, long blkno))
 {
 	struct buf *bp;
-	struct devtab *dp;
+	const struct devtab *dp;
 	
 	dp = bdevsw[MAJOR(dev)].d_tab;
 	
@@ -70,7 +72,7 @@ struct buf *incore(dev_t dev, long blkno)
 	return NULL;
 }
 
-void notavail(struct buf *bp)
+STARTUP(void notavail(struct buf *bp))
 {
 	bp->b_avprev->b_avnext = bp->b_avnext;
 	bp->b_avnext->b_avprev = bp->b_avprev;
@@ -81,7 +83,7 @@ void notavail(struct buf *bp)
  * Wait for I/O completion on the buffer; return errors
  * to the user.
  */
-void iowait(struct buf *bp)
+STARTUP(void iowait(struct buf *bp))
 {
 	/*
 	int x = spl6();
@@ -92,7 +94,7 @@ void iowait(struct buf *bp)
 	*/
 }
 
-struct buf *bread(dev_t dev, long blkno)
+STARTUP(struct buf *bread(dev_t dev, long blkno))
 {
 	struct buf *bp;
 	
@@ -107,7 +109,7 @@ struct buf *bread(dev_t dev, long blkno)
 	return bp;
 }
 
-void bwrite(struct buf *bp)
+STARTUP(void bwrite(struct buf *bp))
 {
 	int flag;
 	
@@ -116,6 +118,9 @@ void bwrite(struct buf *bp)
 	bp->b_bcount = BLOCKSIZE;
 	bdevsw[MAJOR(bp->b_dev)].d_strategy(bp);
 	iowait(bp);
+	if (bp->b_flags & B_COPY) {
+		buffree(bp->b_addr);
+	}
 	brelse(bp);
 	/* */
 }
@@ -126,33 +131,32 @@ void bwrite(struct buf *bp)
  * given up (e.g. when writing a partial block where it is
  * assumed that another write for the same block will soon follow).
  */
-void bdwrite(struct buf *bp)
+STARTUP(void bdwrite(struct buf *bp))
 {
 	bp->b_flags |= B_DELWRI | B_DONE;
 	brelse(bp);
 }
 
-void clrbuf(struct buf *bp)
+/* FIXME: make this do what it should do, not what it currently does do */
+STARTUP(void clrbuf(struct buf *bp))
 {
 	int i;
-	long *lp;
+	int n = 0;
 	
-	if ((bp->b_flags & B_COPY) == 0) {
+	if ((bp->b_flags & B_WRITABLE) == 0) {
 		bp->b_addr = bufalloc();
-		bp->b_flags |= B_COPY;
+		bp->b_flags |= B_COPY | B_WRITABLE;
 	}
 	
-	if (!bp->b_addr)
-		return;
+	if (bp->b_flags & B_CLEAR)
+		n = -1;
 	
-	lp = (long *)bp->b_addr;
-	for (i = BLOCKSIZE / sizeof(long); i; --i)
-		*lp++ = 0;
+	memset(bp->b_addr, n, BLOCKSIZE);
 	
 	bp->b_resid = 0;
 }
 
-struct buf *getblk(dev_t dev, long blkno)
+STARTUP(struct buf *getblk(dev_t dev, long blkno))
 {
 	struct buf *bp;
 	struct devtab *dp;

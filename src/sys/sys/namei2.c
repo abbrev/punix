@@ -30,6 +30,44 @@ STARTUP(static int dirbadentry(struct direct *ep, int entryoffsetinblock))
 	return 0;
 }
 
+/* convert specially-encoded record length into byte length */
+STARTUP(static int reclen(int r))
+{
+	int n;
+	if (r & 0xf0)
+		n = r >> 4;
+	else
+		n = r;
+	return r * 8;
+}
+
+/* FIXME: this might need to be adapted for Punix */
+STARTUP(struct buf *blkatoff(struct inode *ip, off_t offset, char **res))
+{
+	struct fs *fs = ip->i_fs;
+	long lbn = lblkno(offset);
+	struct buf *bp;
+	long bn;
+	char *junk;
+	
+	bn = bmap(ip, lbn, B_READ, 0);
+	if (P.p_error)
+		return NULL;
+	if (bn == -1) {
+		dirbad(ip, offset, "hole in dir");
+		return NULL;
+	}
+	bp = bread(ip->i_dev, bn);
+	if (bp->b_flags & B_ERROR) {
+		brelse(bp);
+		return NULL;
+	}
+	junk = mapin(bp);
+	if (res)
+		*res = junk + blkoff(offset);
+	return bp;
+}
+
 /* FIXME: Punix has a different directory layout, so modify this
  * routine as appropriate
  */
@@ -91,15 +129,15 @@ STARTUP(struct inode *namei(struct nameidata *ndp))
 	struct fs *fs;
 	struct buf *bp = NULL;
 	struct direct *ep;
-	int entryoffsetinblock;
+	int entryoffsetinblock = 0;
 	enum { NONE, COMPACT, FOUND } slotstatus;
 	off_t slotoffset = -1;
-	int slotsize;
-	int slotfreespace;
-	int slotneeded;
-	int numdirpasses;
+	int slotsize = 0;
+	int slotfreespace = 0;
+	int slotneeded = 0;
+	int numdirpasses = 0;
 	off_t endsearch;
-	off_t prevoff;
+	off_t prevoff = 0;
 	int nlink = 0;
 	struct inode *pdp;
 	int i;
@@ -150,11 +188,14 @@ dirloop2:
 			P.p_error = ENAMETOOLONG;
 			goto bad;
 		}
+		/* XXX what is this for? */
+#if 0
 		if (*cp & 0200)
-			if ((*cp&0377) == ('/'|0200) || flag != DELETE) {
+			if (*cp == ('/'|0200) || flag != DELETE) {
 				P.p_error = EINVAL;
 				goto bad;
 			}
+#endif
 		ndp->ni_dent.d_name[i++] = *cp;
 	}
 	ndp->ni_dent.d_namlen = i;
@@ -201,8 +242,8 @@ searchloop:
 		
 		mapout(bp);
 		ep = (struct direct *)((char *)mapin(bp) + entryoffsetinblock);
-		if (ep->d_reclen == 0 || /* XXX */
-		   dirchk && dirbadentry(ep, entryoffsetinblock)) {
+		if (reclen(ep->d_reclen) == 0 ||
+		   (dirchk && dirbadentry(ep, entryoffsetinblock))) {
 			dirbad(dp, ndp->ni_offset, "mangled entry");
 			i = DIRBLKSIZ - (entryoffsetinblock & (DIRBLKSIZ - 1));
 			ndp->ni_offset += i;
@@ -211,35 +252,35 @@ searchloop:
 		}
 		
 		if (slotstatus != FOUND) {
-			int size = ep->d_reclen; /* XXX */
+			int size = reclen(ep->d_reclen);
 			
-			if (ep->d_ino != 0)
+			if (ep->d_ino != 0 && ep->d_ino != (ino_t)-1)
 				size -= DIRSIZ(ep);
 			if (size > 0) {
 				if (size >= slotneeded) {
 					slotstatus = FOUND;
 					slotoffset = ndp->ni_offset;
-					slotsize = ep->d_reclen; /* XXX */
+					slotsize = reclen(ep->d_reclen);
 				} else if (slotstatus == NONE) {
 					slotfreespace += size;
 					if (slotoffset == -1)
 						slotoffset = ndp->ni_offset;
 					if (slotfreespace >= slotneeded) {
 						slotstatus = COMPACT;
-						slotsize = ndp->ni_offset + ep->d_reclen - slotoffset; /* XXX */
+						slotsize = ndp->ni_offset + reclen(ep->d_reclen) - slotoffset;
 					}
 				}
 			}
 		}
 		
-		if (ep->d_ino) {
+		if (ep->d_ino && ep->d_ino != (ino_t)-1) {
 			if (ep->d_namlen == ndp->ni_dent.d_namlen && !bcmp(ndp->ni_dent.d_name, ep->d_name, ep->d_namlen))
 				goto found;
 		}
 		prevoff = ndp->ni_offset;
-		ndp->ni_offset += ep->d_reclen;
-		entryoffsetinblock += ep->d_reclen;
-		if (ep->d_ino)
+		ndp->ni_offset += reclen(ep->d_reclen);
+		entryoffsetinblock += reclen(ep->d_reclen);
+		if (ep->d_ino && ep->d_ino != (ino_t)-1)
 			enduseful = ndp->ni_offset;
 	}
 /* notfound: */
@@ -283,7 +324,7 @@ found:
 	}
 	
 	ndp->ni_dent.d_ino = ep->d_ino;
-	ndp->ni_dent.d_reclen = ep->d_reclen;
+	ndp->ni_dent.d_reclen = ep->d_reclen; /* XXX */
 	mapout(bp);
 	brelse(bp);
 	bp = NULL;

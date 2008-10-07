@@ -10,7 +10,7 @@ SYSINC	= ${PUNIXBASE}/src/sys/h
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
@@ -26,17 +26,18 @@ OBJ	+= syscall.o sysent.o sys_desc.o sys_proc.o sys_prot.o sys_time.o
 OBJ	+= pipe.o sys_sig.o
 # devices
 OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o #dev_vt.o
-OBJ	+= dev_tty.o
+OBJ	+= lcd.o dev_tty.o test1.o
 # helper routines
 OBJ	+= drawcell.o smallfont.o kputs.o kputchar.o scrollcell.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
 OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
-OBJ	+= panic.o abort.o assert.o kprintf.o clock.o lcd.o #globals.o
-OBJ	+= loadav.o
+OBJ	+= panic.o abort.o assert.o kprintf.o clock.o #globals.o
+#OBJ	+= ffs.o loadav.o
 
 #OBJ = testvectors.o
 
+scratch: clean all
 all:	punix-9x.tib
 
 punix-9x.tib:	${OBJ}

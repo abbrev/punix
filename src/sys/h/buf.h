@@ -18,6 +18,7 @@
 #define B_FREE   010000 /* free this flash block */
 #define B_NEWB   020000	/* write this block to a new flash block */
 #define B_CLEAR  040000 /* clear natively (set all bits for flash) */
+#define B_WRITABLE 0100000
 
 /*
  * Each buffer in the pool is usually doubly linked into 2 lists:
@@ -53,6 +54,11 @@ struct buf {
 	long b_blkno;
 	int b_error;
 	size_t b_resid; /* bytes not transferred after error */
+};
+
+struct buffer {
+	char data[BLOCKSIZE];
+	int used;
 };
 
 /*

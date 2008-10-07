@@ -26,4 +26,7 @@ struct  fs {
 	char	fs_fpack[6];     /* file system pack name */
 };
 
+#define blkoff(loc) ((loc) & DEV_BMASK)
+#define lblkno(loc) ((loc) >> DEV_BSHIFT)
+
 #endif

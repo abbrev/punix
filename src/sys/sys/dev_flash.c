@@ -11,23 +11,22 @@
 #include "dev.h"
 #include "globals.h"
 
-#define SECTORSIZE 32768
+#define SECTORSIZE 0x10000L
 #define NUMSECTORS 32
+#define FLASH      ((flash_t)0x200000)
+#define FLASHSIZE  (SECTORSIZE * NUMSECTORS)
+#define FLASHEND   (&FLASH[NUMSECTORS])
 
-#define FBFREE  (-1)
-#define FBUSED  (-2)
+#define FBFREE  (-1) /* free */
+#define FBUSED  (-2) /* used */
 #define FBDEL   (-4) /* deleted but still open */
-#define FBDIRTY (-8) /* obsolete */
+#define FBDIRTY (-8) /* dirty (obsoleted) */
 
 extern long __ld_program_size;
+#define ARCHIVE  ((flash_t)&((char *)FLASH)[(__ld_program_size + 0xffff) % 0x10000])
+#define ARCEND   FLASHEND
 
-typedef short archive_t[][SECTORSIZE];
-
-#if 0
-extern archive_t archive;
-#else
-#define archive (*(archive_t *)((__ld_program_size+0x200000 + 0xffff) & 0xffff))
-#endif
+typedef char (*flash_t)[SECTORSIZE];
 
 /*
  * TO-DO:
@@ -35,8 +34,56 @@ extern archive_t archive;
  * o Make a LRU mapping of block numbers to flashrom addresses. This would make
  *   accessing a recently-accessed block faster.
  * o Should flopen() allow device to be opened once?
- * o Write flwrite().
  */
+
+#define CACHE_SIZE 32
+
+struct cache_entry {
+	long blkno;
+	struct flashblock *fbp;
+};
+
+static struct cache_entry cache[CACHE_SIZE];
+
+/* make this cache entry the most recently used entry */
+static void makeru(struct cache_entry *cep)
+{
+	struct cache_entry ce;
+	
+	if (cep == &cache[0])
+		return;
+	ce = *cep;
+	memmove(&cache[1], &cache[0], (size_t)((void *)cep - (void *)&cache[0]));
+	cache[0] = ce;
+}
+
+static struct cache_entry *cachefind(long blkno)
+{
+	struct cache_entry *cep;
+	
+	/* search for the block */
+	for (cep = &cache[0]; cep < &cache[CACHE_SIZE]; ++cep) {
+		if (cep->blkno == blkno) {
+			makeru(cep);
+			return cep;
+		}
+	}
+	return NULL;
+}
+
+static void cacheadd(long blkno, struct flashblock *fbp)
+{
+	struct cache_entry *cep;
+	
+	if (cachefind(blkno))
+		return;
+	
+	/* we couldn't find this cache entry, so add it to the end */
+	cep = &cache[CACHE_SIZE-1];
+	cep->blkno = blkno;
+	cep->fbp = fbp;
+	makeru(cep);
+}
 
 #if 0
 /* cache using a modified "clock" page replacement algorithm */
@@ -47,7 +94,7 @@ extern archive_t archive;
 struct cache_entry {
 	unsigned int ref;
 	long blkno;
-	void *addr;
+	struct flashblock *fbp;
 };
 
 /* traversing the cache is cheaper than searching (on average) 8192 blocks for
@@ -104,75 +151,104 @@ short FlashErase(const void *dest asm("%a2"));
 
 const struct devtab fltab;
 
-/* extern short archive[][SECTORSIZE]; */
-
-/* XXX: the '- 1' at the end is because sectors are not evenly divisible by
- * flash blocks */
-#define BLOCKSPERSECTOR (2 * SECTORSIZE / sizeof(struct flashblock) - 1)
-
 /* Find the block numbered 'blkno' and return a pointer to the flashblock.
  * Return NULL if this block number doesn't exist.
  */
 STARTUP(static struct flashblock *getfblk(long blkno))
 {
-	int sector, block;
+	int sector;
 	struct flashblock *fbp;
+	struct cache_entry *cep;
 	
-	/* search for the block. */
-	/* FIXME: cache the blkno=>addr mapping for faster future reference. */
-	for (sector = 0; sector < NUMSECTORS; ++sector) {
-		for (block = 0; block < BLOCKSPERSECTOR; ++block) {
-			fbp = (struct flashblock *)&archive[sector][block*sizeof(struct flashblock)/2];
-			
-			if (fbp->status == FBUSED && fbp->blockno == blkno)
-					return fbp;
+	if ((cep = cachefind(blkno)))
+		    return cep->fbp;
+	
+	for (sector = 0; &ARCHIVE[sector] < ARCEND; ++sector) {
+		for (fbp = (struct flashblock *)&ARCHIVE[sector];
+		     (fbp+1) < (struct flashblock *)ARCHIVE[sector+1]; /* the whole block must fit in the sector */
+		     ++fbp) {
+			if (fbp->status == FBFREE) /* end of this sector */
+				break;
+			if ((fbp->status == FBUSED || fbp->status == FBDEL)
+			    && fbp->blockno == blkno) {
+				goto out;
+			}
 		}
 	}
-	return NULL;
+	
+	fbp = NULL;
+out:
+	cacheadd(blkno, fbp);
+	return fbp;
 }
 
-STARTUP(static void flread(struct flashblock *fbp, struct buf *bp))
+extern char *bufalloc();
+
+static void makecopy(struct buf *bp)
 {
+	char *cp;
+	if (bp->b_flags & B_COPY) return;
+	
+	cp = bufalloc();
+	memcpy(cp, bp->b_addr, BLOCKSIZE);
+	bp->b_addr = cp;
+	bp->b_flags |= B_COPY;
+}
+
+/* FIXME: advance the currentfblock pointer to the next free one */
+static void nextblock()
+{
+	++G.currentfblock;
+}
+
+STARTUP(static void flread(struct buf *bp))
+{
+	struct flashblock *fbp = getfblk(bp->b_blkno);
+	
 	bp->b_flags |= B_DONE;
 	
 	if (fbp) {
-		bp->b_flags &= ~B_COPY; /* this is not a copy */
 		bp->b_addr = fbp->data;
+		bp->b_flags &= ~B_COPY;
+		if (bp->b_flags & B_WRITABLE) {
+			makecopy(bp);
+		}
 	} else {
-		int n = 0;
-		bp->b_flags |= B_COPY; /* this is a copy */
-		/* FIXME: allocate a block buffer */
-		
-		/* clear the buffer according to the bit B_CLEAR */
-		if (bp->b_flags & B_CLEAR)
-			n = -1; /* flash native clear state */
-		memset(fbp->data, n, BLOCKSIZE);
+		bp->b_flags &= ~B_WRITABLE;
+		clrbuf(bp);
 	}
 }
 
-STARTUP(static void flwrite(struct flashblock *fbp, struct buf *bp))
+STARTUP(static void flwrite(struct buf *bp))
 {
-	unsigned short *startdiff, *enddiff, *diffp;
+	char *startdiff, *enddiff, *diffp;
 	int newblock = bp->b_flags & B_NEWB;
-	unsigned short *cp;
-	struct flashblock *cfbp, *newfbp;
-	unsigned short *writep;
+	char *cp;
+	struct flashblock *oldfbp, *newfbp;
+	char *writep;
 	int len;
+	struct flashblock *fbp = getfblk(bp->b_blkno);
 	
-	if (!(bp->b_flags & B_COPY)) return;
+	if (!(bp->b_flags & B_COPY)) {
+		if (bp->b_flags & B_NEWB) {
+			bp->b_flags |= B_WRITABLE;
+			flread(bp);
+		} else
+			return;
+	}
 	
-	cfbp = getfblk(bp->b_blkno);
-	if (cfbp) {
-		cp = cfbp->data;
+	oldfbp = getfblk(bp->b_blkno);
+	if (oldfbp) {
+		cp = oldfbp->data;
 		/* find the first byte that is different */
-		for (startdiff = fbp->data; !newblock && startdiff < &fbp->data[BLOCKSIZE/2]; ++startdiff, ++cp) {
+		for (startdiff = fbp->data; !newblock && startdiff < &fbp->data[BLOCKSIZE]; ++startdiff, ++cp) {
 			if (*cp == *startdiff) continue;
 			if ((*cp & *startdiff) != *startdiff)
 				newblock = 1;
 			break;
 		}
 		/* find the last byte that is different */
-		for (diffp = enddiff = startdiff; !newblock && diffp < &fbp->data[BLOCKSIZE/2]; ++diffp, ++cp) {
+		for (diffp = enddiff = startdiff; !newblock && diffp < &fbp->data[BLOCKSIZE]; ++diffp, ++cp) {
 			if (*cp == *diffp) continue;
 			enddiff = diffp;
 			if ((*cp & *diffp) != *diffp)
@@ -180,14 +256,14 @@ STARTUP(static void flwrite(struct flashblock *fbp, struct buf *bp))
 		}
 	} else {
 		newblock = 1;
-		newfbp = G.currentfblock;
 	}
+	
 	if (newblock) {
 		startdiff = fbp->data;
-		enddiff = &fbp->data[BLOCKSIZE / 2 - 1];
+		enddiff = &fbp->data[BLOCKSIZE - 1];
 		newfbp = G.currentfblock;
 	} else {
-		newfbp = cfbp;
+		newfbp = oldfbp;
 	}
 	writep = newfbp->data + (startdiff - fbp->data);
 	len = enddiff - startdiff + 1;
@@ -197,14 +273,16 @@ STARTUP(static void flwrite(struct flashblock *fbp, struct buf *bp))
 		/*
 		 * write the new flash block header
 		 * obsolete the old flash block
-		 * update G.currentfblock
 		 */
+		nextfblock();
 	}
+	cacheadd(fbp->blockno, fbp);
 }
 
-STARTUP(static void fldelete(struct flashblock *fbp, struct buf *bp))
+STARTUP(static void fldelete(struct buf *bp))
 {
 	unsigned short status;
+	struct flashblock *fbp = getfblk(bp->b_blkno);
 	if (!fbp)
 		return;
 	
@@ -215,6 +293,7 @@ STARTUP(static void fldelete(struct flashblock *fbp, struct buf *bp))
 	}
 	
 	FlashWrite(&fbp->status, &status, sizeof(status));
+	cacheadd(fbp->blockno, NULL);
 }
 
 STARTUP(void flopen(dev_t dev))
@@ -234,11 +313,11 @@ STARTUP(void flstrategy(struct buf *bp))
 	fbp = getfblk(bp->b_blkno);
 	
 	if ((bp->b_flags & B_DELETE) || (bp->b_flags & B_FREE)) {
-		fldelete(fbp, bp);
+		fldelete(bp);
 	} else if (bp->b_flags & B_READ) {
-		flread(fbp, bp);
+		flread(bp);
 	} else if (bp->b_flags & B_WRITE) {
-		flwrite(fbp, bp);
+		flwrite(bp);
 	}
 }
 

@@ -22,7 +22,6 @@
 #include "queue.h"
 #include "tty.h"
 #include "proc.h"
-#include "inode.h"
 #include "globals.h"
 
 #define NVT 1
@@ -116,16 +115,16 @@ static const struct state states[];
 static void transition(int ch, int newstate,
  void (*trans)(int ch, struct tty *), struct tty *tp)
 {
-	if (G.vtstate && G.vtstate->exit)
-		G.vtstate->exit(tp);
+	if (G.vt.vtstate && G.vt.vtstate->exit)
+		G.vt.vtstate->exit(tp);
 	if (trans)
 		trans(ch, tp);
 	if (STLAST < (unsigned)newstate)
 		return;
 	
-	G.vtstate = &states[newstate];
-	if (G.vtstate->entry)
-		G.vtstate->entry(tp);
+	G.vt.vtstate = &states[newstate];
+	if (G.vt.vtstate->entry)
+		G.vt.vtstate->entry(tp);
 }
 
 /* XXX: re-write these for Punix */
@@ -176,7 +175,7 @@ static void scrollup(int n)
 #if 1
 STARTUP(static void cursor(struct tty *tp))
 {
-	if (G.cursorvisible)
+	if (G.vt.cursorvisible)
 		invertcursor(tp);
 }
 #else
@@ -186,36 +185,36 @@ STARTUP(static void cursor(struct tty *tp))
 /* possibly scroll up or down so the cursor is visible again */
 STARTUP(static void scroll(struct tty *tp))
 {
-	if (G.pos.row < 0) {
-		scrollup(-G.pos.row);
-		G.pos.row = 0;
-	} else if (G.pos.row > MARGINBOTTOM) {
-		scrolldown(G.pos.row - MARGINBOTTOM);
-		G.pos.row = MARGINBOTTOM;
+	if (G.vt.pos.row < 0) {
+		scrollup(-G.vt.pos.row);
+		G.vt.pos.row = 0;
+	} else if (G.vt.pos.row > MARGINBOTTOM) {
+		scrolldown(G.vt.pos.row - MARGINBOTTOM);
+		G.vt.pos.row = MARGINBOTTOM;
 	}
 }
 
 STARTUP(static void cmd_ind(struct tty *tp))
 {
-	++G.pos.row;
+	++G.vt.pos.row;
 	scroll(tp);
 }
 
 STARTUP(static void cmd_nel(struct tty *tp))
 {
-	G.pos.column = 0;
-	++G.pos.row;
+	G.vt.pos.column = 0;
+	++G.vt.pos.row;
 	scroll(tp);
 }
 
 STARTUP(static void cmd_hts(struct tty *tp))
 {
-	G.tabstops[G.pos.column] = 1;
+	G.vt.tabstops[G.vt.pos.column] = 1;
 }
 
 STARTUP(static void cmd_ri(struct tty *tp))
 {
-	--G.pos.row;
+	--G.vt.pos.row;
 	scroll(tp);
 }
 
@@ -223,38 +222,38 @@ STARTUP(static void reset(struct tty *tp))
 {
 	int i;
 	
-	G.xon = 1;
+	G.vt.xon = 1;
 	memset(LCD_MEM, 0, 3600); /* XXX constant */
-	memset(G.screen, 0, sizeof(G.screen));
-	memset(G.tabstops, 0, sizeof(G.tabstops));
+	memset(G.vt.screen, 0, sizeof(G.vt.screen));
+	memset(G.vt.tabstops, 0, sizeof(G.vt.tabstops));
 	for (i = 0; i < WINWIDTH; i += 8)
-		G.tabstops[i] = 1;
+		G.vt.tabstops[i] = 1;
 	
-	G.pos.row = 0;
-	G.pos.column = 0;
-	G.charset = 0;
-	G.charsets[0] = &glyphsets[1];
-	G.charsets[1] = &glyphsets[2];
-	G.glyphset = G.charsets[G.charset];
-	G.cursorvisible = 1;
+	G.vt.pos.row = 0;
+	G.vt.pos.column = 0;
+	G.vt.charset = 0;
+	G.vt.charsets[0] = &glyphsets[1];
+	G.vt.charsets[1] = &glyphsets[2];
+	G.vt.glyphset = G.vt.charsets[G.vt.charset];
+	G.vt.cursorvisible = 1;
 	cursor(tp);
 	
-	G.vtstate = NULL;
+	G.vt.vtstate = NULL;
 	transition(0, STGROUND, NULL, tp);
 }
 
-/* clear unset parameters up to parameter 'c' */
-STARTUP(static void defaultparams(int ch, struct tty *tp))
+/* clear unset parameters up to parameter 'n' */
+STARTUP(static void defaultparams(int n, struct tty *tp))
 {
 	int i;
 	
-	if (ch > NUMPARAMS)
-		ch = NUMPARAMS;
+	if (n > NUMPARAMS)
+		n = NUMPARAMS;
 	
-	for (i = G.numparams; i < ch; ++i)
-		G.params[i] = 0;
+	for (i = G.vt.numparams; i < n; ++i)
+		G.vt.params[i] = 0;
 	
-	G.numparams = ch;
+	G.vt.numparams = n;
 }
 
 /******************************************************************************
@@ -288,19 +287,19 @@ STARTUP(static void print(int ch, struct tty *tp))
 	 * the right margin, even if it's outside the margin (see the
 	 * "invertcursor" routine).
 	 */
-	if (G.pos.column > MARGINRIGHT) {
-		++G.pos.row;
-		G.pos.column = 0;
+	if (G.vt.pos.column > MARGINRIGHT) {
+		++G.vt.pos.row;
+		G.vt.pos.column = 0;
 		scroll(tp);
 	}
 	
 	/* draw the glyph */
 	if (ch < 0x80)
-		drawglyph(ch - 0x20, G.pos.row, G.pos.column, G.glyphset);
+		drawglyph(ch - 0x20, G.vt.pos.row, G.vt.pos.column, G.vt.glyphset);
 	else
-		drawglyph(ch - 0xa0 + 0x60, G.pos.row, G.pos.column, G.glyphset);
+		drawglyph(ch - 0xa0 + 0x60, G.vt.pos.row, G.vt.pos.column, G.vt.glyphset);
 	
-	++G.pos.column;
+	++G.vt.pos.column;
 }
 
 STARTUP(static void execute(int ch, struct tty *tp))
@@ -311,43 +310,43 @@ STARTUP(static void execute(int ch, struct tty *tp))
 		/* transmit answerback message (?) */
 		break;
 	case 0x08: /* BS */
-		if (G.pos.column > 0)
-			--G.pos.column;
+		if (G.vt.pos.column > 0)
+			--G.vt.pos.column;
 		break;
 	case 0x09: /* HT */
 		/* move the cursor to the next tab stop or the right margin */
-		while (G.pos.column < MARGINRIGHT && !G.tabstops[++G.pos.column])
+		while (G.vt.pos.column < MARGINRIGHT && !G.vt.tabstops[++G.vt.pos.column])
 			;
 		break;
 	case 0x0a: /* LF */
 	case 0x0b: /* VT */
 	case 0x0c: /* FF */
 		/* new line operation */
-		++G.pos.row;
+		++G.vt.pos.row;
 		scroll(tp);
 		/* fall through */
 	case 0x0d: /* CR */
 		/* move cursor to the left margin on the current line */
-		G.pos.column = 0;
+		G.vt.pos.column = 0;
 		break;
 	case 0x0e: /* SO */
 		/* invoke G1 character set, as designated by SCS control
 		 * sequence */
-		G.charset = 1;
-		G.glyphset = G.charsets[G.charset];
+		G.vt.charset = 1;
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case 0x0f: /* SI */
 		/* select G0 character set, as selected by ESC ( sequence */
-		G.charset = 0;
-		G.glyphset = G.charsets[G.charset];
+		G.vt.charset = 0;
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case 0x11: /* XON */
 		/* resume transmission */
-		G.xon = 1;
+		G.vt.xon = 1;
 		break;
 	case 0x13: /* XOFF */
 		/* stop transmitting all codes except XOFF and XON */
-		G.xon = 0;
+		G.vt.xon = 0;
 		break;
 	/* C1 control codes */
 	case 'H'+0x40:
@@ -374,14 +373,14 @@ STARTUP(static void clear(struct tty *tp))
 	/* Clear the current private flag, intermediate characters, final
 	 * character, and parameters. */
 	
-	G.privflag = 0;
-	G.nullop = 0;
+	G.vt.privflag = 0;
+	G.vt.nullop = 0;
 	
-	G.intcharp = &G.intchars[0];
-	G.intchars[0] = '\0';
+	G.vt.intcharp = &G.vt.intchars[0];
+	G.vt.intchars[0] = '\0';
 	
-	G.numparams = 1;
-	G.params[0] = 0;
+	G.vt.numparams = 1;
+	G.vt.params[0] = 0;
 }
 
 STARTUP(static void collect(int ch, struct tty *tp))
@@ -390,13 +389,13 @@ STARTUP(static void collect(int ch, struct tty *tp))
 	 * selecting a control function to be executed when a final character
 	 * arrives. */
 	
-	if (G.intcharp >= &G.intchars[NUMINTCHARS]) {
-		G.nullop = 1; /* flag this so the dispatch turns into a no-op */
+	if (G.vt.intcharp >= &G.vt.intchars[NUMINTCHARS]) {
+		G.vt.nullop = 1; /* flag this so the dispatch turns into a no-op */
 		return;
 	}
 	
-	*G.intcharp++ = ch;
-	*G.intcharp = '\0';
+	*G.vt.intcharp++ = ch;
+	*G.vt.intcharp = '\0';
 }
 
 STARTUP(static void param(int ch, struct tty *tp))
@@ -408,16 +407,16 @@ STARTUP(static void param(int ch, struct tty *tp))
 	 * parameters need be stored. If more than 16 parameters arrive, all the
 	 * extra parameters are silently ignored. */
 	
-	if (G.numparams > NUMPARAMS)
+	if (G.vt.numparams > NUMPARAMS)
 		return;
 	
 	if (ch == ';') {
-		if (G.numparams <= NUMPARAMS)
-			G.params[G.numparams++] = 0;
+		if (G.vt.numparams <= NUMPARAMS)
+			G.vt.params[G.vt.numparams++] = 0;
 	} else {
-		G.params[G.numparams-1] = G.params[G.numparams-1] * 10 + (ch - '0');
-		if (G.params[G.numparams-1] > MAXPARAMVAL)
-			G.params[G.numparams-1] = MAXPARAMVAL;
+		G.vt.params[G.vt.numparams-1] = G.vt.params[G.vt.numparams-1] * 10 + (ch - '0');
+		if (G.vt.params[G.vt.numparams-1] > MAXPARAMVAL)
+			G.vt.params[G.vt.numparams-1] = MAXPARAMVAL;
 	}
 }
 
@@ -428,7 +427,7 @@ STARTUP(static void esc_dispatch(int ch, struct tty *tp))
 	 * characters are available because collect() stored them as they
 	 * arrived. */
 	
-	if (G.nullop)
+	if (G.vt.nullop)
 		return;
 	
 	switch (ch) {
@@ -485,30 +484,30 @@ STARTUP(static void esc_dispatch(int ch, struct tty *tp))
 		break;
 	case 'A':
 		/* SCS (UK) */
-		if (G.intchars[0] == '(')
-			G.charsets[0] = &glyphsets[0];
-		else if (G.intchars[0] == ')')
-			G.charsets[1] = &glyphsets[0];
+		if (G.vt.intchars[0] == '(')
+			G.vt.charsets[0] = &glyphsets[0];
+		else if (G.vt.intchars[0] == ')')
+			G.vt.charsets[1] = &glyphsets[0];
 		
-		G.glyphset = G.charsets[G.charset];
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case 'B':
 		/* SCS (ASCII) */
-		if (G.intchars[0] == '(')
-			G.charsets[0] = &glyphsets[1];
-		else if (G.intchars[0] == ')')
-			G.charsets[1] = &glyphsets[1];
+		if (G.vt.intchars[0] == '(')
+			G.vt.charsets[0] = &glyphsets[1];
+		else if (G.vt.intchars[0] == ')')
+			G.vt.charsets[1] = &glyphsets[1];
 		
-		G.glyphset = G.charsets[G.charset];
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case '0':
 		/* SCS (Special Graphics) */
-		if (G.intchars[0] == '(')
-			G.charsets[0] = &glyphsets[2];
-		else if (G.intchars[0] == ')')
-			G.charsets[1] = &glyphsets[2];
+		if (G.vt.intchars[0] == '(')
+			G.vt.charsets[0] = &glyphsets[2];
+		else if (G.vt.intchars[0] == ')')
+			G.vt.charsets[1] = &glyphsets[2];
 		
-		G.glyphset = G.charsets[G.charset];
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case '1':
 		/* SCS (Alternate Character ROM Standard Character Set) */
@@ -530,69 +529,69 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 	int n, r, c;
 	int i;
 	
-	if (G.nullop)
+	if (G.vt.nullop)
 		return;
 	
 	switch (ch) {
 	case 'A':
 		/* CUU Pn */
-		n = G.params[0];
+		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
 		
-		G.pos.row -= n;
-		if (G.pos.row < 0)
-			G.pos.row = 0;
+		G.vt.pos.row -= n;
+		if (G.vt.pos.row < 0)
+			G.vt.pos.row = 0;
 		break;
 	case 'B':
 		/* CUD Pn */
-		n = G.params[0];
+		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
 		
-		G.pos.row += n;
-		if (G.pos.row > MARGINBOTTOM)
-			G.pos.row = MARGINBOTTOM;
+		G.vt.pos.row += n;
+		if (G.vt.pos.row > MARGINBOTTOM)
+			G.vt.pos.row = MARGINBOTTOM;
 		break;
 	case 'C':
 		/* CUF Pn */
-		n = G.params[0];
+		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
 		
-		G.pos.column += n;
-		if (G.pos.column > MARGINRIGHT)
-			G.pos.column = MARGINRIGHT;
+		G.vt.pos.column += n;
+		if (G.vt.pos.column > MARGINRIGHT)
+			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'D':
 		/* CUB Pn */
-		n = G.params[0];
+		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
 		
-		G.pos.column -= n;
-		if (G.pos.column < 0)
-			G.pos.column = 0;
+		G.vt.pos.column -= n;
+		if (G.vt.pos.column < 0)
+			G.vt.pos.column = 0;
 		break;
 	case 'H':
 		/* CUP Pr Pc */
 	case 'f':
 		/* HVP Pn Pn */
 		defaultparams(2, tp);
-		r = G.params[0];
-		c = G.params[1];
+		r = G.vt.params[0];
+		c = G.vt.params[1];
 		
-		G.pos.row = r - 1;
-		if (G.pos.row < 0)
-			G.pos.row = 0;
-		else if (G.pos.row > MARGINBOTTOM)
-			G.pos.row = MARGINBOTTOM;
+		G.vt.pos.row = r - 1;
+		if (G.vt.pos.row < 0)
+			G.vt.pos.row = 0;
+		else if (G.vt.pos.row > MARGINBOTTOM)
+			G.vt.pos.row = MARGINBOTTOM;
 		
-		G.pos.column = c - 1;
-		if (G.pos.column < 0)
-			G.pos.column = 0;
-		else if (G.pos.column > MARGINRIGHT)
-			G.pos.column = MARGINRIGHT;
+		G.vt.pos.column = c - 1;
+		if (G.vt.pos.column < 0)
+			G.vt.pos.column = 0;
+		else if (G.vt.pos.column > MARGINRIGHT)
+			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'c':
 		/* DA Pn */
@@ -611,10 +610,10 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 	case 'y':
 		/* DECTST 2 Ps */
 		defaultparams(2, tp);
-		if (G.params[0] != 2)
+		if (G.vt.params[0] != 2)
 			break;
 		
-		n = G.params[1];
+		n = G.vt.params[1];
 		
 		while (n & 8) /* Repeate Selected Test(s) indefinitely */
 			if (n == 0)
@@ -632,24 +631,24 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 	case 'J':
 		/* ED Ps */
 		/* Erase in Display */
-		n = G.params[0];
+		n = G.vt.params[0];
 		
 		if (n == 0) {
 			/* Erase from the active position to the end of the
 			 * screen, inclusive (default) */
-			for (c = G.pos.column; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.pos.row, c, &glyphsets[0]);
-			for (r = G.pos.row + 1; r < WINHEIGHT; ++r)
+			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
+				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+			for (r = G.vt.pos.row + 1; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
 					drawglyph(' ' - 0x20, r, c, &glyphsets[0]);
 		} else if (n == 1) {
 			/* Erase from start of the screen to the active
 			 * position, inclusive */
-			for (r = 0; r < G.pos.row; ++r)
+			for (r = 0; r < G.vt.pos.row; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
 					drawglyph(' ' - 0x20, r, c, &glyphsets[0]);
-			for (c = 0; c <= G.pos.column; ++c)
-				drawglyph(' ' - 0x20, G.pos.row, c, &glyphsets[0]);
+			for (c = 0; c <= G.vt.pos.column; ++c)
+				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
 		} else if (n == 2) {
 			/* Erase all of the display -- all lines are erased,
 			 * changed to single-width, and the cursor does not
@@ -662,30 +661,30 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 	case 'K':
 		/* EL Ps */
 		/* Erase in Line */
-		n = G.params[0];
+		n = G.vt.params[0];
 		
 		if (n == 0) {
 			/* Erase from the active position to the end of the
 			 * line, inclusive (default) */
-			for (c = G.pos.column; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.pos.row, c, &glyphsets[0]);
+			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
+				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
 		} else if (n == 1) {
 			/* Erase from the start of the line to the active
 			 * position, inclusive */
-			for (c = 0; c <= G.pos.column; ++c)
-				drawglyph(' ' - 0x20, G.pos.row, c, &glyphsets[0]);
+			for (c = 0; c <= G.vt.pos.column; ++c)
+				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
 		} else if (n == 2) {
 			/* Erase all of the line, inclusive */
 			for (c = 0; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.pos.row, c, &glyphsets[0]);
+				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
 		}
 		break;
 	case 'h':
 		/* SM Ps ... */
 		/* Set Mode */
 		
-		for (i = 0; i < G.numparams; ++i)
-			switch (G.params[i]) {
+		for (i = 0; i < G.vt.numparams; ++i)
+			switch (G.vt.params[i]) {
 			case 1:  /* DECCKM */
 				break;
 			case 2:  /* DECCANM */
@@ -711,8 +710,8 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 		/* RM Ps ... */
 		/* Reset Mode */
 		
-		for (i = 0; i < G.numparams; ++i)
-			switch (G.params[i]) {
+		for (i = 0; i < G.vt.numparams; ++i)
+			switch (G.vt.params[i]) {
 			case 1:  /* DECCKM */
 				break;
 			case 2:  /* DECCANM */
@@ -740,8 +739,8 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 		/* SGR Ps ... */
 		/* Select Graphic Rendition */
 		
-		for (i = 0; i < G.numparams; ++i) {
-			switch (G.params[i]) {
+		for (i = 0; i < G.vt.numparams; ++i) {
+			switch (G.vt.params[i]) {
 			case 0:
 				/* attributes off */
 				break;
@@ -763,7 +762,7 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 		break;
 	case 'g':
 		/* TBC Ps */
-		switch (G.params[0]) {
+		switch (G.vt.params[0]) {
 		case 0:
 			/* Clear the horizontal tab stop at the active
 			 * position (default) */
@@ -836,7 +835,7 @@ STARTUP(static void osc_put(int ch, struct tty *tp))
 	 * the end of the control string is recognised. */
 }
 
-STARTUP(static void osc_end(int ch, struct tty *tp))
+STARTUP(static void osc_end(struct tty *tp))
 {
 	/* FIXME: Allow the OSC Handler to finish neatly. */
 }
@@ -1035,7 +1034,7 @@ static const struct state states[] = {
 /* one-shot routine on system startup */
 STARTUP(void vtinit())
 {
-	G.vtstate = &states[STGROUND];
+	G.vt.vtstate = &states[STGROUND];
 }
 
 /*
@@ -1065,7 +1064,7 @@ STARTUP(void vtoutput(int ch, struct tty *tp))
 	         (0x80 <= ch && ch <= 0x9a))
 		transition(ch, STGROUND, execute, tp);
 	else
-		G.vtstate->event(ch, tp);
+		G.vt.vtstate->event(ch, tp);
 	
 	cursor(tp);
 	splx(x);
@@ -1108,7 +1107,7 @@ STARTUP(void vtrint(dev_t dev))
 {
 	int ch = 0; /* XXX: how to get the value from Int_1? */
 	
-	vtinput(ch, &G.vt[MINOR(dev)]);
+	vtinput(ch, &G.vt.vt[MINOR(dev)]);
 }
 
 STARTUP(void vtopen(dev_t dev, int rw))
@@ -1120,7 +1119,7 @@ STARTUP(void vtopen(dev_t dev, int rw))
 		P.p_error = ENXIO;
 		return;
 	}
-	tp = &G.vt[minor];
+	tp = &G.vt.vt[minor];
 	if (!(tp->t_state & ISOPEN)) {
 		tp->t_state = ISOPEN;
 		tp->t_termios.c_iflag = ICRNL;
@@ -1138,12 +1137,12 @@ STARTUP(void vtclose(dev_t dev, int rw))
 
 STARTUP(void vtread(dev_t dev))
 {
-	ttyread(&G.vt[MINOR(dev)]);
+	ttyread(&G.vt.vt[MINOR(dev)]);
 }
 
 STARTUP(void vtwrite(dev_t dev))
 {
-	struct tty *tp = &G.vt[MINOR(dev)];
+	struct tty *tp = &G.vt.vt[MINOR(dev)];
 	int ch;
 	
 	if (!(tp->t_state & ISOPEN))

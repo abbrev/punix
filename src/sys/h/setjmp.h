@@ -1,5 +1,5 @@
-#ifndef _SETJMP_H_
-#define _SETJMP_H_
+#ifndef _H_SETJMP_H_
+#define _H_SETJMP_H_
 
 /* $Id: setjmp.h,v 1.4 2008/01/15 20:23:56 fredfoobar Exp $ */
 

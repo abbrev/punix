@@ -64,7 +64,6 @@
 #include <sys/resource.h>
 #include <limits.h>
 #include <stdint.h>
-#include <setjmp.h>
 
 /* #include "procglo.h" */
 #include "param.h"
@@ -72,6 +71,7 @@
 #include "file.h"
 /* #include "signal.h" */
 #include "ktime.h"
+#include "setjmp.h"
 
 #if 0
 #define NPROC	32
@@ -111,6 +111,19 @@ struct proc {
 	struct proc *p_next;
 	char p_status;	/* stopped, ready, running, zombie, etc. */
 	int p_flag;
+	
+	/* syscalls */
+#ifdef USPARGS
+#if USPARGS
+	void *p_arg;	/* args to syscall on user stack */
+#else
+	int p_arg[8];	/* args to syscall (probably don't need 8 words) */
+#endif
+#else
+#error "USPARGS is not defined!"
+#endif
+	uint32_t p_retval;
+	int p_error;
 	
 	/* scheduling */
 	int p_nice;
@@ -154,26 +167,37 @@ struct proc {
 	gid_t p_groups[NGROUPS];	/* groups, 0 terminated */
 	
 	/* signals */
-#if 0
-	sighandler_t p_signal[NSIG];	/* signal handlers */
-#else
-	struct sigaction p_sigaction[NSIG];
-#endif
+	/* 2.11BSD => Punix
+	 * u_signal[]() => p_signal[]()
+	 * u_sigmask[]  => p_sigmasks[]
+	 * u_sigonstack => p_sigonstack
+	 * u_sigintr    => p_sigintr
+	 * 
+	 * u_oldmask    => p_oldmask
+	 * u_code       => p_sigcode
+	 * u_psflags    => p_psflags
+	 * u_sigstk     => p_sigstk
+	 * p_sig        => p_sig
+	 * p_sigmask    => p_sigmask
+	 * p_sigignore  => p_sigignore
+	 * p_sigcatch   => p_sigcatch
+	 */
 	sigset_t p_sig;		/* currently posted signals */
-	sigset_t p_sigmask[NSIG];	/* correct type ? */
-	sigset_t p_cursigmask;
-	sigset_t p_sigonstack;	/* signals to take on sigstack */
-	sigset_t p_sigintr;	/* signals that interrupt syscalls */
-	stack_t p_sigstk;	/* signal stack */
+	sigset_t p_sigmask;	/* current signal mask */
+	sigset_t p_oldmask;	/* saved mask from before sigpause */
+	sigset_t p_sigignore;	/* signals being ignored */
+	sigset_t p_sigcatch;	/* signals being caught by user */
+	int p_sigcode;		/* code to trap */
+	char p_psflags;		/* process signal flags */
+	char p_ptracesig;	/* */
+	struct sigaltstack p_sigstk;	/* signal stack */
 	
-	/* syscalls */
-#if USPARGS
-	void *p_arg;	/* args to syscall on user stack */
-#else
-	int p_arg[8];	/* args to syscall (probably don't need 8 words) */
-#endif
-	uint32_t p_retval;
-	int p_error;
+	/* expansion of struct sigaction */
+	void (*p_signal[NSIG])();	/* signal handlers */
+	sigset_t p_sigmasks[NSIG];	/* signal masks */
+	sigset_t p_sigonstack;		/* signals to run on alternate stack */
+	sigset_t p_sigintr;		/* signals that interrupt syscalls */
+	sigset_t p_signocldwait;
 	
 	/* file descriptors */
 	struct file *p_ofile[NOFILE];	/* file structures for open files */
@@ -190,7 +214,9 @@ struct proc {
 	char *p_base;
 	size_t p_count;
 	off_t p_offset; /* need this? */
+#if 1
 	char p_dbuf[NAME_MAX+1]; /* need this? */
+#endif
 	const char *p_dirp; /* need this? */
 	struct inode *p_pdir;
 	struct direct p_dent;
@@ -242,5 +268,9 @@ struct proc {
 #define P_WAITED  002 /* set if parent received this proc's status already */
 #define P_TIMEOUT 004 /* tsleep timeout */
 #define P_SINTR   010 /* a signal can interrupt sleep */
+#define P_NOCLDWAIT 020 /* don't wait for children when they terminate */
+#define P_NOCLDSTOP 040 /* don't receive notification of stopped children */
+#define P_VFORK     0100 /* vforking */
+#define P_VFDONE    0200 /* end vfork */
 
 #endif /* _SYS_PROC_H_ */

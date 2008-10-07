@@ -31,11 +31,12 @@
 #include "process.h"
 #include "queue.h"
 #include "inode.h"
+#include "wait.h"
 #include "globals.h"
 
 /* process manipulation system calls */
 
-STARTUP(void sys_sigreturn())
+void sys_sigreturn()
 {
 	/* FIXME: write this! */
 }
@@ -68,7 +69,7 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 }
 /* XXX */
 
-STARTUP(static void copyenv(char ***vp, char **sp, char **sv))
+static void copyenv(char ***vp, char **sp, char **sv)
 {
 	char *cp;
 	char **v = *vp;
@@ -82,6 +83,21 @@ STARTUP(static void copyenv(char ***vp, char **sp, char **sv))
 	*v++ = NULL;
 	*vp = v;
 	*sp = s;
+}
+
+static void endvfork()
+{
+	struct proc *pp;
+	
+	pp = P.p_pptr;
+	P.p_flag &= ~P_VFORK;
+	wakeup(pp);
+	while (!(P.p_flag&P_VFDONE))
+		slp(pp, PZERO-1);
+#if 0
+	P.p_dsize = pp->p_dsize = 0; /* are these necessary? */
+	P.p_ssize = pp->p_ssize = 0; /* " */
+#endif
 }
 
 /* the following are inherited by the child from the parent (this list comes from execve(2) man page in FreeBSD 6.2):
@@ -100,7 +116,7 @@ STARTUP(static void copyenv(char ***vp, char **sp, char **sv))
 Essentially, don't touch those (except for things like signals set to be caught
 are set to default in the new image).
 */
-STARTUP(void sys_execve())
+void sys_execve()
 {
 	struct a {
 		const char *pathname;
@@ -165,8 +181,8 @@ STARTUP(void sys_execve())
 	*--(int *)ustack = 1; /* argc */
 #endif
 	
-	if (P.p_pptr && P.p_pptr->p_status == P_VFORKING)
-		P.p_pptr->p_status = P_RUNNING;
+	if (P.p_flag & P_VFORK)
+		endvfork();
 	else {
 		/* free our resources */
 	}
@@ -206,44 +222,80 @@ STARTUP(void sys_execve())
 	 */
 }
 
+void doexit(int status)
+{
+	int i;
+	struct proc *q;
+	
+	P.p_flag &= ~P_TRACED;
+	P.p_sigignore = ~0;
+	P.p_sig = 0;
+	
+#if 0
+	for (i = 0; i < NOFILE; ++i) {
+		struct file *f;
+		f = P.p_ofile[i];
+		P.p_ofile[i] = NULL;
+		P.p_oflag[i] = 0;
+		closef(f); /* crash in closef() */
+	}
+	ilock(P.p_cdir);
+	iput(P.p_cdir);
+	if (P.p_rdir) {
+		ilock(P.p_rdir);
+		iput(P.p_rdir);
+	}
+	P.p_rlimit[RLIMIT_FSIZE].rlim_cur = RLIM_INFINITY;
+	if (P.p_flag & P_VFORK)
+		endvfork();
+	else {
+		/* xfree(); */
+		/* mfree(...); */
+	}
+	/* mfree(...); */
+#endif
+	
+	if (P.p_pid == 1)
+		panic("init died");
+	
+	P.p_waitstat = status;
+	/* ruadd(&P.p_rusage, &P.p_crusage); */
+	for EACHPROC(q) {
+		if (q->p_pptr == &P) {
+			q->p_pptr = &G.proc[1];
+			wakeup(&G.proc[0]);
+			if (q->p_flag & P_TRACED) {
+				q->p_flag &= ~P_TRACED;
+				psignal(q, SIGKILL);
+			} else if (q->p_status == P_STOPPED) {
+				psignal(q, SIGHUP);
+				psignal(q, SIGCONT);
+			}
+		}
+	}
+	psignal(P.p_pptr, SIGCHLD);
+	wakeup(P.p_pptr);
+	swtch();
+}
+
 /* XXX: fix this to conform to the new vfork() method */
-STARTUP(void sys_exit())
+void sys_exit()
 {
 	struct a {
 		int status;
 	} *ap = (struct a *)P.p_arg;
 	
-	if (P.p_pid == 1)
-		panic("process 1 exited");
-	
-	CURRENT->p_waitstat = ap->status << 8;
-	/* clean up resources used by proc */
-	/*
-	 * we probably don't need to free memory allocations, as we probably
-	 * don't need to increment ref counts to mem allocs upon vfork
-	 * This is because a vfork parent is blocked until the child exits or
-	 * execs anyway
-	 */
-	/* close all fd's */
-	/* any more we have to do? */
-	/* FIXME: write this */
-	
-	/* FIXME: add signals to appropriate global header file and fix this */
-	psignal(P.p_pptr, SIGCHLD);
-	
-	P.p_status = P_ZOMBIE;
-	/* if parent is blocked by us with vfork, we need to wake it up */
-	
-	swtch();
+	doexit(W_EXITCODE(ap->status, 0));
 }
 
-STARTUP(void sys_fork())
+void sys_fork()
 {
 	P.p_error = ENOSYS;
 }
 
-STARTUP(void sys_vfork())
+void sys_vfork()
 {
+#if 0
 	struct proc *cp = NULL;
 	pid_t pid;
 	void *sp = NULL;
@@ -273,25 +325,27 @@ STARTUP(void sys_vfork())
 	cp->p_stack = sp;
 	cp->p_stacksize = 0; /* XXX */
 	cp->p_status = P_RUNNING;
+	cp->p_flag |= P_VFORK;
 	
 	/* use the new kernel stack but the same user stack */
 	setup_env(cp->p_ssav, P.p_tfp, sp);
 	
-	P.p_status = P_VFORKING;
-	swtch();
+	/* wait for child to end its vfork */
+	while (cp->p_flag & P_VFORK)
+		slp(cp, PSWP+1);
 	
+	/* reclaim our stuff */
+	cp->p_flag |= P_VFDONE;
+	wakeup(&P);
 	return;
 stackp:
 	pfree(cp);
 nomem:
 	P.p_error = ENOMEM;
+#endif
 }
 
-STARTUP(static void dowait4(
-		pid_t pid,
-		int *status,
-		int options,
-		struct rusage *rusage))
+static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 {
 	struct proc *p;
 	int nfound = 0;
@@ -310,10 +364,8 @@ loop:
 			if (p->p_pgrp != -pid) continue;
 		}
 		++nfound;
-		if ((P.p_sigaction[SIGCHLD].sa_flags & SA_NOCLDWAIT)
-		    || P.p_sigaction[SIGCHLD].sa_handler == SIG_IGN) {
+		if (P.p_flag & P_NOCLDWAIT)
 			continue;
-		}
 		if ((options & WCONTINUED) && p->p_status == P_RUNNING && (p->p_flag & P_WAITED)) {
 			/* return with this proc */
 			p->p_status &= ~P_WAITED;
@@ -374,13 +426,13 @@ struct wait4a {
 	struct rusage *rusage;
 };
 
-STARTUP(void sys_wait())
+void sys_wait()
 {
 	struct wait3a *ap = (struct wait3a *)P.p_arg;
 	dowait4(-1, ap->status, 0, NULL);
 }
 
-STARTUP(void sys_waitpid())
+void sys_waitpid()
 {
 	struct wait4a *ap = (struct wait4a *)P.p_arg;
 	dowait4(ap->pid, ap->status, ap->options, NULL);
@@ -405,17 +457,17 @@ STARTUP(void sys_wait4())
 }
 #endif
 
-STARTUP(void sys_getpid())
+void sys_getpid()
 {
 	P.p_retval = P.p_pid;
 }
 
-STARTUP(void sys_getppid())
+void sys_getppid()
 {
 	P.p_retval = P.p_pptr->p_pid;
 }
 
-STARTUP(static void donice(struct proc *p, int n))
+static void donice(struct proc *p, int n)
 {
 
         if (P.p_uid && P.p_ruid &&
@@ -434,7 +486,7 @@ STARTUP(static void donice(struct proc *p, int n))
         p->p_nice = n;
 }
 
-STARTUP(void sys_nice())
+void sys_nice()
 {
 	struct a {
 		int inc;
@@ -444,7 +496,7 @@ STARTUP(void sys_nice())
 	P.p_retval = P.p_nice - NZERO;
 }
 
-STARTUP(void sys_getpriority())
+void sys_getpriority()
 {
 	struct a {
 		int which;
@@ -495,7 +547,7 @@ STARTUP(void sys_getpriority())
 		P.p_error = ESRCH;
 }
 
-STARTUP(void sys_setpriority())
+void sys_setpriority()
 {
 	struct a {
 		int which;
@@ -551,7 +603,7 @@ STARTUP(void sys_setpriority())
 		P.p_error = ESRCH;
 }
 
-STARTUP(void sys_getrlimit())
+void sys_getrlimit()
 {
 	struct a {
 		int resource;
@@ -574,7 +626,7 @@ STARTUP(void sys_getrlimit())
 	}
 }
 
-STARTUP(void sys_setrlimit())
+void sys_setrlimit()
 {
 	struct a {
 		int resource;
@@ -598,7 +650,7 @@ STARTUP(void sys_setrlimit())
 	}
 }
 
-STARTUP(void sys_getrusage())
+void sys_getrusage()
 {
 	struct a {
 		int who;

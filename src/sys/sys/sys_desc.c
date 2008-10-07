@@ -55,6 +55,7 @@
 
 /* everything in here manipulates file descriptors */
 
+#include <limits.h>
 #include <unistd.h>
 #include <stddef.h>
 #include <errno.h>

@@ -33,10 +33,6 @@ STARTUP(static void flush())
 	splx(x);
 }
 
-/*
- * FIXME: do rxon() to resume receiving when buffer has room to accept more
- * data and txon() to resume transmitting when buffer has more data.
- */
 STARTUP(void linkintr())
 {
 	int status;
@@ -64,22 +60,23 @@ STARTUP(void linkintr())
 	}
 	
 	if (status & LS_RXBYTE) {
-		ch = LINK_BUFFER;
-		/* put the byte on the receive queue */
-		putc(ch, &G.linkreadq);
-		
-		if (qisfull(&G.linkreadq))
-			rxoff(); /* no room for the next byte */
+		if (qisfull(&G.linkreadq)) /* no room for this byte */
+			rxoff();
 		else if (G.linkreadq.q_count == 1) {
+			/* get the byte and put it on the receive queue */
+			ch = LINK_BUFFER;
+			putc(ch, &G.linkreadq);
+			
+			/* wakeup any processes reading from the link */
 			spl3();
 			wakeup(&G.linkreadq);
 		}
 	}
 	
 	if (status & LS_TXEMPTY) {
-		/* get the next byte from the send queue and send it */
+		/* send the next byte from the send queue */
 		
-		if ((ch = getc(&G.linkwriteq)) < 0)
+		if ((ch = getc(&G.linkwriteq)) < 0) /* nothing to send */
 			txoff();
 		else {
 			LINK_BUFFER = ch;
@@ -120,15 +117,19 @@ STARTUP(void linkread(dev_t dev))
 {
 	/* read up to p_count bytes from the rx queue to p_base */
 	int ch;
+	int x;
 	size_t count = P.p_count;
 	
 	for (; P.p_count; --P.p_count) {
+		rxon();
+		x = spl5();
 		while ((ch = getc(&G.linkreadq)) < 0) {
 			if (count == P.p_count)
 				slp(&G.linkreadq, PPIPE);
 			else /* we got some data already, so just return */
 				return;
 		}
+		splx(x);
 		*P.p_base++ = ch;
 	}
 }
@@ -136,15 +137,17 @@ STARTUP(void linkread(dev_t dev))
 STARTUP(void linkwrite(dev_t dev))
 {
 	int ch;
+	int x;
 	
 	for (; P.p_count; --P.p_count) {
 		ch = *P.p_base++;
+		x = spl5();
+		txon();
 		while (putc(ch, &G.linkwriteq) < 0) {
-			int x = spl5();
 			G.linklowat = QSIZE - 32; /* XXX constant */
 			slp(&G.linkwriteq, PPIPE);
-			splx(x);
 		}
+		splx(x);
 	}
 }
 

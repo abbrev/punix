@@ -162,20 +162,6 @@ STARTUP(void swtch())
 	longjmp(P.p_ssav, 1);
 }
 
-/* sleep until event */
-STARTUP(void slp(void *event, int basepri))
-{
-	P.p_waitfor = event;
-	P.p_status = P_SLEEPING;
-	P.p_basepri = basepri;
-	swtch();
-	
-	if (issig()) {
-		/*psig();*/
-		longjmp(P.p_qsav, 1);
-	}
-}
-
 STARTUP(void unsleep(struct proc *p))
 {
 	int x = spl7();
@@ -297,10 +283,24 @@ resume:
 			return EINTR;
 		return ERESTART;
 	}
-	return(0);
+	return 0;
 }
 
 #endif
+
+/* sleep until event */
+STARTUP(void slp(void *event, int basepri))
+{
+	int priority = basepri;
+	if (basepri > PZERO)
+		priority |= PCATCH;
+	P.p_error = tsleep(event, priority, NULL);
+	
+	if (!(priority & PCATCH) || P.p_error == 0)
+		return;
+	
+	longjmp(P.p_qsav, 1);
+}
 
 
 

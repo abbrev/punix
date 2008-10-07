@@ -29,8 +29,10 @@ struct rlimit {
 };
 
 struct rusage {
-	struct timeval	ru_utime;	/* user time used */
-	struct timeval	ru_stime;	/* system time used */
+	struct timeval ru_utime;	/* user time used */
+	struct timeval ru_stime;	/* system time used */
+	long           ru_nvcsw;	/* voluntary context switches */
+	long           ru_nsignals;
 };
 
 /* possible values for resource argument of getrlimit() and setrlimit() */

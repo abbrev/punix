@@ -4,6 +4,7 @@
 #include "queue.h"
 #include "inode.h"
 #include "tty.h"
+#include "heap.h"
 
 struct globals {
 	char exec_ram[60];
@@ -14,6 +15,10 @@ struct globals {
 	int _cputime;
 	int _updlock;
 	int lowestpri;
+	struct proc *freeproc;
+	struct proc *current;
+	struct proc proc[NPROC];
+	struct file file[NFILE];
 	unsigned long loadavg[3];
 	
 	int audiosamp; /* current samples */
@@ -42,10 +47,6 @@ struct globals {
 	
 	char canonb[CANBSIZ];
 	struct inode inode[NINODE];
-	struct proc proc[NPROC];
-	struct proc *freeproc;
-	struct proc *current;
-	struct file file[NFILE];
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
@@ -53,35 +54,39 @@ struct globals {
 	struct flashblock *currentfblock;
 	int contrast;
 	/* dev_vt static variables */
-	int xon;
-	int privflag;
-	int nullop;
-	char intchars[2+1];
-	char *intcharp;
-	unsigned params[16];
-	int numparams;
-	int cursorvisible;
-	int tabstops[60];
-	struct state *vtstate;
-	struct glyphset *glyphset, *charsets[2];
-	int charset;
-	struct pos {
-		int row, column;
-	} pos;
-	struct row {
-		struct cell {
-			struct attrib {
-				int bold:1;
-				int underscore:1;
-				int blink:1;
-				int reverse:1;
-			} attrib;
-			int c;
-		} cells[60];
-	} screen[20];
-	struct tty vt[1];
+	struct {
+		int xon;
+		int privflag;
+		int nullop;
+		char intchars[2+1];
+		char *intcharp;
+		unsigned params[16];
+		int numparams;
+		int cursorvisible;
+		int tabstops[60];
+		struct state const *vtstate;
+		struct glyphset *glyphset, *charsets[2];
+		int charset;
+		struct pos {
+			int row, column;
+		} pos;
+		struct row {
+			struct cell {
+				struct attrib {
+					int bold:1;
+					int underscore:1;
+					int blink:1;
+					int reverse:1;
+				} attrib;
+				int c;
+			} cells[60];
+		} screen[20];
+		const struct tty vt[1];
+	} vt;
 	
-	int heap[0];
+	int heapsize;
+	struct heapentry heaplist[HEAPSIZE];
+	char heap[0][BLOCKSIZE];
 };
 
 # if 0

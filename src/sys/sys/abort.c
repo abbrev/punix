@@ -2,7 +2,7 @@
 
 #include "punix.h"
 
-void abort(void)
+STARTUP(void abort(void))
 {
 	panic("Aborted");
 }
