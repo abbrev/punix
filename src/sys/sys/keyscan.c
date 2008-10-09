@@ -1,3 +1,6 @@
+#include "punix.h"
+#include "kbd.h"
+
 #define KBROWMASK (*(volatile short *)0x600018)
 #define KBCOLMASK (*(volatile char *)0x60001b)
 
@@ -27,12 +30,6 @@ static const short Translate_Key_Table[8][] = {
 extern char key_mask[KEY_NBR_ROW];
 
 #define KEY_NBR_ROW 10 /* 10 for 92+, 7 for 89 */
-| In: 
-|	Nothing
-| Out:
-|	d4.w = Key
-| Destroy:
-|	All !
 int KeyScan()
 {
 	int row, col;
@@ -47,7 +44,7 @@ loop:
 	_WaitKeyboard();
 
 	if (~KBCOLMASK) {
-	/* A key is pressed. Check which key is pressed */
+		/* A key is pressed. Check which key is pressed */
 		key_pressed = 0;
 		rowmask = 1;
 		for (row = KEY_NBR_ROW - 1; row >= 0; --row, rowmask <<= 1) {
