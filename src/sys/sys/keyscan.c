@@ -112,40 +112,41 @@ static const struct translate Translate_2nd[] = {
 	{ 0, 0 }
 };
 
+static short translate(short key, struct translate *tp)
+{
+	while (tp->oldkey) {
+		if (tp->oldkey == key) {
+			return tp->newkey;
+		}
+	}
+	return 0;
+}
+
 void AddKey(short key)
 {
 	const struct translate *tp;
 	if (key >= 0x1000) {
 		/* status key */
 		if (key == key_status)
-			key_status = 0;
+			key_status &= ~key;
 		else
-			key_status = key;
+			key_status |= key;
 		return;
 	}
 	
 	/* normal key */
-	switch (key_status) {
-	case KEY_2ND:
+	if (key_status & KEY_2ND) {
+		short k;
 		if (key == 'z') {
 			/* caps lock */
 			key_caps = !key_caps;
 			goto end;
 		}
-		tp = &Translate_2nd[0];
-		while (tp->oldkey) {
-			if (tp->oldkey == key) {
-				key = tp->newkey;
-				goto add_key;
-			}
-		}
-		key |= key_status;
-		break;
-	case KEY_SHIFT:
-		if (key >= 128)
-			key |= key_status;
-		break;
-	case KEY_DIAMOND:
+		k = translate(key, Translate_2nd);
+		if (k) key = k;
+		else   key |= key_status;
+	}
+	if (key_status == KEY_DIAMOND) {
 		if (key == '+') {
 			lcd_inc_contrast();
 			goto end;
@@ -153,14 +154,26 @@ void AddKey(short key)
 			lcd_dec_contrast();
 			goto end;
 		}
-		key |= key_status;
-		break;
+		/* FIXME: translate Ctrl-key */
+		if ('a' <= key && key <= 'z') {
+			key -= 0x40;
+		} else {
+			switch (key) {
+			case '[':
+			case '\\':
+			case ']':
+			case '^':
+			case '_':
+			case '`':
+				key -= 0x40;
+				break;
+			}
+		}
 	}
 	
 add_key:
-	if ((key_status == KEY_SHIFT) ^ key_caps) {
-		if ('a' <= key && key <= 'z')
-			key += 'A' - 'a';
+	if ((key_status & KEY_SHIFT) ^ key_caps) {
+		key = toupper(key);
 	}
 	
 	AddKeyToFIFOKeyBuffer(key);
