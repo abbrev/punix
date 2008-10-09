@@ -2,25 +2,25 @@
 #define KBCOLMASK (*(volatile char *)0x60001b)
 
 static const short Translate_Key_Table[8][] = {
-#ifdef _TI89
-	KEY_UP,KEY_LEFT,KEY_DOWN,KEY_RIGHT,KEY_2ND,KEY_SHIFT,KEY_DIAMOND,KEY_ALPHA
-	KEY_ENTER,'+','-','*','/','^',KEY_CLEAR,KEY_F5
-	KEY_SIGN,'3','6','9',',','t',KEY_BACK,KEY_F4
-	'.','2','5','8',')','z',KEY_CATALOG,KEY_F3
-	'0','1','4','7','(','y',KEY_MODE,KEY_F2
-	KEY_APPS,KEY_STO,KEY_EE,KEY_OR,'=','x',KEY_HOME,KEY_F1
-	KEY_ESC,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID	
+#ifdef TI89
+	KEY_UP,KEY_LEFT,KEY_DOWN,KEY_RIGHT,KEY_2ND,KEY_SHIFT,KEY_DIAMOND,KEY_ALPHA,
+	KEY_ENTER,'+','-','*','/','^',KEY_CLEAR,KEY_F5,
+	KEY_SIGN,'3','6','9',',','t',KEY_BACK,KEY_F4,
+	'.','2','5','8',')','z',KEY_CATALOG,KEY_F3,
+	'0','1','4','7','(','y',KEY_MODE,KEY_F2,
+	KEY_APPS,KEY_STO,KEY_EE,KEY_OR,'=','x',KEY_HOME,KEY_F1,
+	KEY_ESC,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,
 #else
-	KEY_2ND,KEY_DIAMOND,KEY_SHIFT,KEY_HAND,KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN
-	KEY_VOID,'z','s','w',KEY_F8,'1','2','3'
-	KEY_VOID,'x','d','e',KEY_F3,'4','5','6'
-	KEY_STO,'c','f','r',KEY_F7,'7','8','9'
-	' ','v','g','t',KEY_F2,'(',')',','
-	'/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN
-	'^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p'
-	'=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*'
-	KEY_BACK,KEY_THETA,'l','o','+',KEY_MODE,KEY_ESC,KEY_VOID
-	'-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN
+	KEY_2ND,KEY_DIAMOND,KEY_SHIFT,KEY_HAND,KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN,
+	KEY_VOID,'z','s','w',KEY_F8,'1','2','3',
+	KEY_VOID,'x','d','e',KEY_F3,'4','5','6',
+	KEY_STO,'c','f','r',KEY_F7,'7','8','9',
+	' ','v','g','t',KEY_F2,'(',')',',',
+	'/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN,
+	'^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p',
+	'=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*',
+	KEY_BACK,KEY_THETA,'l','o','+',KEY_MODE,KEY_ESC,KEY_VOID,
+	'-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN,
 #endif
 };
 
