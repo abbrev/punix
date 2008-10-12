@@ -35,4 +35,6 @@ size_t	strxfrm(char *__dest, const char *__src, size_t __n);
 /* Other common BSD functions */
 char *strsep(char **__stringp, const char *__delim);
 
+int	ffsl(long);
+
 #endif /* _STRING_H_ */

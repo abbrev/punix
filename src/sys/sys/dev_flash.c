@@ -36,33 +36,24 @@ typedef char (*flash_t)[SECTORSIZE];
  * o Should flopen() allow device to be opened once?
  */
 
-#define CACHE_SIZE 32
-
-struct cache_entry {
-	long blkno;
-	struct flashblock *fbp;
-};
-
-static struct cache_entry cache[CACHE_SIZE];
-
 /* make this cache entry the most recently used entry */
-static void makeru(struct cache_entry *cep)
+static void makeru(struct flash_cache_entry *cep)
 {
-	struct cache_entry ce;
+	struct flash_cache_entry ce;
 	
-	if (cep == &cache[0])
+	if (cep == &G.flash_cache[0])
 		return;
 	ce = *cep;
-	memmove(&cache[1], &cache[0], (size_t)((void *)cep - (void *)&cache[0]));
-	cache[0] = ce;
+	memmove(&G.flash_cache[1], &G.flash_cache[0], (size_t)((void *)cep - (void *)&G.flash_cache[0]));
+	G.flash_cache[0] = ce;
 }
 
-static struct cache_entry *cachefind(long blkno)
+static struct flash_cache_entry *cachefind(long blkno)
 {
-	struct cache_entry *cep;
+	struct flash_cache_entry *cep;
 	
 	/* search for the block */
-	for (cep = &cache[0]; cep < &cache[CACHE_SIZE]; ++cep) {
+	for (cep = &G.flash_cache[0]; cep < &G.flash_cache[FLASH_CACHE_SIZE]; ++cep) {
 		if (cep->blkno == blkno) {
 			makeru(cep);
 			return cep;
@@ -73,13 +64,13 @@ static struct cache_entry *cachefind(long blkno)
 
 static void cacheadd(long blkno, struct flashblock *fbp)
 {
-	struct cache_entry *cep;
+	struct flash_cache_entry *cep;
 	
 	if (cachefind(blkno))
 		return;
 	
 	/* we couldn't find this cache entry, so add it to the end */
-	cep = &cache[CACHE_SIZE-1];
+	cep = &G.flash_cache[FLASH_CACHE_SIZE-1];
 	cep->blkno = blkno;
 	cep->fbp = fbp;
 	makeru(cep);
@@ -158,7 +149,7 @@ STARTUP(static struct flashblock *getfblk(long blkno))
 {
 	int sector;
 	struct flashblock *fbp;
-	struct cache_entry *cep;
+	struct flash_cache_entry *cep;
 	
 	if ((cep = cachefind(blkno)))
 		    return cep->fbp;

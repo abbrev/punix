@@ -235,7 +235,7 @@ FlashErase_ExecuteInRam_End:
 | Destroy:
 |	%d0
 BatTooLowFlash:
-	jsr	. | CheckBatt | XXX
+	jbsr	batt_check
 	cmp.b	#2,%d0
 	slt	%d0
 	rts

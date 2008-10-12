@@ -43,7 +43,7 @@
 #define F_SHIFT 12
 #define F_ONE (1 << F_SHIFT)
 
-STARTUP(void loadav(unsigned long *avg, int numrun))
+STARTUP(void loadav(int numrun))
 {
 	static const unsigned long cexp[3] = {
 		3769, 4028, 4073 /* 4096 * exp(-x/60) */
@@ -52,5 +52,5 @@ STARTUP(void loadav(unsigned long *avg, int numrun))
 	unsigned long n = (unsigned long)numrun << F_SHIFT;
 
 	for (i = 0; i < 3; ++i)
-		avg[i] = cexp[i] * avg[i] + (F_ONE - cexp[i]) * n;
+		G.loadavg[i] = cexp[i] * G.loadavg[i] + (F_ONE - cexp[i]) * n;
 }

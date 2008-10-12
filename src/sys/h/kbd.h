@@ -7,12 +7,12 @@
 #define KEY_ESC_COL		 0
 #define KEY_APPS_ROW		 0x5f
 #define KEY_APPS_COL		 0
-#define KEY_NBR_ROW		 7	; 10 for 92+/v200, 7 for 89
+#define KEY_NBR_ROW		 7	/* 10 for 92+/v200, 7 for 89 */
 /*#define KEY_INIT_MASK		 0xFFBF	; $FDFF for 92+/89 $FFBF for 89*/
 #define RESET_KEY_STATUS_MASK	 0x0F
 #define SCR_WIDTH		 160
 #define SCR_HEIGHT		 100
-#define USED_FONT		 0	; Small Font for dialog
+#define USED_FONT		 0	/* Small Font for dialog */
 #define TAB_SIZE		 40
 #elif defined(TI92P)
 #define IS89_0_2		 2
@@ -20,13 +20,15 @@
 #define KEY_ESC_COL		 6
 #define KEY_APPS_ROW		 0x37f
 #define KEY_APPS_COL		 6
-#define KEY_NBR_ROW		 10	; 10 for 92+/v200, 7 for 89
+#define KEY_NBR_ROW		 10	/* 10 for 92+/v200, 7 for 89 */
 /*#define KEY_INIT_MASK		 $FDFF	; $FDFF for 92+/89 $FFBF for 89*/
 #define RESET_KEY_STATUS_MASK	 0xF0
 #define SCR_WIDTH		 240
 #define SCR_HEIGHT		 128
-#define USED_FONT		 1	; Normal Font for dialog
+#define USED_FONT		 1	/* Normal Font for dialog */
 #define TAB_SIZE		 60
+#else
+#error TI89 and TI92P are undefined!
 #endif
 
 #define KEY_MAX	 20
@@ -50,7 +52,7 @@
 #define KEY_THETA	 136
 #define KEY_SIGN	 173
 #define KEY_BACK	 257
-#define KEY_STO		 22	; Original Key code is 258
+#define KEY_STO		 22	/* Original Key code is 258 */
 #define KEY_COS		 260
 #define KEY_TAN		 261
 #define KEY_LN		 262
@@ -100,7 +102,7 @@
 
 #ifdef TI89
 #define HELPKEYS_KEY (KEY_DIAMOND|KEY_EE)
-#elif define(TI92P)
+#elif defined(TI92P)
 #define HELPKEYS_KEY (KEY_DIAMOND|'k')
 #endif
 

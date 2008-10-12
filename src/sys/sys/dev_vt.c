@@ -22,6 +22,7 @@
 #include "queue.h"
 #include "tty.h"
 #include "proc.h"
+#include "glyph.h"
 #include "globals.h"
 
 #define NVT 1
@@ -128,16 +129,6 @@ static void transition(int ch, int newstate,
 }
 
 /* XXX: re-write these for Punix */
-#define GLWIDTH 8
-#define GLHEIGHT 12
-
-struct glyph {
-	unsigned char rows[12];
-};
-
-struct glyphset {
-	struct glyph glyphs[192];
-};
 
 #if 0
 struct glyphset *glyphset;
@@ -145,22 +136,21 @@ struct glyphset *charsets[2];
 int charset;
 #endif
 
+#define SPACEGLYPH (glyphsets[0].lower[' ' - 0x20])
+
 static struct glyphset glyphsets[] = {
-#include "glyphs-uk.inc"
-#include "glyphs-us.inc"
-#include "glyphs-sg.inc"
+#include "glyphsets/uk.inc"
+#include "glyphsets/us.inc"
+#include "glyphsets/sg.inc"
 /* alt char ROM standard chars here */
 /* alt char ROM special graphics here */
 };
-
-static void drawglyph(int g, int row, int col, struct glyphset *glyphset)
-{
-}
 
 static void invertcursor()
 {
 }
 
+#if 0
 /* move screen contents up */
 static void scrolldown(int n)
 {
@@ -170,10 +160,11 @@ static void scrolldown(int n)
 static void scrollup(int n)
 {
 }
+#endif
 /* end XXX */
 
 #if 1
-STARTUP(static void cursor(struct tty *tp))
+static void cursor(struct tty *tp)
 {
 	if (G.vt.cursorvisible)
 		invertcursor(tp);
@@ -183,7 +174,7 @@ STARTUP(static void cursor(struct tty *tp))
 #endif
 
 /* possibly scroll up or down so the cursor is visible again */
-STARTUP(static void scroll(struct tty *tp))
+static void scroll(struct tty *tp)
 {
 	if (G.vt.pos.row < 0) {
 		scrollup(-G.vt.pos.row);
@@ -194,31 +185,31 @@ STARTUP(static void scroll(struct tty *tp))
 	}
 }
 
-STARTUP(static void cmd_ind(struct tty *tp))
+static void cmd_ind(struct tty *tp)
 {
 	++G.vt.pos.row;
 	scroll(tp);
 }
 
-STARTUP(static void cmd_nel(struct tty *tp))
+static void cmd_nel(struct tty *tp)
 {
 	G.vt.pos.column = 0;
 	++G.vt.pos.row;
 	scroll(tp);
 }
 
-STARTUP(static void cmd_hts(struct tty *tp))
+static void cmd_hts(struct tty *tp)
 {
 	G.vt.tabstops[G.vt.pos.column] = 1;
 }
 
-STARTUP(static void cmd_ri(struct tty *tp))
+static void cmd_ri(struct tty *tp)
 {
 	--G.vt.pos.row;
 	scroll(tp);
 }
 
-STARTUP(static void reset(struct tty *tp))
+static void reset(struct tty *tp)
 {
 	int i;
 	
@@ -243,7 +234,7 @@ STARTUP(static void reset(struct tty *tp))
 }
 
 /* clear unset parameters up to parameter 'n' */
-STARTUP(static void defaultparams(int n, struct tty *tp))
+static void defaultparams(int n, struct tty *tp)
 {
 	int i;
 	
@@ -264,7 +255,7 @@ STARTUP(static void defaultparams(int n, struct tty *tp))
  * terminal emulators like xterm and rxvt.
  ******************************************************************************/
 
-STARTUP(static void print(int ch, struct tty *tp))
+static void print(int ch, struct tty *tp)
 {
 	/* Display a glyph according to the character set mappings and shift
 	 * states in effect. */
@@ -295,14 +286,14 @@ STARTUP(static void print(int ch, struct tty *tp))
 	
 	/* draw the glyph */
 	if (ch < 0x80)
-		drawglyph(ch - 0x20, G.vt.pos.row, G.vt.pos.column, G.vt.glyphset);
+		drawglyph(&G.vt.glyphset->lower[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
 	else
-		drawglyph(ch - 0xa0 + 0x60, G.vt.pos.row, G.vt.pos.column, G.vt.glyphset);
+		drawglyph(&G.vt.glyphset->upper[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
 	
 	++G.vt.pos.column;
 }
 
-STARTUP(static void execute(int ch, struct tty *tp))
+static void execute(int ch, struct tty *tp)
 {
 	/* Execute the C0 or C1 control function. */
 	switch (ch) {
@@ -368,7 +359,7 @@ STARTUP(static void execute(int ch, struct tty *tp))
 	}
 }
 
-STARTUP(static void clear(struct tty *tp))
+static void clear(struct tty *tp)
 {
 	/* Clear the current private flag, intermediate characters, final
 	 * character, and parameters. */
@@ -383,7 +374,7 @@ STARTUP(static void clear(struct tty *tp))
 	G.vt.params[0] = 0;
 }
 
-STARTUP(static void collect(int ch, struct tty *tp))
+static void collect(int ch, struct tty *tp)
 {
 	/* Store the private marker or intermediate character for later use in
 	 * selecting a control function to be executed when a final character
@@ -398,7 +389,7 @@ STARTUP(static void collect(int ch, struct tty *tp))
 	*G.vt.intcharp = '\0';
 }
 
-STARTUP(static void param(int ch, struct tty *tp))
+static void param(int ch, struct tty *tp)
 {
 	/* Collect the characters of a parameter string for a control sequence
 	 * or device control sequence and build a list of parameters. The
@@ -420,7 +411,7 @@ STARTUP(static void param(int ch, struct tty *tp))
 	}
 }
 
-STARTUP(static void esc_dispatch(int ch, struct tty *tp))
+static void esc_dispatch(int ch, struct tty *tp)
 {
 	/* Determine the control function to be executed from the intermediate
 	 * character(s) and final character, and execute it. The intermediate
@@ -518,7 +509,7 @@ STARTUP(static void esc_dispatch(int ch, struct tty *tp))
 	}
 }
 
-STARTUP(static void csi_dispatch(int ch, struct tty *tp))
+static void csi_dispatch(int ch, struct tty *tp)
 {
 	/* Determine the control function to be executed from private marker,
 	 * intermediate character(s) and final character, and execute it,
@@ -637,25 +628,25 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 			/* Erase from the active position to the end of the
 			 * screen, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 			for (r = G.vt.pos.row + 1; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(' ' - 0x20, r, c, &glyphsets[0]);
+					drawglyph(&SPACEGLYPH, r, c);
 		} else if (n == 1) {
 			/* Erase from start of the screen to the active
 			 * position, inclusive */
 			for (r = 0; r < G.vt.pos.row; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(' ' - 0x20, r, c, &glyphsets[0]);
+					drawglyph(&SPACEGLYPH, r, c);
 			for (c = 0; c <= G.vt.pos.column; ++c)
-				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
 			/* Erase all of the display -- all lines are erased,
 			 * changed to single-width, and the cursor does not
 			 * move. */
 			for (r = 0; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(' ' - 0x20, r, c, &glyphsets[0]);
+					drawglyph(&SPACEGLYPH, r, c);
 		}
 		break;
 	case 'K':
@@ -667,16 +658,16 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 			/* Erase from the active position to the end of the
 			 * line, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 1) {
 			/* Erase from the start of the line to the active
 			 * position, inclusive */
 			for (c = 0; c <= G.vt.pos.column; ++c)
-				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
 			/* Erase all of the line, inclusive */
 			for (c = 0; c < WINWIDTH; ++c)
-				drawglyph(' ' - 0x20, G.vt.pos.row, c, &glyphsets[0]);
+				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 		}
 		break;
 	case 'h':
@@ -737,7 +728,7 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 		break;
 	case 'm':
 		/* SGR Ps ... */
-		/* Select Graphic Rendition */
+		/* FIXME: Select Graphic Rendition */
 		
 		for (i = 0; i < G.vt.numparams; ++i) {
 			switch (G.vt.params[i]) {
@@ -762,6 +753,7 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 		break;
 	case 'g':
 		/* TBC Ps */
+		/* FIXME */
 		switch (G.vt.params[0]) {
 		case 0:
 			/* Clear the horizontal tab stop at the active
@@ -790,7 +782,7 @@ STARTUP(static void csi_dispatch(int ch, struct tty *tp))
 
 /* NOTE: The following actions will probably be a no-op in this vt. */
 
-STARTUP(static void hook(struct tty *tp))
+static void hook(struct tty *tp)
 {
 	/* FIXME: Determine the control function from the private marker,
 	 * intermediate character(s) and final character, and execute it,
@@ -807,20 +799,20 @@ STARTUP(static void hook(struct tty *tp))
 	 * complicated protocols like ReGIS. */
 }
 
-STARTUP(static void put(int ch, struct tty *tp))
+static void put(int ch, struct tty *tp)
 {
 	/* FIXME: Pass characters from the data string part of a device control
 	 * string to a handler that has previously been selected by the hook()
 	 * action. C0 controls are also passed to the handler. */
 }
 
-STARTUP(static void unhook(struct tty *tp))
+static void unhook(struct tty *tp)
 {
 	/* FIXME: Call the previously selected handler function with an "end of
 	 * data" parameter. This allows the handler to finish neatly. */
 }
 
-STARTUP(static void osc_start(struct tty *tp))
+static void osc_start(struct tty *tp)
 {
 	/* FIXME: Initialize an external parser (the "OSC Handler") to handle
 	 * the characters from the control string. OSC control strings are not
@@ -828,14 +820,14 @@ STARTUP(static void osc_start(struct tty *tp))
 	 * choice of parsers. */
 }
 
-STARTUP(static void osc_put(int ch, struct tty *tp))
+static void osc_put(int ch, struct tty *tp)
 {
 	/* FIXME: Pass characters from the control string to the OSC Handler as
 	 * they arrive. There is therefore no need to buffer characters until
 	 * the end of the control string is recognised. */
 }
 
-STARTUP(static void osc_end(struct tty *tp))
+static void osc_end(struct tty *tp)
 {
 	/* FIXME: Allow the OSC Handler to finish neatly. */
 }
@@ -844,7 +836,7 @@ STARTUP(static void osc_end(struct tty *tp))
  * State events
  ***************************************/
 
-STARTUP(static void ground_event(int ch, struct tty *tp))
+static void ground_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -854,7 +846,7 @@ STARTUP(static void ground_event(int ch, struct tty *tp))
 		print(ch, tp);
 }
 
-STARTUP(static void escape_event(int ch, struct tty *tp))
+static void escape_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -874,7 +866,7 @@ STARTUP(static void escape_event(int ch, struct tty *tp))
 		transition(c, STGROUND, esc_dispatch, tp);
 }
 
-STARTUP(static void escint_event(int ch, struct tty *tp))
+static void escint_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -886,7 +878,7 @@ STARTUP(static void escint_event(int ch, struct tty *tp))
 		transition(c, STGROUND, esc_dispatch, tp);
 }
 
-STARTUP(static void csient_event(int ch, struct tty *tp))
+static void csient_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -904,7 +896,7 @@ STARTUP(static void csient_event(int ch, struct tty *tp))
 		transition(c, STGROUND, csi_dispatch, tp);
 }
 
-STARTUP(static void csiprm_event(int ch, struct tty *tp))
+static void csiprm_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -920,7 +912,7 @@ STARTUP(static void csiprm_event(int ch, struct tty *tp))
 		transition(c, STGROUND, csi_dispatch, tp);
 }
 
-STARTUP(static void csiint_event(int ch, struct tty *tp))
+static void csiint_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -932,7 +924,7 @@ STARTUP(static void csiint_event(int ch, struct tty *tp))
 		transition(c, STGROUND, csi_dispatch, tp);
 }
 
-STARTUP(static void csiign_event(int ch, struct tty *tp))
+static void csiign_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -942,7 +934,7 @@ STARTUP(static void csiign_event(int ch, struct tty *tp))
 		transition(c, STGROUND, NULL, tp);
 }
 
-STARTUP(static void dcsent_event(int ch, struct tty *tp))
+static void dcsent_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -958,7 +950,7 @@ STARTUP(static void dcsent_event(int ch, struct tty *tp))
 		transition(c, STDCSPAS, NULL, tp);
 }
 
-STARTUP(static void dcsprm_event(int ch, struct tty *tp))
+static void dcsprm_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -972,7 +964,7 @@ STARTUP(static void dcsprm_event(int ch, struct tty *tp))
 		transition(c, STDCSPAS, NULL, tp);
 }
 
-STARTUP(static void dcsint_event(int ch, struct tty *tp))
+static void dcsint_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -984,7 +976,7 @@ STARTUP(static void dcsint_event(int ch, struct tty *tp))
 		transition(c, STDCSPAS, NULL, tp);
 }
 
-STARTUP(static void dcspas_event(int ch, struct tty *tp))
+static void dcspas_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -992,11 +984,11 @@ STARTUP(static void dcspas_event(int ch, struct tty *tp))
 		put(ch, tp);
 }
 
-STARTUP(static void dcsign_event(int ch, struct tty *tp))
+static void dcsign_event(int ch, struct tty *tp)
 {
 }
 
-STARTUP(static void oscstr_event(int ch, struct tty *tp))
+static void oscstr_event(int ch, struct tty *tp)
 {
 	int c = ch & 0x7f;
 	
@@ -1004,7 +996,7 @@ STARTUP(static void oscstr_event(int ch, struct tty *tp))
 		osc_put(ch, tp);
 }
 
-STARTUP(static void sosstr_event(int ch, struct tty *tp))
+static void sosstr_event(int ch, struct tty *tp)
 {
 	if (ch == 0x07)
 		transition(ch, STGROUND, NULL, tp);
@@ -1032,9 +1024,10 @@ static const struct state states[] = {
  ***************************************/
 
 /* one-shot routine on system startup */
-STARTUP(void vtinit())
+void vtinit()
 {
 	G.vt.vtstate = &states[STGROUND];
+	reset(&G.vt.vt[0]); /* XXX dev */
 }
 
 /*
@@ -1042,7 +1035,7 @@ STARTUP(void vtinit())
  * all terminal activity in the same context as the current process.
  */
 /* FIXME: use the tty structure */
-STARTUP(void vtoutput(int ch, struct tty *tp))
+void vtoutput(int ch, struct tty *tp)
 {
 	int x = spl5();
 	cursor(tp);
@@ -1074,7 +1067,7 @@ STARTUP(void vtoutput(int ch, struct tty *tp))
  * vtinput is similar to ttyinput, but it is
  * designed for the needs of the vt device.
  */
-STARTUP(void vtinput(int ch, struct tty *tp))
+void vtinput(int ch, struct tty *tp)
 {
 	int iflag = tp->t_termios.c_iflag;
 	int lflag = tp->t_termios.c_lflag;
@@ -1103,14 +1096,22 @@ STARTUP(void vtinput(int ch, struct tty *tp))
 
 /* NB: there is no vtxint routine */
 
-STARTUP(void vtrint(dev_t dev))
+void vtrint(dev_t dev)
 {
 	int ch = 0; /* XXX: how to get the value from Int_1? */
 	
 	vtinput(ch, &G.vt.vt[MINOR(dev)]);
 }
 
-STARTUP(void vtopen(dev_t dev, int rw))
+int kputchar(int ch)
+{
+	struct tty *tp = &G.vt.vt[0]; /* XXX */
+	ch &= 0xff;
+	vtoutput(ch, tp);
+	return ch;
+}
+
+void vtopen(dev_t dev, int rw)
 {
 	int minor = MINOR(dev);
 	struct tty *tp;
@@ -1131,16 +1132,16 @@ STARTUP(void vtopen(dev_t dev, int rw))
 	ttyopen(dev, tp);
 }
 
-STARTUP(void vtclose(dev_t dev, int rw))
+void vtclose(dev_t dev, int rw)
 {
 }
 
-STARTUP(void vtread(dev_t dev))
+void vtread(dev_t dev)
 {
 	ttyread(&G.vt.vt[MINOR(dev)]);
 }
 
-STARTUP(void vtwrite(dev_t dev))
+void vtwrite(dev_t dev)
 {
 	struct tty *tp = &G.vt.vt[MINOR(dev)];
 	int ch;
@@ -1152,6 +1153,6 @@ STARTUP(void vtwrite(dev_t dev))
 		vtoutput(ch, tp);
 }
 
-STARTUP(void vtioctl(dev_t dev, int cmd, void *cmarg, int rw))
+void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
 {
 }

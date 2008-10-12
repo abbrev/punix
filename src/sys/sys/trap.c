@@ -67,7 +67,9 @@ STARTUP(void hardclock(unsigned short ps))
 		int n = 0;
 		for EACHPROC(p)
 			if (p->p_status == P_RUNNING) ++n;
-		//loadav(G.loadavg, n);
+		loadav(n);
+		
+		batt_check();
 	}
 	
 	/* do call-outs */
@@ -90,8 +92,9 @@ STARTUP(void hardclock(unsigned short ps))
 			++c2;
 		}
 		c1 = &G.callout[0];
-		while (c2->c_func)
-			*c1++ = *c2++;
+		do
+			*c1 = *c2++;
+		while (c1++->c_func);
 	}
 	
 out:

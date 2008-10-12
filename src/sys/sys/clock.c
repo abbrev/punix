@@ -80,8 +80,10 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	c2[1].c_func = NULL;
 	
 	/* move entries upward to make room for this new entry */
-	while (c2 >= c1)
+	while (c2 >= c1) {
 		c2[1] = c2[0];
+		--c2;
+	}
 	
 	c1->c_time = t;
 	c1->c_func = func;

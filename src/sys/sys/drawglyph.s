@@ -17,20 +17,20 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-.global drawcell
+.global drawglyph
 
 .include "lcd.inc"
 
 .section _st1, "x"
 
 | 6x4 (small) glyph
-| drawglyph(int g, int row, int col, char *glyphset)
+| drawglyph(struct glyph *glyph, int row, int col)
 drawglyph:
 	movem.l	%d3/%d4,-(%sp)
-	move	8+4(%sp),%d0	| g
-	move	8+4(%sp),%d1	| row
-	move	8+6(%sp),%d2	| col
-	move	8+8(%sp),%a1	| glyphset (use this if glyphset is an arg var)
+	move.l	#0xbeeff00d,%a1
+	move.l	8+4(%sp),%a1	| glyph
+	move	8+8(%sp),%d1	| row
+	move	8+10(%sp),%d2	| col
 	
 	| get address on screen
 	mulu	#6*LCD_INCY,%d1
@@ -47,16 +47,6 @@ drawglyph:
 	| %a0 holds screen address
 	| %d3 holds shift amount
 	| %d4.b holds mask
-	
-	| get address of glyph
-	and	#0xFF,%d0		| limit the char # to [0,255]
-	mulu	#12,%d0			| 12 because the glyph is interleaved
-					| with a light grayscale plane
-	
-	|move.l	(glyphset),%a1		| use this if glyphset is a global var
-	add	%d0,%a1
-	|lea	smallfont(%a1,%pc),%a1
-	|add.l	#smallfont,%a1	| address of font data
 	| %a1 holds glyph address
 	
 	moveq	#LCD_INCY,%d0

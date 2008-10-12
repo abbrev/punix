@@ -26,6 +26,7 @@
 #define	HZ	256		/* XXX: Ticks/second of the clock */
 #define TICK	(1000000000L / HZ) /* nanoseconds/tick of the clock */
 #define HEAPSIZE 512
+#define FLASH_CACHE_SIZE 32
 
 #define	TIMEZONE (5*60)		/* Minutes westward from Greenwich */
 #define	DSTFLAG	1		/* Daylight Saving Time applies in this locality */

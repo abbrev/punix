@@ -1,5 +1,5 @@
 /* also update the version in sys/punix.h */
-.data
-.even
+.section _st1,"r"
+.align	4
 	.asciz	"0.06"
-	.asciz	"08/30/2008"
+	.asciz	"10/12/2008"

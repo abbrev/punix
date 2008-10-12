@@ -17,16 +17,14 @@
 #include "proc.h"
 #include "buf.h"
 #include "dev.h"
+#include "globals.h"
 
 #define DEBUG()
-
-struct buf avbuflist; /* list of buf */
-static struct buffer buffers[NBUF];
 
 STARTUP(char *bufalloc())
 {
 	struct buffer *bfp;
-	for (bfp = &buffers[0]; bfp < &buffers[NBUF]; ++bfp) {
+	for (bfp = &G.buffers[0]; bfp < &G.buffers[NBUF]; ++bfp) {
 		if (!bfp->used) {
 			bfp->used = 1;
 			return bfp->data;
@@ -193,12 +191,12 @@ loop:
 	 * buffer list */
 	
 	/* the list is empty, so sleep on it */
-	if (avbuflist.b_avnext == &avbuflist) {
-		avbuflist.b_flags |= B_WANTED;
-		slp(&avbuflist, PRIBIO+1);
+	if (G.avbuflist.b_avnext == &G.avbuflist) {
+		G.avbuflist.b_flags |= B_WANTED;
+		slp(&G.avbuflist, PRIBIO+1);
 		goto loop;
 	}
-	notavail(bp = avbuflist.b_avnext);
+	notavail(bp = G.avbuflist.b_avnext);
 	
 	if (bp->b_flags & B_DELWRI) {
 		bwrite(bp);

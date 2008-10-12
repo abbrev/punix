@@ -25,7 +25,7 @@ extern void flstrategy(struct buf *);
 extern const struct devtab fltab;
 
 const struct bdevsw bdevsw[] = {
-	{ flopen, flclose, flstrategy, &fltab },
+	{ flopen, flclose, flstrategy, &fltab }, /* flash */
 	{ 0, 0, 0, 0 }
 };
 
@@ -56,7 +56,7 @@ void miscioctl(dev_t, int, ...);
  */
 const struct cdevsw cdevsw[] = {
 { miscopen,   nulldev,     miscread,   miscwrite,   miscioctl   }, /* misc */
-#if 0
+#if 1
 { vtopen,     vtclose,     vtread,     vtwrite,     vtioctl     }, /* vt */
 #endif
 { devttyopen, devttyclose, devttyread, devttywrite, devttyioctl }, /* tty */

@@ -1,10 +1,14 @@
 #include <termios.h>
 
+#include "flash.h"
 #include "callout.h"
 #include "queue.h"
 #include "inode.h"
 #include "tty.h"
 #include "heap.h"
+#include "buf.h"
+#include "kbd.h"
+#include "glyph.h"
 
 struct globals {
 	char exec_ram[60];
@@ -51,7 +55,12 @@ struct globals {
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
 	
+	struct buf avbuflist; /* list of buf */
+	struct buffer buffers[NBUF];
+	
 	struct flashblock *currentfblock;
+	struct flash_cache_entry flash_cache[FLASH_CACHE_SIZE];
+	
 	int contrast;
 	/* dev_vt static variables */
 	struct {
@@ -81,8 +90,20 @@ struct globals {
 				int c;
 			} cells[60];
 		} screen[20];
-		const struct tty vt[1];
+		struct tty vt[1];
+		
+		short key;
+		int key_caps;
+		char key_mask[KEY_NBR_ROW];
+		short key_status;
+		int key_repeat_delay;
+		int key_repeat_start_delay;
+		int key_counter;
+		short key_previous;
+		short key_prev_row, key_prev_col;
 	} vt;
+	
+	int batt_level;
 	
 	int heapsize;
 	struct heapentry heaplist[HEAPSIZE];

@@ -209,37 +209,15 @@ icode:
 	pea	_argv0(%pc)	| path ("/etc/init")
 	bsr	execve
 	
-	move.l	#2f-1f,-(%sp)	| count
-	pea	1f(%pc)		| buf
-	move	#2,-(%sp)	| fd (2 = stderr)
-	bsr	write
-	
 	move	#-1,-(%sp)	| status
 	bsr	_exit
 
-1:	.ascii	"icode: execve(\"/etc/init\") failed\n"
-	.ascii	"Testing terminal instead...\n"
+	pea	1f(%pc)
+	jbsr	panic
 	
-	.ascii	"\n"
-	.ascii	" !\"#$%&'()*+,-./0123456789:;<=>?\n"
-	.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\n"
-	.ascii	"`abcdefghijklmnopqrstuvwxyz{|}~"
-	.byte	127
-	.ascii	"\n"
+	bra	.
 	
-	
-	.ascii	"This line is exactly 60 characters long.01234567890123456789"
-	.ascii	"This should start on the next line. (A)\n"
-	.ascii	"This line is exactly 60 characters long and ends with a NL.X\n"
-	.ascii	"This should start on the next line. (B)\n"
-	
-	
-	.ascii	"\t\b\b\b\b\b\b\b\bThis should start at the beginning of the line.\n"
-	.ascii	"T\bT\tx\t\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bhi\bis\bs line should not look funky.\n"
-	.ascii	"0         1         2         3         4         5         \n"
-	.ascii	"012345678901234567890123456789012345678901234567890123456789\n"
-	.ascii	"\t#\t##\t###\t####\t#####\t######\t#######\t########\t#\n"
-2:
+1:	.asciz	"execve and _exit failed"
 
 | strings
 _argv0:	.asciz	"/etc/init"

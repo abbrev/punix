@@ -10,7 +10,7 @@ SYSINC	= ${PUNIXBASE}/src/sys/h
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -DBUILD=\"`date +%FT%T`\"
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD=\"`date +%FT%T`\"
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
@@ -25,15 +25,15 @@ OBJ	=  start.o vectors.o main.o entry.o version.o calc.o signal.o
 OBJ	+= syscall.o sysent.o sys_desc.o sys_proc.o sys_prot.o sys_time.o
 OBJ	+= pipe.o sys_sig.o
 # devices
-OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o #dev_vt.o
-OBJ	+= lcd.o dev_tty.o test1.o
+OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o dev_vt.o
+OBJ	+= lcd.o dev_tty.o keyscan.o batt.o
 # helper routines
-OBJ	+= drawcell.o smallfont.o kputs.o kputchar.o scrollcell.o
+OBJ	+= kputs.o scroll.o # drawcell.o smallfont.o kputchar.o scrollcell.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
 OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o clock.o #globals.o
-#OBJ	+= ffs.o loadav.o
+OBJ	+= ffs.o loadav.o drawglyph.o
 
 #OBJ = testvectors.o
 
@@ -45,7 +45,7 @@ punix-9x.tib:	${OBJ}
 
 obj:	${OBJ}
 
-${OBJ}: Makefile ${SYSINC}/globals.h ${SYSINC}/punix.h
+${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h
 
 ########################################
 # source dependencies
@@ -68,6 +68,7 @@ setjmp.o: setjmp.s
 ${SYSINC}/proc.h: ${SYSINC}/file.h ${STDINC}/sys/types.h \
 	${STDINC}/time.h ${STDINC}/signal.h
 ${SYSINC}/process.h: ${SYSINC}/proc.h
+dev_vt.o: dev_vt.c glyphsets/uk.inc glyphsets/us.inc glyphsets/sg.inc
 
 md5.o: md5.c
 qsort.o: qsort.c
@@ -110,6 +111,13 @@ ${SYSINC}/procglo.def ${SYSINC}/vectorsglo.def ${SYSINC}/heapglo.def
 ########################################
 # Data (images, fonts)
 ########################################
+
+uk.inc: glyphsets/uk.pbm
+	make -C glyphsets
+us.inc: glyphsets/us.pbm
+	make -C glyphsets
+sg.inc: glyphsets/sg.pbm
+	make -C glyphsets
 
 smallfont.o: smallfont.bin
 smallfont.bin: fonts/smallfont.pbm
