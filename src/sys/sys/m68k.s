@@ -27,6 +27,9 @@ defspl	5 | audio (link port)
 |defspl	6 | on key
 defspl	7 | block everything (except memory write error)
 
+.global nop
+nop:	rts
+
 | void halt();
 .global halt
 halt:

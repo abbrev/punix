@@ -214,7 +214,7 @@ static void reset(struct tty *tp)
 	int i;
 	
 	G.vt.xon = 1;
-	memset(LCD_MEM, 0, 3600); /* XXX constant */
+	memset((void *)LCD_MEM, 0, 3600); /* XXX constant */
 	memset(G.vt.screen, 0, sizeof(G.vt.screen));
 	memset(G.vt.tabstops, 0, sizeof(G.vt.tabstops));
 	for (i = 0; i < WINWIDTH; i += 8)
@@ -341,19 +341,19 @@ static void execute(int ch, struct tty *tp)
 		break;
 	/* C1 control codes */
 	case 'H'+0x40:
-		/* HTS */
+		/* HTS - Horizontal Tabulation Set */
 		cmd_hts(tp);
 		break;
 	case 'D'+0x40:
-		/* IND */
+		/* IND - Index */
 		cmd_ind(tp);
 		break;
 	case 'M'+0x40:
-		/* RI */
+		/* RI - Reverse Index */
 		cmd_ri(tp);
 		break;
 	case 'E'+0x40:
-		/* NEL */
+		/* NEL - Next Line */
 		cmd_nel(tp);
 		break;
 	}
@@ -422,6 +422,7 @@ static void esc_dispatch(int ch, struct tty *tp)
 		return;
 	
 	switch (ch) {
+#if 0
 	case '8':
 		/* DECALN # (DEC Private) */
 		/* DECRC (DEC Private) */
@@ -452,29 +453,29 @@ static void esc_dispatch(int ch, struct tty *tp)
 	case '5':
 		/* DECSWL # (DEC Private) */
 		break;
+#endif
 	case 'H':
-		/* HTS */
+		/* HTS - Horizontal Tabulation Set */
 		cmd_hts(tp);
 		break;
 	case 'D':
-		/* IND */
+		/* IND - Index */
 		cmd_ind(tp);
 		break;
 	case 'M':
-		/* RI */
+		/* RI - Reverse Index */
 		cmd_ri(tp);
 		break;
 	case 'E':
-		/* NEL */
+		/* NEL - Next Line */
 		cmd_nel(tp);
 		break;
 	case 'c':
-		/* RIS */
-		/* reset to initial state */
+		/* RIS - Reset to Initial State */
 		reset(tp);
 		break;
 	case 'A':
-		/* SCS (UK) */
+		/* SCS - Select Character Set (UK) */
 		if (G.vt.intchars[0] == '(')
 			G.vt.charsets[0] = &glyphsets[0];
 		else if (G.vt.intchars[0] == ')')
@@ -483,7 +484,7 @@ static void esc_dispatch(int ch, struct tty *tp)
 		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case 'B':
-		/* SCS (ASCII) */
+		/* SCS - Select Character Set (ASCII) */
 		if (G.vt.intchars[0] == '(')
 			G.vt.charsets[0] = &glyphsets[1];
 		else if (G.vt.intchars[0] == ')')
@@ -525,7 +526,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 	
 	switch (ch) {
 	case 'A':
-		/* CUU Pn */
+		/* CUU Pn - Cursor Up */
 		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
@@ -535,7 +536,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.row = 0;
 		break;
 	case 'B':
-		/* CUD Pn */
+		/* CUD Pn - Cursor Down */
 		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
@@ -545,7 +546,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.row = MARGINBOTTOM;
 		break;
 	case 'C':
-		/* CUF Pn */
+		/* CUF Pn - Cursor Forward */
 		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
@@ -555,7 +556,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'D':
-		/* CUB Pn */
+		/* CUB Pn - Cursor Backward */
 		n = G.vt.params[0];
 		if (n == 0)
 			n = 1;
@@ -565,9 +566,9 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.column = 0;
 		break;
 	case 'H':
-		/* CUP Pr Pc */
+		/* CUP Pr Pc - Cursor Position */
 	case 'f':
-		/* HVP Pn Pn */
+		/* HVP Pn Pn - Horizontal and Vertical Position */
 		defaultparams(2, tp);
 		r = G.vt.params[0];
 		c = G.vt.params[1];
@@ -585,7 +586,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'c':
-		/* DA Pn */
+		/* DA Pn - Device Attributes */
 		/* FIXME: send a response to the host */
 		break;
 	case 'q':
@@ -593,6 +594,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 		break;
 	case 'x':
 		/* DECREQTPARM sol */
+		/* DECREPTPARM sol par nbits xspeed rspeed clkmul flags */
 		/* FIXME */
 		break;
 	case 'r':
@@ -600,13 +602,14 @@ static void csi_dispatch(int ch, struct tty *tp)
 		break;
 	case 'y':
 		/* DECTST 2 Ps */
+#if 0
 		defaultparams(2, tp);
 		if (G.vt.params[0] != 2)
 			break;
 		
 		n = G.vt.params[1];
 		
-		while (n & 8) /* Repeate Selected Test(s) indefinitely */
+		while (n & 8) /* Repeat Selected Test(s) indefinitely */
 			if (n == 0)
 				; /* reset the VT100 */
 			else if (n & 1)
@@ -615,9 +618,11 @@ static void csi_dispatch(int ch, struct tty *tp)
 				; /* Data Loop Back */
 			else if (n & 4)
 				; /* EIA modem control test */
+#endif
 		break;
 	case 'n':
 		/* DSR Ps */
+		/* Device Status Report */
 		break;
 	case 'J':
 		/* ED Ps */
@@ -752,25 +757,31 @@ static void csi_dispatch(int ch, struct tty *tp)
 		
 		break;
 	case 'g':
-		/* TBC Ps */
+		/* TBC Ps - Tabulation Clear */
 		/* FIXME */
 		switch (G.vt.params[0]) {
 		case 0:
 			/* Clear the horizontal tab stop at the active
 			 * position (default) */
+			G.vt.tabstops[G.vt.pos.column] = 0;
 			break;
+#if 0
 		case 1:
 			/* Clear vertical tab stop at active line */
 			break;
 		case 2:
 			/* Clear all horizontal tab stops in active line */
 			break;
+#endif
 		case 3:
 			/* Clear all horizontal tab stops */
+			for (i = 0; i < 60; ++i) G.vt.tabstops[i] = 0;
 			break;
+#if 0
 		case 4:
 			/* Clear all vertical tab stops */
 			break;
+#endif
 		}
 		
 		break;
@@ -1028,6 +1039,8 @@ void vtinit()
 {
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
+	G.vt.key_repeat_start_delay = 256 / 4;
+	G.vt.key_repeat_delay = 256 / 20;
 }
 
 /*
@@ -1098,9 +1111,13 @@ void vtinput(int ch, struct tty *tp)
 
 void vtrint(dev_t dev)
 {
-	int ch = 0; /* XXX: how to get the value from Int_1? */
+	int ch = G.vt.key;
 	
+#if 0
 	vtinput(ch, &G.vt.vt[MINOR(dev)]);
+#else
+	vtoutput(ch, &G.vt.vt[MINOR(dev)]); /* XXX for debugging/testing */
+#endif
 }
 
 int kputchar(int ch)

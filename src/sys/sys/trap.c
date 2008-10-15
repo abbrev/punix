@@ -54,6 +54,11 @@ STARTUP(void hardclock(unsigned short ps))
 	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
 	
+	/* XXX: this shows the number of times this function has been called.
+	 * It draws in the bottom-right corner of the screen.
+	 */
+	++*(long *)(0x4c00+0xf00-8);
+	
 	/* nsec cannot get up to or over 1e9 (one second); we just have to wait
 	 * for the RTC to catch up to us */
 	if (walltime.tv_nsec < 1000000000L - TICK) {

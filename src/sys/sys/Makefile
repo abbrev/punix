@@ -28,7 +28,7 @@ OBJ	+= pipe.o sys_sig.o
 OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o dev_vt.o
 OBJ	+= lcd.o dev_tty.o keyscan.o batt.o
 # helper routines
-OBJ	+= kputs.o scroll.o # drawcell.o smallfont.o kputchar.o scrollcell.o
+OBJ	+= kputs.o scroll.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
 OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
@@ -109,23 +109,16 @@ ${SYSINC}/procglo.def ${SYSINC}/vectorsglo.def ${SYSINC}/heapglo.def
 #	make -C ${SYSINC}
 
 ########################################
-# Data (images, fonts)
+# Data (images, glyphs)
 ########################################
 
-uk.inc: glyphsets/uk.pbm
+glyphsets/uk.inc: glyphsets/uk.pbm
 	make -C glyphsets
-us.inc: glyphsets/us.pbm
+glyphsets/us.inc: glyphsets/us.pbm
 	make -C glyphsets
-sg.inc: glyphsets/sg.pbm
+glyphsets/sg.inc: glyphsets/sg.pbm
 	make -C glyphsets
-
-smallfont.o: smallfont.bin
-smallfont.bin: fonts/smallfont.pbm
-	tail -c 3072 <$< >$@
-fonts/smallfont.pbm: fonts/smallfont.ppm
-	make -C fonts smallfont.pbm
 
 clean:
 	rm -f *.bin *.o punix-9x.tib
-	make -C fonts clean
 	#make -C ${SYSINC} clean

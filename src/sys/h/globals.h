@@ -94,13 +94,13 @@ struct globals {
 		
 		short key;
 		int key_caps;
-		char key_mask[KEY_NBR_ROW];
-		short key_status;
+		char key_array[KEY_NBR_ROW];
+		short key_mod;
 		int key_repeat_delay;
 		int key_repeat_start_delay;
-		int key_counter;
+		int key_repeat_counter;
 		short key_previous;
-		short key_prev_row, key_prev_col;
+		short key_row_mask, key_col_mask;
 	} vt;
 	
 	int batt_level;

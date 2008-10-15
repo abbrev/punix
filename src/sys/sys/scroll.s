@@ -3,44 +3,51 @@
 .section _st1, "rx"
 
 |void scrolldown(int rows)
+|scroll terminal window down (text moves up)
+|tested and works
 .global scrolldown
 scrolldown:
-	move	4(%sp),%d0
+	move	4(%sp),%d1
 	beq.s	9f
 	
-	mulu	#LCD_INCY*6,%d0
-	move	%d0,4(%sp)
-	lea.l	LCD_MEM,%a0
-	move	#NUMCELLROWS*6*LCD_INCY,%d1
-	sub	%d0,%d1
-	ext.l	%d1
+	mulu	#LCD_INCY*6,%d1
+	lea.l	LCD_MEM,%a0	| dest
+	move	#NUMCELLROWS*6*LCD_INCY,%d0
+	sub	%d1,%d0
+	ext.l	%d0
 	
-	|move.l	%d1,-(%sp)
-	|pea.l	0(%a0,%d0)
-	|pea.l	LCD_MEM
-	|bsr	memmove
-	|lea.l	12(%sp),%sp
-	
-	lea.l	0(%a0,%d0),%a1
-	lea.l	LCD_MEM,%a0
-	move.l	%d1,%d0
+	lea.l	0(%a0,%d1),%a1	| src
 	bsr	memmove_reg
 	
-	move	4(%sp),%d0
-	subq.l	#1,%d0
+	asr	#2,%d1
+	subq.l	#1,%d1
 	lea.l	LCD_MEM+NUMCELLROWS*6*LCD_INCY,%a0
-0:	clr.b	-(%a0)
-	dbra	%d0,0b
+0:	clr.l	-(%a0)
+	dbra	%d1,0b
 	
 9:	rts
 
 |void scrollup(int rows)
+|scroll terminal window up (text moves down)
+|not tested!
 .global scrollup
 scrollup:
-	move	4(%sp),%d0
+	move	4(%sp),%d1
 	beq.s	9f
 	
-	/* FIXME: write this! */
+	mulu	#LCD_INCY*6,%d1
+	lea.l	LCD_MEM,%a1	| src
+	move	#NUMCELLROWS*6*LCD_INCY,%d0
+	sub	%d1,%d0
+	ext.l	%d0
 	
-	nop
+	lea.l	0(%a1,%d1),%a0	| dest
+	bsr	memmove_reg
+	
+	asr	#2,%d1
+	subq.l	#1,%d1
+	lea.l	LCD_MEM,%a0
+0:	clr.l	(%a0)+
+	dbra	%d1,0b
+	
 9:	rts

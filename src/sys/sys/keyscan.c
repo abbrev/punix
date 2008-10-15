@@ -23,12 +23,12 @@ static const short Translate_Key_Table[][8] = {
 	{ KEY_2ND,KEY_DIAMOND,KEY_SHIFT,KEY_HAND,KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN, },
 	{ KEY_VOID,'z','s','w',KEY_F8,'1','2','3', },
 	{ KEY_VOID,'x','d','e',KEY_F3,'4','5','6', },
-	{ KEY_STO,'c','f','r',KEY_F7,'7','8','9', },
+	{ '\t','c','f','r',KEY_F7,'7','8','9', },
 	{ ' ','v','g','t',KEY_F2,'(',')',',', },
 	{ '/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN, },
 	{ '^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p', },
 	{ '=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*', },
-	{ KEY_BACK,KEY_THETA,'l','o','+',KEY_MODE,KEY_ESC,KEY_VOID, },
+	{ '\b',KEY_THETA,'l','o','+',KEY_MODE,'\x1b',KEY_VOID, },
 	{ '-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN, },
 #endif
 };
@@ -45,23 +45,31 @@ static const struct translate Translate_2nd[] = {
 	{ 'e',0xe9 }, /* e' */
 	{ 'r','@' },
 	{ 't','#' },
+#if 0
 	{ 'y',0x1a }, /* solid right triangle */ /* XXX */
+#endif
 	{ 'u',0xfc }, /* u" */
 	{ 'i',0x97 }, /* imaginary */
 	{ 'o',0xd4 }, /* O^ */
 	{ 'p','_' },
 	{ 'a',0xe1 }, /* a` */
+#if 0
 	{ 's',0x81 }, /* German s XXX */
+#endif
 	{ 'd',0xb0 }, /* degree */
+#if 0
 	{ 'f',0x9f }, /* angle XXX */
 	{ 'g',0x80 }, /* alpha */ /* XXX */
+#endif
 	{ 'h','&' },
 	{ 'j',0xbe }, /* infinity */
 	{ 'k','|' },
 	{ 'l','"' },
 	{ 'x',0xa9 }, /* copyright */
 	{ 'c',0xc7 }, /* C, */
+#if 0
 	{ 'v',0x9d }, /* not equal XXX */
+#endif
 	{ 'b','\'' },
 	{ 'n',0xf1 }, /* n~ */
 	{ 'm',';' },
@@ -71,12 +79,16 @@ static const struct translate Translate_2nd[] = {
 	{ ')','}' },
 	{ ',','[' },
 	{ '/',']' },
+#if 0
 	{ '^',0x8c }, /* pi XXX */
+#endif
 	{ '7',0xbd }, /* integral (1/2) */
 	{ '8',0xbc }, /* derivative (1/4) */
 	{ '9',0xb4 }, /* ^-1 (accent) */
 	{ '*',0xa8 }, /* square root (") */
+#if 0
 	{ '4',0x8e }, /* Sigma XXX */
+#endif
 	{ '5',KEY_MATH },
 	{ '6',KEY_MEM },
 	{ '-',KEY_VARLINK },
@@ -99,23 +111,16 @@ static const struct translate Translate_2nd[] = {
 static short translate(short key, const struct translate *tp)
 {
 	while (tp->oldkey) {
-		if (tp->oldkey == key) {
+		if (tp->oldkey == key)
 			return tp->newkey;
-		}
+		++tp;
 	}
 	return 0;
 }
 
 void addkey(short key)
 {
-	if (key >= 0x1000) {
-		/* status key */
-		G.vt.key_status ^= key; /* toggle this status key */
-		return;
-	}
-	
-	/* normal key */
-	if (G.vt.key_status & KEY_2ND) {
+	if (G.vt.key_mod & KEY_2ND) {
 		short k;
 		if (key == 'z') {
 			/* caps lock */
@@ -124,9 +129,9 @@ void addkey(short key)
 		}
 		k = translate(key, Translate_2nd);
 		if (k) key = k;
-		/*else   key |= key_status;*/
+		/*else   key |= key_mod;*/
 	}
-	if (G.vt.key_status == KEY_DIAMOND) {
+	if (G.vt.key_mod & KEY_DIAMOND) {
 		if (key == '+') {
 			lcd_inc_contrast();
 			goto end;
@@ -135,8 +140,8 @@ void addkey(short key)
 			goto end;
 		}
 		if ('a' <= key && key <= 'z') {
-			key -= 0x40;
-		} else if ('3' <= key && '7' <= key) {
+			key -= 0x60;
+		} else if ('3' <= key && key <= '7') {
 			key -= 0x18;
 		} else if (key == '8') {
 			key = 0x7f;
@@ -145,7 +150,7 @@ void addkey(short key)
 		}
 	}
 	
-	if ((G.vt.key_status & KEY_SHIFT) ^ G.vt.key_caps) {
+	if (!!(G.vt.key_mod & KEY_SHIFT) ^ G.vt.key_caps) {
 #if 0
 		key = toupper(key);
 #else
@@ -159,8 +164,8 @@ void addkey(short key)
 		vtrint(0x0100);
 	}
 end:
-	G.vt.key_status = 0;
-	G.vt.key_mask[0] &= RESET_KEY_STATUS_MASK;
+	/*G.vt.key_mod = 0;*/
+	G.vt.key_array[0] &= RESET_KEY_STATUS_MASK;
 #if 0
 	G.vt.key_auto_status = 1;
 #endif
@@ -168,78 +173,55 @@ end:
 
 void scankb()
 {
+	short rowmask = 1, colmask, key;
+	unsigned char *currow = &G.vt.key_array[0];
 	int row, col;
-	short key_pressed = 0;
-	static short key_previous, key_cur_row, key_cur_col;
-	char *curmask;
-	short rowmask, j, k;
-	
-loop:
-	curmask = &G.vt.key_mask[0];
-	/* check if a key is pressed */
-	KBROWMASK = 0; /* read all keys */
-	_WaitKeyboard();
-
-	if (~KBCOLMASK) {
-		/* A key is pressed. Check which key is pressed */
-		key_pressed = 0;
-		rowmask = 1;
-		for (row = KEY_NBR_ROW - 1; row >= 0; --row, rowmask <<= 1) {
-			KBROWMASK = ~rowmask; /* select row */
-			_WaitKeyboard();
-			k = KBCOLMASK; /* read which keys are pressed */
-			j = k; /* add the key mask */
-			k = k | *curmask; /* clear some keys according to the mask */
-			*curmask++ &= ~j; /* update the mask */
-			if (!~k) continue; /* no key is pressed */
-			
-			/* find out which key is pressed */
-			col = ffs(k) - 1;
-			key_cur_row = rowmask; /* remember which key is currently pressed */
-			key_cur_col = 1 << col;
-			curmask[-1] |= key_cur_col; /* update mask so that this key won't be added again */
-			
-			key_pressed = Translate_Key_Table[row][col];
-			if (key_pressed >= 0x1000)
-				goto end;
-			
-			G.vt.key_prev_row = key_cur_row;
-			G.vt.key_prev_col = key_cur_col;
-			G.vt.key_previous = key_pressed;
-			G.vt.key_counter = G.vt.key_repeat_start_delay; /* start delay before repeating it */
-			break;
-		}
-		
-		/* no new keys were pressed - auto repeat previous key */
-		if (key_previous == 0 || key_pressed >= 0x1000) {
-			key_pressed = 0;
-			goto end;
-		}
-		/* check if previous key is still pressed. */
-		KBROWMASK = ~key_cur_row; /* select row */
+	short k;
+	unsigned char kdiff;
+	for (row = KEY_NBR_ROW - 1; row >= 0; --row, rowmask <<= 1, ++currow) {
+		KBROWMASK = ~rowmask;
 		_WaitKeyboard();
-		k = KBCOLMASK; /* read which keys are pressed */
-		if (k & key_cur_col) { /* previous key is not pressed */
-			G.vt.key_mask[0] &= RESET_KEY_STATUS_MASK; /* clear mask for status keys */
-			G.vt.key_status = G.vt.key_previous = 0;
-			goto loop;
+		k = KBCOLMASK;
+		kdiff = k ^ *currow;
+		*currow = k;
+		if (!kdiff) continue;
+       
+		while (kdiff) {
+			col = ffs(kdiff) - 1;
+			colmask = 1 << col;
+			kdiff &= ~colmask;
+			key = Translate_Key_Table[KEY_NBR_ROW-row-1][col];
+			if (!(*currow & colmask)) {
+				/* key was pressed */
+				if (key < 0x1000) {
+					G.vt.key_row_mask = rowmask;
+					G.vt.key_col_mask = colmask;
+					G.vt.key_previous = key;
+					G.vt.key_repeat_counter = G.vt.key_repeat_start_delay;
+					addkey(key);
+				} else {
+					G.vt.key_mod |= key;
+				}
+			} else {
+				/* key was released */
+				if (key < 0x1000) {
+					if (key == G.vt.key_previous) {
+						G.vt.key_previous = 0;
+					}
+				} else {
+					G.vt.key_mod &= ~key;
+				}
+			}
 		}
-		if (!--G.vt.key_counter) {
-			G.vt.key_counter = G.vt.key_repeat_delay;
-			key_pressed = G.vt.key_previous /* | KEY_AUTO_REPEAT */;
-		} else
-			key_pressed = 0;
-	} else {
-		/* no key is currently being pressed */
-		memset(G.vt.key_mask, 0, KEY_NBR_ROW); /* reset key_mask */
-		G.vt.key_previous = 0;
-#if 0
-		if (G.vt.key_auto_status)
-			G.vt.key_auto_status = G.vt.key_status = 0;
-#endif
+		goto end;
+	}
+	/* no key was pressed or released, so repeat the previous key */
+	if (G.vt.key_previous == 0) goto end;
+	if (!--G.vt.key_repeat_counter) {
+		G.vt.key_repeat_counter = G.vt.key_repeat_delay;
+		addkey(G.vt.key_previous);
 	}
 end:
 	KBROWMASK = 0x380; /* reset to standard key reading */
-	if (key_pressed)
-		addkey(key_pressed);
+	return;
 }

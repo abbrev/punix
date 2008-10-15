@@ -17,11 +17,6 @@
 #define FLASHSIZE  (SECTORSIZE * NUMSECTORS)
 #define FLASHEND   (&FLASH[NUMSECTORS])
 
-#define FBFREE  (-1) /* free */
-#define FBUSED  (-2) /* used */
-#define FBDEL   (-4) /* deleted but still open */
-#define FBDIRTY (-8) /* dirty (obsoleted) */
-
 extern long __ld_program_size;
 #define ARCHIVE  ((flash_t)&((char *)FLASH)[(__ld_program_size + 0xffff) % 0x10000])
 #define ARCEND   FLASHEND
@@ -158,10 +153,9 @@ STARTUP(static struct flashblock *getfblk(long blkno))
 		for (fbp = (struct flashblock *)&ARCHIVE[sector];
 		     (fbp+1) < (struct flashblock *)ARCHIVE[sector+1]; /* the whole block must fit in the sector */
 		     ++fbp) {
-			if (fbp->status == FBFREE) /* end of this sector */
+			if (fbp->blockno == ~0) /* end of this sector */
 				break;
-			if ((fbp->status == FBUSED || fbp->status == FBDEL)
-			    && fbp->blockno == blkno) {
+			if (fbp->blockno == blkno) {
 				goto out;
 			}
 		}
@@ -272,18 +266,12 @@ STARTUP(static void flwrite(struct buf *bp))
 
 STARTUP(static void fldelete(struct buf *bp))
 {
-	unsigned short status;
+	long zero = 0;
 	struct flashblock *fbp = getfblk(bp->b_blkno);
 	if (!fbp)
 		return;
 	
-	if (bp->b_flags & B_FREE) {
-		status = FBDIRTY; /* completely delete this block */
-	} else {
-		status = FBDEL; /* keep block around until flash closes */
-	}
-	
-	FlashWrite(&fbp->status, &status, sizeof(status));
+	FlashWrite(&fbp->blockno, &zero, sizeof(zero));
 	cacheadd(fbp->blockno, NULL);
 }
 
