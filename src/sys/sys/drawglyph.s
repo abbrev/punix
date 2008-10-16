@@ -17,17 +17,15 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-.global drawglyph
-
 .include "lcd.inc"
 
 .section _st1, "x"
 
+.global drawglyph
 | 6x4 (small) glyph
 | drawglyph(struct glyph *glyph, int row, int col)
 drawglyph:
 	movem.l	%d3/%d4,-(%sp)
-	move.l	#0xbeeff00d,%a1
 	move.l	8+4(%sp),%a1	| glyph
 	move	8+8(%sp),%d1	| row
 	move	8+10(%sp),%d2	| col
@@ -45,18 +43,18 @@ drawglyph:
 	move	%d1,%a0
 	lea	LCD_MEM(%a0),%a0	| address on screen
 	| %a0 holds screen address
-	| %d3 holds shift amount
-	| %d4.b holds mask
+	| %d3.b holds glyph mask
+	| %d4.b holds screen mask
 	| %a1 holds glyph address
 	
 	moveq	#LCD_INCY,%d0
-	moveq	#6-1,%d2		| glyph height - 1
+	moveq	#6-1,%d2	| glyph height - 1
 0:
 	move.b	(%a1)+,%d1	| get a row from the glyph
 	and.b	%d3,%d1		| mask glyph
 	
-	and.b	%d4,(%a0)		| mask byte on screen
-	or.b	%d1,(%a0)		| and put glyph row there
+	and.b	%d4,(%a0)	| mask byte on screen
+	or.b	%d1,(%a0)	| and put glyph row there
 	
 	| FIXME: for greyscale, change the line below to do the same as above,
 	| except write to the light plane instead of the dark plane.
@@ -76,4 +74,36 @@ drawglyph:
 	dbra	%d2,0b
 	
 	movem.l	(%sp)+,%d3/%d4
+	rts
+
+.global xorcursor
+| xorcursor(int row, int col)
+| XXX: this can probably be optimized
+xorcursor:
+	move	%d3,-(%sp)
+	move	2+4(%sp),%d1	| row
+	move	2+6(%sp),%d2	| col
+	
+	| get address on screen
+	mulu	#6*LCD_INCY,%d1
+	
+	move.b	#0xf0,%d3	| XOR mask XXX
+	asr	#1,%d2		| col / 2
+	bcc.s	0f		| is col even?
+	move.b	#0x0f,%d3	| XXX
+0:
+	add	%d2,%d1		| + col
+	move	%d1,%a0
+	lea	LCD_MEM(%a0),%a0	| address on screen
+	| %a0 holds screen address
+	| %d3 holds cursor mask
+	
+	moveq	#LCD_INCY,%d0
+	moveq	#6-1,%d2	| cursor height - 1
+0:
+	eor.b	%d3,(%a0)	| XOR the cursor to the screen
+	add	%d0,%a0		| next screen row
+	dbra	%d2,0b
+	
+	move	(%sp)+,%d3
 	rts

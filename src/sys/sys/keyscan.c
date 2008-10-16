@@ -120,7 +120,15 @@ static short translate(short key, const struct translate *tp)
 
 void addkey(short key)
 {
-	if (G.vt.key_mod & KEY_2ND) {
+	short mod;
+	if (key >= 0x1000) {
+		G.vt.key_mod_sticky ^= key;
+		return;
+	}
+	
+	mod = G.vt.key_mod | G.vt.key_mod_sticky;
+	
+	if (mod & KEY_2ND) {
 		short k;
 		if (key == 'z') {
 			/* caps lock */
@@ -131,7 +139,7 @@ void addkey(short key)
 		if (k) key = k;
 		/*else   key |= key_mod;*/
 	}
-	if (G.vt.key_mod & KEY_DIAMOND) {
+	if (mod & KEY_DIAMOND) {
 		if (key == '+') {
 			lcd_inc_contrast();
 			goto end;
@@ -150,7 +158,7 @@ void addkey(short key)
 		}
 	}
 	
-	if (!!(G.vt.key_mod & KEY_SHIFT) ^ G.vt.key_caps) {
+	if (!!(mod & KEY_SHIFT) ^ G.vt.key_caps) {
 #if 0
 		key = toupper(key);
 #else
@@ -164,8 +172,8 @@ void addkey(short key)
 		vtrint(0x0100);
 	}
 end:
-	/*G.vt.key_mod = 0;*/
-	G.vt.key_array[0] &= RESET_KEY_STATUS_MASK;
+	G.vt.key_mod_sticky = 0;
+	/*G.vt.key_array[0] &= RESET_KEY_STATUS_MASK;*/
 #if 0
 	G.vt.key_auto_status = 1;
 #endif
@@ -185,7 +193,7 @@ void scankb()
 		kdiff = k ^ *currow;
 		*currow = k;
 		if (!kdiff) continue;
-       
+		
 		while (kdiff) {
 			col = ffs(kdiff) - 1;
 			colmask = 1 << col;
@@ -198,10 +206,10 @@ void scankb()
 					G.vt.key_col_mask = colmask;
 					G.vt.key_previous = key;
 					G.vt.key_repeat_counter = G.vt.key_repeat_start_delay;
-					addkey(key);
 				} else {
 					G.vt.key_mod |= key;
 				}
+				addkey(key);
 			} else {
 				/* key was released */
 				if (key < 0x1000) {

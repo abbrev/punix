@@ -95,7 +95,7 @@ struct globals {
 		short key;
 		int key_caps;
 		char key_array[KEY_NBR_ROW];
-		short key_mod;
+		short key_mod, key_mod_sticky;
 		int key_repeat_delay;
 		int key_repeat_start_delay;
 		int key_repeat_counter;

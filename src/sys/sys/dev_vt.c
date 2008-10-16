@@ -146,8 +146,11 @@ static struct glyphset glyphsets[] = {
 /* alt char ROM special graphics here */
 };
 
-static void invertcursor()
+static void invertcursor(struct tty *tp)
 {
+	(void)tp;
+	xorcursor(G.vt.pos.row,
+	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column);
 }
 
 #if 0
@@ -227,7 +230,6 @@ static void reset(struct tty *tp)
 	G.vt.charsets[1] = &glyphsets[2];
 	G.vt.glyphset = G.vt.charsets[G.vt.charset];
 	G.vt.cursorvisible = 1;
-	cursor(tp);
 	
 	G.vt.vtstate = NULL;
 	transition(0, STGROUND, NULL, tp);
@@ -646,6 +648,8 @@ static void csi_dispatch(int ch, struct tty *tp)
 			for (c = 0; c <= G.vt.pos.column; ++c)
 				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
+			/* XXX: we could just erase the entire display,
+			 * excluding the status line at the bottom */
 			/* Erase all of the display -- all lines are erased,
 			 * changed to single-width, and the cursor does not
 			 * move. */
@@ -1039,6 +1043,7 @@ void vtinit()
 {
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
+	cursor(&G.vt.vt[0]);
 	G.vt.key_repeat_start_delay = 256 / 4;
 	G.vt.key_repeat_delay = 256 / 20;
 }
