@@ -10,7 +10,7 @@ SYSINC	= ${PUNIXBASE}/src/sys/h
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD=\"`date +%FT%T`\"
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD="\"`date --rfc-3339=seconds`\""
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l

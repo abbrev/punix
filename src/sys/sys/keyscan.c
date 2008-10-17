@@ -28,7 +28,7 @@ static const short Translate_Key_Table[][8] = {
 	{ '/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN, },
 	{ '^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p', },
 	{ '=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*', },
-	{ '\b',KEY_THETA,'l','o','+',KEY_MODE,'\x1b',KEY_VOID, },
+	{ '\b',KEY_THETA,'l','o','+',KEY_MODE,'\e',KEY_VOID, },
 	{ '-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN, },
 #endif
 };
@@ -61,8 +61,11 @@ static const struct translate Translate_2nd[] = {
 	{ 'f',0x9f }, /* angle XXX */
 	{ 'g',0x80 }, /* alpha */ /* XXX */
 #endif
+ { 'g','`' },
 	{ 'h','&' },
+#if 0
 	{ 'j',0xbe }, /* infinity */
+#endif
 	{ 'k','|' },
 	{ 'l','"' },
 	{ 'x',0xa9 }, /* copyright */
@@ -81,12 +84,10 @@ static const struct translate Translate_2nd[] = {
 	{ '/',']' },
 #if 0
 	{ '^',0x8c }, /* pi XXX */
-#endif
 	{ '7',0xbd }, /* integral (1/2) */
 	{ '8',0xbc }, /* derivative (1/4) */
 	{ '9',0xb4 }, /* ^-1 (accent) */
 	{ '*',0xa8 }, /* square root (") */
-#if 0
 	{ '4',0x8e }, /* Sigma XXX */
 #endif
 	{ '5',KEY_MATH },
@@ -98,7 +99,10 @@ static const struct translate Translate_2nd[] = {
 	{ '+',KEY_CHAR },
 	{ '0','<' },
 	{ '.','>' },
+	{ KEY_SIGN,'~' },
+#if 0
 	{ KEY_SIGN,KEY_ANS },
+#endif
 	{ KEY_BACK,KEY_INS },
 	{ KEY_ENTER,KEY_ENTRY },
 	{ KEY_APPS,KEY_SWITCH },
@@ -116,6 +120,178 @@ static short translate(short key, const struct translate *tp)
 		++tp;
 	}
 	return 0;
+}
+
+struct expand {
+	short oldkey;
+	char expansion[6];
+};
+
+static const struct expand expand_table[] = {
+	{ KEY_LEFT, "\e[D" },
+	{ KEY_UP, "\e[A" },
+	{ KEY_RIGHT, "\e[C" },
+	{ KEY_DOWN, "\e[B" },
+	
+	{ KEY_COS, "cos " },
+	{ KEY_SIN, "sin " },
+	{ KEY_TAN, "tan " },
+	{ KEY_LN, "ln " },
+/* FIXME: add more */	
+#if 1
+	{ KEY_INS, "\e[2~" },
+	{ KEY_F1, "\eOP" },
+	{ KEY_F2, "\eOQ" },
+	{ KEY_F3, "\eOR" },
+	{ KEY_F4, "\eOS" },
+	{ KEY_F5, "\e[15~" },
+	{ KEY_F6, "\e[17~" },
+	{ KEY_F7, "\e[18~" },
+	{ KEY_F8, "\e[19~" },
+#endif
+ { 0, "" }
+};
+
+static void expand(short key)
+{
+	const struct expand *ep = expand_table;
+	while (ep->oldkey) {
+		if (ep->oldkey == key) {
+			char *cp = ep->expansion;
+			while (*cp != '\0') {
+				G.vt.key = *cp++;
+				vtrint(0x0100); /* XXX dev */
+			}
+			return;
+		}
+		++ep;
+	}
+}
+
+struct compose {
+	char digraph[2];
+	short newkey;
+};
+
+static const struct compose compose_table[] = {
+	{ "  ", 160 },
+	{ "!!", 161 },
+	{ "c/", 162 },
+	{ "c|", 162 },
+	{ "L-", 163 },
+	{ "L=", 163 },
+	{ "ox", 164 },
+	{ "xo", 164 },
+	{ "Y-", 165 },
+	{ "Y=", 165 },
+	{ "||", 166 },
+	{ "so", 167 },
+	{ "\"\"", 168 },
+	{ "(c", 169 },
+	{ "a_", 170 },
+	{ "<<", 171 },
+	{ "-,", 172 },
+	{ "--", 173 },
+	{ "(r", 174 },
+	{ "__", 175 },
+	{ "^0", 176 },
+	{ "+-", 177 },
+	{ "^2", 178 },
+	{ "^3", 179 },
+	{ "''", 180 },
+	{ "u/", 181 },
+	{ "P!", 182 },
+	{ "p!", 182 },
+	{ "!P", 182 },
+	{ "!p", 182 },
+	{ "..", 183 },
+	{ ",,", 184 },
+	{ "^1", 185 },
+	{ "o_", 186 },
+	{ ">>", 187 },
+	{ "14", 188 },
+	{ "12", 189 },
+	{ "34", 190 },
+	{ "??", 191 },
+	{ "A`", 192 },
+	{ "A'", 193 },
+	{ "A^", 194 },
+	{ "A~", 195 },
+	{ "A\"", 196 },
+	{ "A*", 197 },
+	{ "AE", 198 },
+	{ "C,", 199 },
+	{ "E`", 200 },
+	{ "E'", 201 },
+	{ "E^", 202 },
+	{ "E\"", 203 },
+	{ "I`", 204 },
+	{ "I'", 205 },
+	{ "I^", 206 },
+	{ "I\"", 207 },
+	{ "-D", 208 },
+	{ "N~", 209 },
+	{ "O`", 210 },
+	{ "O'", 211 },
+	{ "O^", 212 },
+	{ "O~", 213 },
+	{ "O\"", 214 },
+	{ "xx", 215 },
+	{ "O/", 216 },
+	{ "U`", 217 },
+	{ "U'", 218 },
+	{ "U^", 219 },
+	{ "U\"", 220 },
+	{ "Y'", 221 },
+	{ "TH", 222 },
+	{ "ss", 223 },
+	{ "a`", 224 },
+	{ "a'", 225 },
+	{ "a^", 226 },
+	{ "a~", 227 },
+	{ "a\"", 228 },
+	{ "a*", 229 },
+	{ "ae", 230 },
+	{ "c,", 231 },
+	{ "e`", 232 },
+	{ "e'", 233 },
+	{ "e^", 234 },
+	{ "e\"", 235 },
+	{ "i`", 236 },
+	{ "i'", 237 },
+	{ "i^", 238 },
+	{ "i\"", 239 },
+	{ "-d", 240 },
+	{ "n~", 241 },
+	{ "o`", 242 },
+	{ "o'", 243 },
+	{ "o^", 244 },
+	{ "o~", 245 },
+	{ "o\"", 246 },
+	{ "-:", 247 },
+	{ ":-", 247 },
+	{ "o/", 248 },
+	{ "u`", 249 },
+	{ "u'", 250 },
+	{ "u^", 251 },
+	{ "u\"", 252 },
+	{ "y'", 253 },
+	{ "th", 254 },
+	{ "y\"", 255 },
+	/* FIXME: add more */
+	{ "", 0 },
+};
+
+static short compose(short key)
+{
+	const struct compose *cp = compose_table;
+	while (cp->digraph[0] != '\0') {
+		if (cp->digraph[0] == G.vt.key_compose && cp->digraph[1] == key) {
+			return cp->newkey;
+		}
+		++cp;
+	}
+	return key;
 }
 
 void addkey(short key)
@@ -137,7 +313,7 @@ void addkey(short key)
 		}
 		k = translate(key, Translate_2nd);
 		if (k) key = k;
-		/*else   key |= key_mod;*/
+		else   key |= mod;
 	}
 	if (mod & KEY_DIAMOND) {
 		if (key == '+') {
@@ -167,9 +343,24 @@ void addkey(short key)
 #endif
 	}
 	
+	if (key == KEY_COMPOSE) {
+		G.vt.compose = 1;
+		goto end;
+	}
+	
 	if (key < 0x100) {
+		if (G.vt.compose) {
+			G.vt.key_compose = key;
+			G.vt.compose = 0;
+			goto end;
+		} else if (G.vt.key_compose) {
+			key = compose(key);
+			G.vt.key_compose = 0;
+		}
 		G.vt.key = key;
 		vtrint(0x0100);
+	} else {
+		expand(key);
 	}
 end:
 	G.vt.key_mod_sticky = 0;

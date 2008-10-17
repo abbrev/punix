@@ -1046,6 +1046,8 @@ void vtinit()
 	cursor(&G.vt.vt[0]);
 	G.vt.key_repeat_start_delay = 256 / 4;
 	G.vt.key_repeat_delay = 256 / 20;
+	G.vt.key_compose = 0;
+	G.vt.key_mod_sticky = 0;
 }
 
 /*
