@@ -7,10 +7,8 @@ struct glyph {
 	unsigned short rows[GLYPH_HEIGHT];
 };
 
-/* 96 lower + 96 upper (excludes C0 + C1) */
 struct glyphset {
-	struct glyph lower[96];
-	struct glyph upper[96];
+	struct glyph glyphs[96];
 };
 
 void drawglyph(struct glyph *glyph, int row, int col);

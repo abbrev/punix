@@ -28,7 +28,7 @@ static const short Translate_Key_Table[][8] = {
 	{ '/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN, },
 	{ '^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p', },
 	{ '=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*', },
-	{ '\b',KEY_THETA,'l','o','+',KEY_MODE,'\e',KEY_VOID, },
+	{ KEY_BACK,KEY_THETA,'l','o','+',KEY_MODE,'\e',KEY_VOID, },
 	{ '-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN, },
 #endif
 };
@@ -140,6 +140,7 @@ static const struct expand expand_table[] = {
 /* FIXME: add more */	
 #if 1
 	{ KEY_INS, "\e[2~" },
+	{ KEY_DEL, "\e[3~" },
 	{ KEY_F1, "\eOP" },
 	{ KEY_F2, "\eOQ" },
 	{ KEY_F3, "\eOR" },
@@ -331,6 +332,8 @@ void addkey(short key)
 			key = 0x7f;
 		} else if (key == '/') {
 			key = 0x1f;
+		} else if (key == KEY_BACK) {
+			key = KEY_DEL;
 		}
 	}
 	

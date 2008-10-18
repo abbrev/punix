@@ -128,23 +128,33 @@ static void transition(int ch, int newstate,
 		G.vt.vtstate->entry(tp);
 }
 
-/* XXX: re-write these for Punix */
-
-#if 0
-struct glyphset *glyphset;
-struct glyphset *charsets[2];
-int charset;
-#endif
-
-#define SPACEGLYPH (glyphsets[0].lower[' ' - 0x20])
+#define GLYPHSET_UPPER 0
+#define GLYPHSET_UK    1
+#define GLYPHSET_US    2
+#define GLYPHSET_SG    3
+#define GLYPHSET_ALTSG 4
 
 static struct glyphset glyphsets[] = {
+{
+#include "glyphsets/upper.inc"
+},
+{
 #include "glyphsets/uk.inc"
+},
+{
 #include "glyphsets/us.inc"
+},
+{
 #include "glyphsets/sg.inc"
+},
 /* alt char ROM standard chars here */
-/* alt char ROM special graphics here */
+{
+/* alt char ROM special graphics (technical character set) */
+#include "glyphsets/tcs.inc" 
+},
 };
+
+#define SPACEGLYPH (glyphsets[GLYPHSET_US].glyphs[' ' - 0x20])
 
 static void invertcursor(struct tty *tp)
 {
@@ -153,18 +163,10 @@ static void invertcursor(struct tty *tp)
 	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column);
 }
 
-#if 0
 /* move screen contents up */
-static void scrolldown(int n)
-{
-}
-
+extern void scrolldown(int n);
 /* move screen contents down */
-static void scrollup(int n)
-{
-}
-#endif
-/* end XXX */
+extern void scrollup(int n);
 
 #if 1
 static void cursor(struct tty *tp)
@@ -226,8 +228,8 @@ static void reset(struct tty *tp)
 	G.vt.pos.row = 0;
 	G.vt.pos.column = 0;
 	G.vt.charset = 0;
-	G.vt.charsets[0] = &glyphsets[1];
-	G.vt.charsets[1] = &glyphsets[2];
+	G.vt.charsets[0] = &glyphsets[GLYPHSET_US];
+	G.vt.charsets[1] = &glyphsets[GLYPHSET_SG];
 	G.vt.glyphset = G.vt.charsets[G.vt.charset];
 	G.vt.cursorvisible = 1;
 	
@@ -280,6 +282,8 @@ static void print(int ch, struct tty *tp)
 	 * the right margin, even if it's outside the margin (see the
 	 * "invertcursor" routine).
 	 */
+	if (ch == 0x7f) return;
+	
 	if (G.vt.pos.column > MARGINRIGHT) {
 		++G.vt.pos.row;
 		G.vt.pos.column = 0;
@@ -288,9 +292,9 @@ static void print(int ch, struct tty *tp)
 	
 	/* draw the glyph */
 	if (ch < 0x80)
-		drawglyph(&G.vt.glyphset->lower[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
+		drawglyph(&G.vt.glyphset->glyphs[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
 	else
-		drawglyph(&G.vt.glyphset->upper[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
+		drawglyph(&glyphsets[GLYPHSET_UPPER].glyphs[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
 	
 	++G.vt.pos.column;
 }
@@ -305,6 +309,11 @@ static void execute(int ch, struct tty *tp)
 	case 0x08: /* BS */
 		if (G.vt.pos.column > 0)
 			--G.vt.pos.column;
+		else {
+			G.vt.pos.column = MARGINRIGHT;
+			--G.vt.pos.row;
+			scroll(tp);
+		}
 		break;
 	case 0x09: /* HT */
 		/* move the cursor to the next tab stop or the right margin */
@@ -479,27 +488,27 @@ static void esc_dispatch(int ch, struct tty *tp)
 	case 'A':
 		/* SCS - Select Character Set (UK) */
 		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[0];
+			G.vt.charsets[0] = &glyphsets[GLYPHSET_UK];
 		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[0];
+			G.vt.charsets[1] = &glyphsets[GLYPHSET_UK];
 		
 		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case 'B':
 		/* SCS - Select Character Set (ASCII) */
 		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[1];
+			G.vt.charsets[0] = &glyphsets[GLYPHSET_US];
 		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[1];
+			G.vt.charsets[1] = &glyphsets[GLYPHSET_US];
 		
 		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	case '0':
 		/* SCS (Special Graphics) */
 		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[2];
+			G.vt.charsets[0] = &glyphsets[GLYPHSET_SG];
 		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[2];
+			G.vt.charsets[1] = &glyphsets[GLYPHSET_SG];
 		
 		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
@@ -508,6 +517,12 @@ static void esc_dispatch(int ch, struct tty *tp)
 		break;
 	case '2':
 		/* SCS (Alternate Character ROM Special Graphics) */
+		if (G.vt.intchars[0] == '(')
+			G.vt.charsets[0] = &glyphsets[GLYPHSET_ALTSG];
+		else if (G.vt.intchars[0] == ')')
+			G.vt.charsets[1] = &glyphsets[GLYPHSET_ALTSG];
+		
+		G.vt.glyphset = G.vt.charsets[G.vt.charset];
 		break;
 	}
 }
@@ -567,6 +582,15 @@ static void csi_dispatch(int ch, struct tty *tp)
 		if (G.vt.pos.column < 0)
 			G.vt.pos.column = 0;
 		break;
+	case 'E':
+		/* FIXME: CNL - Cursor Next Line */
+		break;
+	case 'F':
+		/* FIXME: CPL - Cursor Preceding Line */
+		break;
+	case 'G':
+		/* FIXME: CHA - Cursor Character Absolute */
+		break;
 	case 'H':
 		/* CUP Pr Pc - Cursor Position */
 	case 'f':
@@ -586,6 +610,12 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.column = 0;
 		else if (G.vt.pos.column > MARGINRIGHT)
 			G.vt.pos.column = MARGINRIGHT;
+		break;
+	case 'I':
+		/* FIXME: CHT - Cursor Forward Tabulation */
+		break;
+	case 'M':
+		/* FIXME: DL - Delete Line */
 		break;
 	case 'c':
 		/* DA Pn - Device Attributes */

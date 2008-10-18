@@ -24,6 +24,7 @@
 .global drawglyph
 | 6x4 (small) glyph
 | drawglyph(struct glyph *glyph, int row, int col)
+	dc.l	0xbeeff00b
 drawglyph:
 	movem.l	%d3/%d4,-(%sp)
 	move.l	8+4(%sp),%a1	| glyph

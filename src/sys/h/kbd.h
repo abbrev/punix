@@ -19,7 +19,8 @@
 #define KEY_ENTER	 13
 #define KEY_THETA	 136
 #define KEY_SIGN	 173
-#define KEY_BACK	 257
+#define KEY_BACK	 '\b' /* XXX use 0x7f once the tty code works */
+#define KEY_DEL		 277 /* XXX */
 #define KEY_STO		 22	/* Original Key code is 258 */
 #define KEY_COS		 260
 #define KEY_TAN		 261
