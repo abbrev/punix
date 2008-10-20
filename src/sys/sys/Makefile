@@ -68,7 +68,7 @@ setjmp.o: setjmp.s
 ${SYSINC}/proc.h: ${SYSINC}/file.h ${STDINC}/sys/types.h \
 	${STDINC}/time.h ${STDINC}/signal.h
 ${SYSINC}/process.h: ${SYSINC}/proc.h
-dev_vt.o: dev_vt.c glyphsets/uk.inc glyphsets/us.inc glyphsets/sg.inc
+dev_vt.o: dev_vt.c glyphsets/uk.inc glyphsets/us.inc glyphsets/sg.inc glyphsets/tcs.inc glyphsets/upper.inc
 
 md5.o: md5.c
 qsort.o: qsort.c
@@ -117,6 +117,10 @@ glyphsets/uk.inc: glyphsets/uk.pbm
 glyphsets/us.inc: glyphsets/us.pbm
 	make -C glyphsets
 glyphsets/sg.inc: glyphsets/sg.pbm
+	make -C glyphsets
+glyphsets/tcs.inc: glyphsets/tcs.pbm
+	make -C glyphsets
+glyphsets/upper.inc: glyphsets/upper.pbm
 	make -C glyphsets
 
 clean:

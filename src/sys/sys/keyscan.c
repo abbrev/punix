@@ -336,6 +336,8 @@ void addkey(short key)
 			key = 0x1f;
 		} else if (key == KEY_BACK) {
 			key = KEY_DEL;
+		} else if (key == '=') {
+			key = '%'; /* XXX */
 		}
 	}
 	
