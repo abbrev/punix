@@ -64,18 +64,19 @@ struct globals {
 	int contrast;
 	/* dev_vt static variables */
 	struct {
-		int xon;
+		unsigned char xon;
+		unsigned char nullop;
 		int privflag;
-		int nullop;
 		char intchars[2+1];
 		char *intcharp;
-		unsigned params[16];
-		int numparams;
-		int cursorvisible;
-		int tabstops[60];
+		int params[16];
+		unsigned char numparams;
+		unsigned char cursorvisible;
+		unsigned char tabstops[(60+7)/8];
 		struct state const *vtstate;
 		struct glyphset *glyphset, *charsets[2];
-		int charset;
+		unsigned char charset;
+		unsigned char margintop, marginbottom;
 		struct pos {
 			int row, column;
 		} pos;
@@ -92,17 +93,17 @@ struct globals {
 		} screen[20];
 		struct tty vt[1];
 		
-		short key;
-		int key_caps;
 		char key_array[KEY_NBR_ROW];
 		short key_mod, key_mod_sticky;
+		short key;
 		short key_compose;
-		int compose;
-		int key_repeat_delay;
-		int key_repeat_start_delay;
-		int key_repeat_counter;
+		unsigned char key_caps;
+		unsigned char compose;
+		unsigned char key_repeat; /* repeat enabled? */
+		unsigned char key_repeat_delay;
+		unsigned char key_repeat_start_delay;
+		unsigned char key_repeat_counter;
 		short key_previous;
-		short key_row_mask, key_col_mask;
 	} vt;
 	
 	int batt_level;

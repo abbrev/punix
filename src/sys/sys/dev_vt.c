@@ -6,9 +6,9 @@
  * machine at http://vt100.net/emu/dec_ansi_parser
  */
 
-/* FIXME: move global variables to sys/globals.h */
-
 /* FIXME: use the tty structure in each routine to support multiple vt's */
+/* TODO: add more escape codes, starting with DECSTBM (Set Top and Bottom
+ * Margins). */
 
 #include <sys/types.h>
 #include <termios.h>
@@ -39,6 +39,7 @@
 
 #define NUMPARAMS 16
 #define NUMINTCHARS 2
+#define UNDEFPARAM (-1) /* undefined parameter value */
 
 #if 0
 static const struct tty vt[NVT];
@@ -190,6 +191,11 @@ static void scroll(struct tty *tp)
 	}
 }
 
+#define istabstop(n) (G.vt.tabstops[(n)/8] & (1 << ((n)%8)))
+#define settabstop(n) (G.vt.tabstops[(n)/8] |= 1 << ((n)%8))
+#define cleartabstop(n) (G.vt.tabstops[(n)/8] &= ~(1 << ((n)%8)))
+#define cleartabstops() memset(G.vt.tabstops, 0, sizeof(G.vt.tabstops))
+
 static void cmd_ind(struct tty *tp)
 {
 	++G.vt.pos.row;
@@ -205,7 +211,7 @@ static void cmd_nel(struct tty *tp)
 
 static void cmd_hts(struct tty *tp)
 {
-	G.vt.tabstops[G.vt.pos.column] = 1;
+	settabstop(G.vt.pos.column);
 }
 
 static void cmd_ri(struct tty *tp)
@@ -221,9 +227,9 @@ static void reset(struct tty *tp)
 	G.vt.xon = 1;
 	memset((void *)LCD_MEM, 0, 3600); /* XXX constant */
 	memset(G.vt.screen, 0, sizeof(G.vt.screen));
-	memset(G.vt.tabstops, 0, sizeof(G.vt.tabstops));
+	cleartabstops();
 	for (i = 0; i < WINWIDTH; i += 8)
-		G.vt.tabstops[i] = 1;
+		settabstop(i);
 	
 	G.vt.pos.row = 0;
 	G.vt.pos.column = 0;
@@ -246,9 +252,9 @@ static void defaultparams(int n, struct tty *tp)
 		n = NUMPARAMS;
 	
 	for (i = G.vt.numparams; i < n; ++i)
-		G.vt.params[i] = 0;
+		G.vt.params[i] = UNDEFPARAM;
 	
-	G.vt.numparams = n;
+	G.vt.numparams = n + 1;
 }
 
 /******************************************************************************
@@ -317,8 +323,10 @@ static void execute(int ch, struct tty *tp)
 		break;
 	case 0x09: /* HT */
 		/* move the cursor to the next tab stop or the right margin */
-		while (G.vt.pos.column < MARGINRIGHT && !G.vt.tabstops[++G.vt.pos.column])
-			;
+		while (G.vt.pos.column < MARGINRIGHT) {
+			++G.vt.pos.column;
+			if (istabstop(G.vt.pos.column)) break;
+		}
 		break;
 	case 0x0a: /* LF */
 	case 0x0b: /* VT */
@@ -381,8 +389,8 @@ static void clear(struct tty *tp)
 	G.vt.intcharp = &G.vt.intchars[0];
 	G.vt.intchars[0] = '\0';
 	
-	G.vt.numparams = 1;
-	G.vt.params[0] = 0;
+	G.vt.numparams = 0;
+	G.vt.params[0] = UNDEFPARAM;
 }
 
 static void collect(int ch, struct tty *tp)
@@ -409,16 +417,25 @@ static void param(int ch, struct tty *tp)
 	 * parameters need be stored. If more than 16 parameters arrive, all the
 	 * extra parameters are silently ignored. */
 	
+	int v;
+	
 	if (G.vt.numparams > NUMPARAMS)
 		return;
-	
+	if (G.vt.numparams == 0) {
+		++G.vt.numparams;
+		G.vt.params[0] = UNDEFPARAM;
+	}
+
 	if (ch == ';') {
-		if (G.vt.numparams <= NUMPARAMS)
-			G.vt.params[G.vt.numparams++] = 0;
+		if (G.vt.numparams < NUMPARAMS)
+			G.vt.params[G.vt.numparams++] = UNDEFPARAM;
 	} else {
-		G.vt.params[G.vt.numparams-1] = G.vt.params[G.vt.numparams-1] * 10 + (ch - '0');
-		if (G.vt.params[G.vt.numparams-1] > MAXPARAMVAL)
-			G.vt.params[G.vt.numparams-1] = MAXPARAMVAL;
+		v = G.vt.params[G.vt.numparams-1];
+		if (v < 0) v = 0;
+		v = v * 10 + (ch - '0');
+		if (v > MAXPARAMVAL)
+			v = MAXPARAMVAL;
+		G.vt.params[G.vt.numparams-1] = v;
 	}
 }
 
@@ -541,11 +558,14 @@ static void csi_dispatch(int ch, struct tty *tp)
 	if (G.vt.nullop)
 		return;
 	
+	if (G.vt.numparams > NUMPARAMS) G.vt.numparams = NUMPARAMS;
+	
 	switch (ch) {
 	case 'A':
 		/* CUU Pn - Cursor Up */
+		if (G.vt.pos.row == MARGINTOP) break;
 		n = G.vt.params[0];
-		if (n == 0)
+		if (n <= 0)
 			n = 1;
 		
 		G.vt.pos.row -= n;
@@ -554,8 +574,9 @@ static void csi_dispatch(int ch, struct tty *tp)
 		break;
 	case 'B':
 		/* CUD Pn - Cursor Down */
+		if (G.vt.pos.row == MARGINBOTTOM) break;
 		n = G.vt.params[0];
-		if (n == 0)
+		if (n <= 0)
 			n = 1;
 		
 		G.vt.pos.row += n;
@@ -565,7 +586,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 	case 'C':
 		/* CUF Pn - Cursor Forward */
 		n = G.vt.params[0];
-		if (n == 0)
+		if (n <= 0)
 			n = 1;
 		
 		G.vt.pos.column += n;
@@ -575,7 +596,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 	case 'D':
 		/* CUB Pn - Cursor Backward */
 		n = G.vt.params[0];
-		if (n == 0)
+		if (n <= 0)
 			n = 1;
 		
 		G.vt.pos.column -= n;
@@ -629,12 +650,30 @@ static void csi_dispatch(int ch, struct tty *tp)
 		/* DECREPTPARM sol par nbits xspeed rspeed clkmul flags */
 		/* FIXME */
 		break;
+#if 0
 	case 'r':
 		/* DECSTBM Pn Pn (DEC Private) */
+		/* FIXME: add static variables margintop and marginbottom,
+		 * and use them in scrolling and cursor movement code */
+		int t = G.vt.params[0];
+		int b = G.vt.params[1];
+		if (t < 0 && b < 0) {
+			G.vt.margintop = 1;
+			G.vt.marginbottom = MARGINBOTTOM;
+		} else {
+			if (t <= 0) t = 1;
+			if (b <= 0) b = 1;
+			if (b > MARGINBOTTOM) b = MARGINBOTTOM;
+			if (b <= t) break;
+			G.vt.margintop = t;
+			G.vt.marginbottom = b;
+		}
+		home();
 		break;
+#endif
+#if 0
 	case 'y':
 		/* DECTST 2 Ps */
-#if 0
 		defaultparams(2, tp);
 		if (G.vt.params[0] != 2)
 			break;
@@ -650,8 +689,8 @@ static void csi_dispatch(int ch, struct tty *tp)
 				; /* Data Loop Back */
 			else if (n & 4)
 				; /* EIA modem control test */
-#endif
 		break;
+#endif
 	case 'n':
 		/* DSR Ps */
 		/* Device Status Report */
@@ -661,7 +700,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 		/* Erase in Display */
 		n = G.vt.params[0];
 		
-		if (n == 0) {
+		if (n <= 0) {
 			/* Erase from the active position to the end of the
 			 * screen, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
@@ -693,7 +732,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 		/* Erase in Line */
 		n = G.vt.params[0];
 		
-		if (n == 0) {
+		if (n <= 0) {
 			/* Erase from the active position to the end of the
 			 * line, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
@@ -797,7 +836,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 		case 0:
 			/* Clear the horizontal tab stop at the active
 			 * position (default) */
-			G.vt.tabstops[G.vt.pos.column] = 0;
+			cleartabstop(G.vt.pos.column);
 			break;
 #if 0
 		case 1:
@@ -809,7 +848,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 #endif
 		case 3:
 			/* Clear all horizontal tab stops */
-			for (i = 0; i < 60; ++i) G.vt.tabstops[i] = 0;
+			cleartabstops();
 			break;
 #if 0
 		case 4:
@@ -1074,9 +1113,11 @@ void vtinit()
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
 	cursor(&G.vt.vt[0]);
-	G.vt.key_repeat_start_delay = 256 / 4;
-	G.vt.key_repeat_delay = 256 / 20;
+	G.vt.key_repeat_start_delay = KEY_REPEAT_START_DELAY;
+	G.vt.key_repeat_delay = KEY_REPEAT_DELAY;
+	G.vt.key_repeat = 1;
 	G.vt.key_compose = 0;
+	G.vt.compose = 0;
 	G.vt.key_mod_sticky = 0;
 }
 

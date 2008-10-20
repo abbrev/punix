@@ -46,6 +46,9 @@
 #define CPUPRIWEIGHT  1
 #define NICEPRIWEIGHT ((CPUMAX - QUANTUM * CPUSCALE) / 20)
 
+#define KEY_REPEAT_START_DELAY  (HZ / 4)
+#define KEY_REPEAT_DELAY        (HZ / 20)
+
 /*
  * priorities
  * probably should not be

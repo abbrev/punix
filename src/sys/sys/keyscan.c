@@ -326,6 +326,8 @@ void addkey(short key)
 		}
 		if ('a' <= key && key <= 'z') {
 			key -= 0x60;
+		} else if (key == '2') {
+			key = 0;
 		} else if ('3' <= key && key <= '7') {
 			key -= 0x18;
 		} else if (key == '8') {
@@ -396,8 +398,6 @@ void scankb()
 			if (!(*currow & colmask)) {
 				/* key was pressed */
 				if (key < 0x1000) {
-					G.vt.key_row_mask = rowmask;
-					G.vt.key_col_mask = colmask;
 					G.vt.key_previous = key;
 					G.vt.key_repeat_counter = G.vt.key_repeat_start_delay;
 				} else {
@@ -418,7 +418,7 @@ void scankb()
 		goto end;
 	}
 	/* no key was pressed or released, so repeat the previous key */
-	if (G.vt.key_previous == 0) goto end;
+	if (!G.vt.key_repeat || G.vt.key_previous == 0) goto end;
 	if (!--G.vt.key_repeat_counter) {
 		G.vt.key_repeat_counter = G.vt.key_repeat_delay;
 		addkey(G.vt.key_previous);
