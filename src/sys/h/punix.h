@@ -41,7 +41,7 @@ struct trapframe {
 #define BLOCKMASK (~BLOCKSIZE)
 
 /* useful macro for iterating through each process */
-#define EACHPROC(p)	((p)=&G.proc[0]; (p)<&G.proc[NPROC]; ++(p))
+#define EACHPROC(p)	((p) = G.prochead; (p); (p) = (p)->p_next)
 
 int spl0(void), spl1(void), spl2(void), spl3(void);
 int spl4(void), spl5(void), spl6(void), spl7(void);

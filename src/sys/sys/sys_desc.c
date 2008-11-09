@@ -192,6 +192,7 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 		inomode = INO_CREATE;
 	
 	/* ... */
+	P.p_error = EMFILE;
 }
 
 /* FIXME: handle case where file doesn't exist but trf=0 */

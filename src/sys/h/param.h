@@ -13,20 +13,21 @@
 #define	MAXUPRC	25		/* max processes per user */
 #define	SSIZE	20		/* initial stack size (*64 bytes) */
 #define	SINCR	20		/* increment of stack (*64 bytes) */
-#define	NOFILE	20		/* max open files per process */
+#define	NOFILE	32		/* max open files per process */
 #define	CANBSIZ	256		/* max size of typewriter line */
 #define	CMAPSIZ	50		/* size of core allocation area */
 #define	SMAPSIZ	50		/* size of swap allocation area */
 #define	NCALL	20		/* max simultaneous time callouts */
-#define	NPROC	150		/* max number of processes */
+#define	NPROC	32		/* max number of processes */
 #define	NGROUPS	16		/* max number of groups */
 #define	NOGROUP	(-1)		
 #define	NTEXT	40		/* max number of pure texts */
 #define	NCLIST	100		/* max total clist size */
 #define	HZ	256		/* XXX: Ticks/second of the clock */
 #define TICK	(1000000000L / HZ) /* nanoseconds/tick of the clock */
-#define HEAPSIZE 512
+#define HEAPSIZE 1024
 #define FLASH_CACHE_SIZE 32
+#define HEAPBLOCKSIZE 16
 
 #define	TIMEZONE (5*60)		/* Minutes westward from Greenwich */
 #define	DSTFLAG	1		/* Daylight Saving Time applies in this locality */

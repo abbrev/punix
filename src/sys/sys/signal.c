@@ -124,7 +124,7 @@ STARTUP(void psignal(struct proc *p, int sig))
 		p->p_sig &= ~STOPSIGMASK;
 	
 	if (prop & SA_STOP) {
-		if (prop & SA_TTYSTOP && (p->p_pptr == &G.proc[1])
+		if (prop & SA_TTYSTOP && (p->p_pptr == G.proc[1])
 		    && action == SIG_DFL)
 			return;
 		p->p_sig &= ~CONTSIGMASK;
@@ -256,7 +256,7 @@ STARTUP(int issignal(struct proc *p))
 				break;
 			}
 			if (prop & SA_STOP) {
-				if ((p->p_pptr==&G.proc[1] && prop&SA_TTYSTOP)
+				if ((p->p_pptr==G.proc[1] && prop&SA_TTYSTOP)
 				   || (p->p_flag&P_TRACED))
 					break;
 				p->p_ptracesig = sig;

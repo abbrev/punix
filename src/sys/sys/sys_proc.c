@@ -24,6 +24,7 @@
 #include <signal.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #include "setjmp.h"
 #include "proc.h"
@@ -53,8 +54,11 @@ STARTUP(static void println(char *s))
 	write(2, "\n", 1);
 }
 
+int printf(const char *format, ...);
+
 STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 {
+	int fd;
 	println("This is a user program.");
 	
 	println("\narguments:");
@@ -64,6 +68,12 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 	println("\nenvironment:");
 	for (; *envp; ++envp)
 		println(*envp);
+	
+	fd = open("/etc/init", O_RDONLY);
+	if (fd < 0)
+		println("open failed!");
+	else
+		printf("fd = %d\n", fd);
 	
 	return 0;
 }
@@ -138,6 +148,11 @@ void sys_execve()
 	void *text = userstart; /* XXX */
 	char *data = NULL;
 	char *stack = NULL;
+	char *ustack = NULL;
+	size_t textsize;
+	size_t datasize;
+	size_t stacksize;
+	size_t ustacksize;
 	
 	long size = 0;
 	char **ap;
@@ -157,42 +172,62 @@ void sys_execve()
 		size += strlen(*ap) + 1;
 	envc = ap - envp; /* number of env vectors */
 	
-	/* XXX: allocate mem for the stack */
-	stack = &G.ustack[USTACKSIZE];
+#define STACKSIZE 1024
+#define USTACKSIZE 1024
+#define UDATASIZE 1024
+	/* allocate the system stack */
+	stacksize = STACKSIZE;
+	stack = memalloc(&stacksize, 0);
+	/* if (!stack) goto ... */
+	/* allocate the user stack */
+	ustacksize = USTACKSIZE;
+	ustack = memalloc(&ustacksize, 0);
+	/* if (!ustack) goto ... */
+	ustack += ustacksize;
+	
+	/* allocate the data section */
+	datasize = UDATASIZE;
+	data = memalloc(&datasize, 0);
+	/* if (!data) goto ... */
 	
 	size = (size + 1) & ~1; /* size must be even */
-	s = stack - size; /* start of strings */
+	s = ustack - size; /* start of strings */
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
 	
-	stack = (char *)v;
-	*--(int *)stack = argc;
+	ustack = (char *)v;
+	*--(int *)ustack = argc;
 	
 	/* copy arguments */
 	copyenv(&v, &s, argp);
 	copyenv(&v, &s, envp);
 	
-#if 0
-	ustack -= strlen(argp[0]) + 1;
-	argv0 = ustack;
-	strcpy(argv0, argp[0]);
-	*--ustack = NULL; /* env[nenv] */
-	*--ustack = NULL; /* argv[narg] */
-	*--ustack = argv0; /* argv[0] */
-	*--(int *)ustack = 1; /* argc */
-#endif
-	
 	if (P.p_flag & P_VFORK)
 		endvfork();
 	else {
 		/* free our resources */
+#if 1
+		memfree(NULL, P.p_pid);
+		if (P.p_stack)
+			memfree(P.p_stack, 0);
+		if (P.p_ustack)
+			memfree(P.p_ustack, 0);
+		if (P.p_text)
+			memfree(P.p_text, 0);
+		if (P.p_data)
+			memfree(P.p_data, 0);
+#endif
 	}
+	P.p_stack = stack;
+	P.p_ustack = ustack;
+	P.p_text = text;
+	P.p_data = data;
 	
 	/* finally, set up the context to return to the new process image */
 	if (setjmp(P.p_ssav))
 		return;
 	
 	/* go to the new user context */
-	P.p_ssav->usp = stack;
+	P.p_ssav->usp = ustack;
 	P.p_tfp->pc = text;
 	longjmp(P.p_ssav, 1);
 	
@@ -262,8 +297,8 @@ void doexit(int status)
 	/* ruadd(&P.p_rusage, &P.p_crusage); */
 	for EACHPROC(q) {
 		if (q->p_pptr == &P) {
-			q->p_pptr = &G.proc[1];
-			wakeup(&G.proc[0]);
+			q->p_pptr = G.proc[1];
+			wakeup(G.proc[0]);
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
 				psignal(q, SIGKILL);
@@ -341,8 +376,8 @@ void sys_vfork()
 stackp:
 	pfree(cp);
 nomem:
-	P.p_error = ENOMEM;
 #endif
+	P.p_error = ENOMEM;
 }
 
 static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
@@ -407,7 +442,7 @@ found:
 	}
 	
 	if (p->p_status == P_ZOMBIE) {
-		/* FIXME: free this proc */
+		pfree(p);
 	}
 }
 
@@ -440,7 +475,7 @@ void sys_waitpid()
 
 /*
  * The following two system calls are XSI extensions and are not necessary for
- * POSIX comformance.
+ * POSIX conformance.
  */
 
 #if 0

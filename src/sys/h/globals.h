@@ -21,7 +21,8 @@ struct globals {
 	int lowestpri;
 	struct proc *freeproc;
 	struct proc *current;
-	struct proc proc[NPROC];
+	struct proc *prochead;
+	struct proc *proc[NPROC];
 	struct file file[NFILE];
 	unsigned long loadavg[3];
 	
@@ -40,14 +41,6 @@ struct globals {
 	
 	dev_t rootdev, pipedev;
 	struct inode *rootdir;
-	
-	int cellrow;
-	int cellcol;
-	/* char cells[20][60]; */
-	
-	/* the following is for testing execve(). */
-#define USTACKSIZE 1024
-	char ustack[USTACKSIZE];
 	
 	char canonb[CANBSIZ];
 	struct inode inode[NINODE];
@@ -110,7 +103,7 @@ struct globals {
 	
 	int heapsize;
 	struct heapentry heaplist[HEAPSIZE];
-	char heap[0][BLOCKSIZE];
+	char heap[0][HEAPBLOCKSIZE];
 };
 
 # if 0

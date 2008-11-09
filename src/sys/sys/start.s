@@ -164,6 +164,7 @@ the_beginning:
 	 
 SYS_exit	= 1	/* put these in a header please */
 SYS_write	= 4
+SYS_open	= 5
 SYS_execve	= 59
 .macro	sys call
 	move	#SYS_\call,%d0
@@ -171,6 +172,12 @@ SYS_execve	= 59
 .endm
 
 .even
+	.global open
+open:
+	sys	open
+	bcs	cerror
+	rts
+	
 	.long	0xbeef0001
 	
 	.global _exit

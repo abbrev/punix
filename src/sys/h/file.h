@@ -31,11 +31,16 @@
  * One for each kernel object.
  */
 struct file {
-	int		f_flag;		/* see below */
-	short		f_type;		/* descriptor type */
+#if 0 /* not yet */
+	struct file *	f_next;
+#endif
+	unsigned char	f_flag;		/* see below */
+	unsigned char	f_type;		/* descriptor type */
 	unsigned short	f_count;	/* reference count */
 	struct inode *	f_inode;	/* pointer to inode structure */
+#if 0
 	short		f_msgcount;	/* references from message queue */
+#endif
 	off_t		f_offset;
 };
 

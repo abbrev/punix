@@ -45,18 +45,17 @@ int kputs(char *);
  */
 STARTUP(void kmain())
 {
-	struct proc *p;
+	struct proc **pp;
 	int i;
 	short *horline;
 	
-	linkinit();
-	audioinit();
 	lcdinit();
 #if 1
 	vtinit();
 #endif
-	
-	G.cellrow = G.cellcol = 0;
+	meminit();
+	linkinit();
+	audioinit();
 	
 	for (horline = (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS];
 	 horline < (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS+LCD_INCY];
@@ -81,12 +80,8 @@ STARTUP(void kmain())
 	
 	/* initialize proc structure */
 	/* are these values correct and all I need? */
-	for EACHPROC(p) {
-		p->p_status = P_FREE;
-		p->p_next = p+1;
-	}
-	G.proc[NPROC-1].p_next = NULL;
-	G.freeproc = &G.proc[0];
+	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
+		*pp = 0;
 	
 	for (i = 0; i < NOFILE; ++i)
 		P.p_ofile[i] = NULL;

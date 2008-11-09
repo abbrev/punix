@@ -1,16 +1,18 @@
 # This Makefile does not list all the dependencies of each object file, so
 # usually it is best to 'make clean' before making the TIB file.
 
+MAKE	= gmake
 CALC	= TI92P
 
 PUNIXBASE	= ../../..
 
 STDINC	= ${PUNIXBASE}/include
 SYSINC	= ${PUNIXBASE}/src/sys/h
+DATE	:= \"`date +'%Y-%m-%d %H:%M:%S%z'`\"
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD="\"`date --rfc-3339=seconds`\""
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD="${DATE}"
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
@@ -32,13 +34,13 @@ OBJ	+= kputs.o scroll.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
 OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
-OBJ	+= panic.o abort.o assert.o kprintf.o clock.o #globals.o
-OBJ	+= ffs.o loadav.o drawglyph.o
+OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
+OBJ	+= ffs.o loadav.o drawglyph.o heap.o
 
 #OBJ = testvectors.o
 
-scratch: clean all
 all:	punix-9x.tib
+scratch: clean all
 
 punix-9x.tib:	${OBJ}
 	${LD} ${LDFLAGS} -o punix $^ #${TIGCC}/lib/flashos.a #${TIGCC}/lib/tigcc.a
@@ -51,6 +53,8 @@ ${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h
 # source dependencies
 ########################################
 
+heap.i: heap.c
+	${CC} ${CFLAGS} $< -E -o $@
 start.o: start.s
 vectors.o: vectors.s
 version.o: version.s
@@ -106,23 +110,23 @@ ${SYSINC}/lcdglo.h ${SYSINC}/lcdglo.inc ${SYSINC}/procglo.h ${SYSINC}/procglo.in
 ${SYSINC}/vectorsglo.h ${SYSINC}/vectorsglo.inc ${SYSINC}/heapglo.h ${SYSINC}/heapglo.inc: \
 ${SYSINC}/cellglo.def ${SYSINC}/glo.def ${SYSINC}/lcdglo.def \
 ${SYSINC}/procglo.def ${SYSINC}/vectorsglo.def ${SYSINC}/heapglo.def
-#	make -C ${SYSINC}
+#	${MAKE} -C ${SYSINC}
 
 ########################################
 # Data (images, glyphs)
 ########################################
 
 glyphsets/uk.inc: glyphsets/uk.pbm
-	make -C glyphsets
+	${MAKE} -C glyphsets
 glyphsets/us.inc: glyphsets/us.pbm
-	make -C glyphsets
+	${MAKE} -C glyphsets
 glyphsets/sg.inc: glyphsets/sg.pbm
-	make -C glyphsets
+	${MAKE} -C glyphsets
 glyphsets/tcs.inc: glyphsets/tcs.pbm
-	make -C glyphsets
+	${MAKE} -C glyphsets
 glyphsets/upper.inc: glyphsets/upper.pbm
-	make -C glyphsets
+	${MAKE} -C glyphsets
 
 clean:
 	rm -f *.bin *.o punix-9x.tib
-	#make -C ${SYSINC} clean
+	#${MAKE} -C ${SYSINC} clean

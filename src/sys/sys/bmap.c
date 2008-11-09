@@ -28,7 +28,7 @@
 /* return the device block number for the inode and logical block number */
 STARTUP(long bmap(struct inode *ip, long bn))
 {
-	return (ip->i_number << 16) + bn + 1; /* XXX does this suffice? */
+	return ((unsigned long)ip->i_number << 16) + bn + 1; /* XXX does this suffice? */
 	
 	/* Whew! That was a challenge. */
 }

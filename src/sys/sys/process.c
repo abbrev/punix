@@ -61,10 +61,8 @@ STARTUP(void decaycputimes())
 	struct proc *p;
 	
 	for EACHPROC(p) {
-		if (p->p_status != P_FREE) {
-			p->p_cputime = p->p_cputime * CPUDECAY / CPUSCALE;
-			setpri(p);
-		}
+		p->p_cputime = p->p_cputime * CPUDECAY / CPUSCALE;
+		setpri(p);
 	}
 }
 
@@ -319,19 +317,41 @@ STARTUP(void wakeup(void *event))
 /* allocate a process structure */
 STARTUP(struct proc *palloc())
 {
-	struct proc *p = G.freeproc;
-	if (p)
-		G.freeproc = p->p_next;
+	size_t psize = sizeof(struct proc);
+	struct proc **pp;
+	struct proc *p = memalloc(&psize, 0);
 	
-	return p;
+	if (!p) return NULL;
+	/* XXX: for faster lookup maintain the first
+	 * free slot in the G.proc table */
+	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
+		if (!*pp) {
+			*pp = p;
+			p->p_next = G.prochead;
+			G.prochead = p;
+			return p;
+		}
+	memfree(p, 0);
+	return NULL;
 }
 
 /* free a process structure */
 STARTUP(void pfree(struct proc *p))
 {
 	if (p) {
-		p->p_next = G.freeproc;
-		G.freeproc = p;
+		/* remove this proc from the list */
+		if (G.prochead == p) {
+			G.prochead = p->p_next;
+		} else {
+			struct proc *p2;
+			for EACHPROC(p2) {
+				if (p2->p_next == p) {
+					p2->p_next = p->p_next;
+					break;
+				}
+			}
+		}
+		memfree(p, 0);
 	}
 }
 
