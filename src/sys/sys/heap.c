@@ -46,58 +46,56 @@ void meminit()
 	/* XXX run some tests */
 #define SIZEOF(v) kprintf("%5ld %-13s ", sizeof(G.v), #v)
 	SIZEOF(exec_ram);
-        SIZEOF(_walltime);
-        SIZEOF(_runrun);
-        SIZEOF(_istick);
-        SIZEOF(_ioport);
-        SIZEOF(_cputime);
-        SIZEOF(_updlock);
-        SIZEOF(lowestpri);
-        SIZEOF(freeproc);
-        SIZEOF(current);
-        SIZEOF(proc);
-        SIZEOF(file);
-        SIZEOF(loadavg);
-        SIZEOF(audiosamp);
-        SIZEOF(audiosamples);
-        SIZEOF(audiolowat);
-        SIZEOF(audioplay);
-        SIZEOF(audiooptr);
-        
-        SIZEOF(linklowat);
-        
-        SIZEOF(linkreadq);
+	SIZEOF(_walltime);
+	SIZEOF(_runrun);
+	SIZEOF(_istick);
+	SIZEOF(_ioport);
+	SIZEOF(_cputime);
+	SIZEOF(_updlock);
+	SIZEOF(lowestpri);
+	SIZEOF(freeproc);
+	SIZEOF(current);
+	SIZEOF(proc);
+	SIZEOF(file);
+	SIZEOF(loadavg);
+	SIZEOF(audiosamp);
+	SIZEOF(audiosamples);
+	SIZEOF(audiolowat);
+	SIZEOF(audioplay);
+	SIZEOF(audiooptr);
+	
+	SIZEOF(linklowat);
+	
+	SIZEOF(linkreadq);
 	SIZEOF(linkwriteq);
 	SIZEOF(audioq);
-        
-        SIZEOF(prngseed);
-        
-        SIZEOF(rootdev);
+	
+	SIZEOF(prngseed);
+	
+	SIZEOF(rootdev);
 	SIZEOF(pipedev);
-        SIZEOF(rootdir);
-        
-        SIZEOF(ustack);
-        
-        SIZEOF(canonb);
-        SIZEOF(inode);
-        SIZEOF(mpid);
-        SIZEOF(pidchecked);
-        SIZEOF(callout);
-        
-        SIZEOF(avbuflist);
-        SIZEOF(buffers);
-        
-        SIZEOF(currentfblock);
-        SIZEOF(flash_cache);
-        
-        SIZEOF(contrast);
+	SIZEOF(rootdir);
+	
+	SIZEOF(canonb);
+	SIZEOF(inode);
+	SIZEOF(mpid);
+	SIZEOF(pidchecked);
+	SIZEOF(callout);
+	
+	SIZEOF(avbuflist);
+	SIZEOF(buffers);
+	
+	SIZEOF(currentfblock);
+	SIZEOF(flash_cache);
+	
+	SIZEOF(contrast);
 	SIZEOF(vt);
-        
-        SIZEOF(batt_level);
-        
-        SIZEOF(heapsize);
-        SIZEOF(heaplist);
-        SIZEOF(heap);
+	
+	SIZEOF(batt_level);
+	
+	SIZEOF(heapsize);
+	SIZEOF(heaplist);
+	SIZEOF(heap);
 	kprintf("%5ld largest unallocated chunk size\n", largest_unallocated_chunk_size());
 	size_t size;
 	void *p;
