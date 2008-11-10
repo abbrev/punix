@@ -1,7 +1,7 @@
 #ifndef _SYS_STAT_H_
 #define _SYS_STAT_H_
 
-/* $Id: stat.h,v 1.2 2007/05/22 17:28:59 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 #include <time.h>

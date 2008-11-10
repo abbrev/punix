@@ -1,7 +1,7 @@
 #ifndef _INTTYPES_H_
 #define _INTTYPES_H_
 
-/* $Id: inttypes.h,v 1.1 2007/05/03 08:59:57 fredfoobar Exp $ */
+/* $Id$ */
 
 /* should be POSIX compliant */
 

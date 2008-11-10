@@ -1,7 +1,7 @@
 #ifndef _SYS_PUNIX_H_
 #define _SYS_PUNIX_H_
 
-/* $Id: punix.h,v 1.7 2008/01/25 20:03:42 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 #include "proc.h"

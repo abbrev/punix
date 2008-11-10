@@ -1,7 +1,7 @@
 #ifndef _FCNTL_H_
 #define _FCNTL_H_
 
-/* $Id: fcntl.h,v 1.4 2007/11/26 19:06:42 fredfoobar Exp $ */
+/* $Id$ */
 
 /* mostly POSIX compliant */
 #include <unistd.h>

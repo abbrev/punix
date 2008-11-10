@@ -1,7 +1,7 @@
 #ifndef _UTIME_H_
 #define _UTIME_H_
 
-/* $Id: utime.h,v 1.1 2007/05/03 08:59:58 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 

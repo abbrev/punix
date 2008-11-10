@@ -1,7 +1,7 @@
 #ifndef _STRING_H_
 #define _STRING_H_
 
-/* $Id: string.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* mostly POSIX compliant with some extra BSD functions */
 

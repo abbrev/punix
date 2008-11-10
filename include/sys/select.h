@@ -1,7 +1,7 @@
 #ifndef _SYS_SELECT_H_
 #define _SYS_SELECT_H_
 
-/* $Id: select.h,v 1.2 2008/01/11 13:30:35 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 #include <signal.h>

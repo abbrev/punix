@@ -1,7 +1,7 @@
 #ifndef _STDARG_H_
 #define _STDARG_H_
 
-/* $Id: stdarg.h,v 1.1 2007/05/03 08:59:58 fredfoobar Exp $ */
+/* $Id$ */
 
 /*
  * POSIX compliant, except for __FAST_VA_ARG__.

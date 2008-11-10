@@ -1,7 +1,7 @@
 #ifndef _STDINT_H_
 #define _STDINT_H_
 
-/* $Id: stdint.h,v 1.1 2007/05/03 08:59:58 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <limits.h>
 

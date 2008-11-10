@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2005 Chris Williams
  * 
- * $Id: syscall.c,v 1.14 2008/04/18 03:01:05 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

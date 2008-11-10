@@ -2,7 +2,7 @@
  * globals.s
  * Copyright 2008 Christopher Williams
  * 
- * $Id: globals.s,v 1.2 2008/01/16 07:02:25 fredfoobar Exp $
+ * $Id$
  * 
  * These are variables that may be accessed in either C or assembly routines.
  */

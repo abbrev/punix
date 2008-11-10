@@ -2,7 +2,7 @@
  * PedroM - Operating System for Ti-89/Ti-92+/V200.
  * Copyright (C) 2003 PpHd
  * 
- * $Id: string.s,v 1.3 2008/01/15 20:13:37 fredfoobar Exp $
+ * $Id$
  * 
  * 2005-04-05 Chris Williams
  *   changed routines to work with `size_t' (as the standards dictate), where

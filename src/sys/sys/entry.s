@@ -3,7 +3,7 @@
  * Copyright (C) 2003 PpHd
  * Copyright 2004, 2005 Chris Williams
  * 
- * $Id: entry.s,v 1.13 2008/04/19 18:38:25 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

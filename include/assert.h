@@ -1,4 +1,4 @@
-/* $Id: assert.h,v 1.3 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /*
  * this is almost POSIX compliant

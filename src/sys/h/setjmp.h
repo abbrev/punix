@@ -1,7 +1,7 @@
 #ifndef _H_SETJMP_H_
 #define _H_SETJMP_H_
 
-/* $Id: setjmp.h,v 1.4 2008/01/15 20:23:56 fredfoobar Exp $ */
+/* $Id$ */
 
 typedef struct {
 	long	d[5];	/* %d3-%d7 */

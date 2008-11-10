@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2008 Christopher Williams
  * 
- * $Id: clock.c,v 1.4 2008/04/19 18:25:18 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

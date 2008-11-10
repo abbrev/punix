@@ -1,7 +1,7 @@
 #ifndef _SYS_SOCKET_H_
 #define _SYS_SOCKET_H_
 
-/* $Id: socket.h,v 1.1 2007/05/03 08:59:59 fredfoobar Exp $ */
+/* $Id$ */
 
 /* this should be more or less POSIX compliant */
 

@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2005 Chris Williams
  * 
- * $Id: proc.h,v 1.13 2008/04/18 03:44:57 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -79,8 +79,7 @@
 #endif
 
 /* "P" is roughly equivalent to "u" in BSD */
-#define CURRENT		G.current
-#define P		(*CURRENT)
+#define P		(*current)
 
 /* this determines whether system calls read their arguments from the user stack
  * or from an array in the proc structure. 0 => array, !0 => USP

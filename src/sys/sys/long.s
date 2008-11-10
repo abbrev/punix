@@ -2,7 +2,7 @@
 | Copyright (C) 2003, 2005 Patrick Pelissier
 | Modified for Punix by Christopher Williams
 | 
-| $Id: long.s,v 1.5 2008/04/18 05:49:16 fredfoobar Exp $
+| $Id$
 | 
 | This program is free software; you can redistribute it and/or modify it under
 | the terms of the GNU General Public License as published by the Free Software

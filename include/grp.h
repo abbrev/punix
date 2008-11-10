@@ -1,7 +1,7 @@
 #ifndef _GRP_H_
 #define _GRP_H_
 
-/* $Id: grp.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* should be POSIX compliant */
 

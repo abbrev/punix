@@ -1,7 +1,7 @@
 #ifndef _SYS_TYPES_H_
 #define _SYS_TYPES_H_
 
-/* $Id: types.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* this should be POSIX-compliant */
 

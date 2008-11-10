@@ -1,4 +1,4 @@
-/* $Id: ktime.h,v 1.9 2008/04/19 18:41:15 fredfoobar Exp $ */
+/* $Id$ */
 
 #ifndef _KTIME_H_
 #define _KTIME_H_

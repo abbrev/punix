@@ -1,7 +1,7 @@
 #ifndef _LIMITS_H_
 #define _LIMITS_H_
 
-/* $Id: limits.h,v 1.3 2007/12/12 23:30:48 fredfoobar Exp $ */
+/* $Id$ */
 /* This should mostly conform to POSIX */
 
 /*

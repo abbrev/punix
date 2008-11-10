@@ -1,7 +1,7 @@
 #include "sysent.h"
 #include "punix.h"
 
-/* $Id: sysent.c,v 1.9 2008/01/24 01:42:01 fredfoobar Exp $ */
+/* $Id$ */
 
 
 void sys_NONE();

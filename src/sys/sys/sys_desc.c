@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2005-2008 Christopher Williams
  * 
- * $Id: sys_desc.c,v 1.7 2008/01/16 07:02:25 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -1110,6 +1110,13 @@ static const struct state states[] = {
 /* one-shot routine on system startup */
 void vtinit()
 {
+	short *horline;
+	
+	for (horline = (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS];
+	 horline < (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS+LCD_INCY];
+	  ++horline)
+		*horline = ~0;
+	
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
 	cursor(&G.vt.vt[0]);

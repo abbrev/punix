@@ -1,7 +1,7 @@
 #ifndef _SYS_TIME_H_
 #define _SYS_TIME_H_
 
-/* $Id: time.h,v 1.3 2008/04/18 19:44:25 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 

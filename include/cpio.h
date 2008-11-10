@@ -1,7 +1,7 @@
 #ifndef _CPIO_H_
 #define _CPIO_H_
 
-/* $Id: cpio.h,v 1.1 2007/05/03 08:59:57 fredfoobar Exp $ */
+/* $Id$ */
 
 /* extracted almost directly from POSIX (so it should be compliant) */
 

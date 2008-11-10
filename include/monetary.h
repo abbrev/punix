@@ -1,7 +1,7 @@
 #ifndef _MONETARY_H_
 #define _MONETARY_H_
 
-/* $Id: monetary.h,v 1.1 2007/05/03 08:59:58 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <stddef.h>
 

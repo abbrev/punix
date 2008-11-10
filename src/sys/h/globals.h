@@ -18,9 +18,9 @@ struct globals {
 	int _ioport;
 	int _cputime;
 	int _updlock;
+	struct proc *_current;
 	int lowestpri;
 	struct proc *freeproc;
-	struct proc *current;
 	struct proc *prochead;
 	struct proc *proc[NPROC];
 	struct file file[NFILE];
@@ -124,5 +124,6 @@ extern int updlock;
 #define ioport   G._ioport
 #define cputime  G._cputime
 #define updlock  G._updlock
+#define current  G._current
 
 # endif

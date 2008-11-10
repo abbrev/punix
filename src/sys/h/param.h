@@ -18,7 +18,7 @@
 #define	CMAPSIZ	50		/* size of core allocation area */
 #define	SMAPSIZ	50		/* size of swap allocation area */
 #define	NCALL	20		/* max simultaneous time callouts */
-#define	NPROC	32		/* max number of processes */
+#define	NPROC	64		/* max number of processes */
 #define	NGROUPS	16		/* max number of groups */
 #define	NOGROUP	(-1)		
 #define	NTEXT	40		/* max number of pure texts */

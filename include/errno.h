@@ -1,7 +1,7 @@
 #ifndef _ERRNO_H_
 #define _ERRNO_H_
 
-/* $Id: errno.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* not POSIX compliant - need to add some codes */
 

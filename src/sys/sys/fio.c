@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2007 Chris Williams
  * 
- * $Id: fio.c,v 1.6 2008/01/15 20:06:00 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

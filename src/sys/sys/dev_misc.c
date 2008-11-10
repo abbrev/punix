@@ -2,7 +2,7 @@
  * dev_misc.c, miscellaneous system devices
  * Copyright 2008 Christopher Williams
  * 
- * $Id: dev_misc.c,v 1.3 2008/04/18 02:20:09 fredfoobar Exp $
+ * $Id$
  * 
  * This implements /dev/null, /dev/zero, /dev/full, and /dev/random.
  */

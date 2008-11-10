@@ -1,7 +1,7 @@
 #ifndef _STDIO_H_
 #define _STDIO_H_
 
-/* $Id: stdio.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* mostly POSIX compliant */
 

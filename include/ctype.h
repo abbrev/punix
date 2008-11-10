@@ -1,7 +1,7 @@
 #ifndef _CTYPE_H_
 #define _CTYPE_H_
 
-/* $Id: ctype.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* this should be POSIX compliant */
 

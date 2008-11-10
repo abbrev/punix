@@ -1,7 +1,7 @@
 #ifndef _STDDEF_H_
 #define _STDDEF_H_
 
-/* $Id: stddef.h,v 1.1 2007/05/03 08:59:58 fredfoobar Exp $ */
+/* $Id$ */
 
 /* POSIX compliant? */
 

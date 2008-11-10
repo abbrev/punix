@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2005, 2007 Chris Williams
  * 
- * $Id: sys_prot.c,v 1.2 2007/12/12 23:22:08 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

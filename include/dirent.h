@@ -1,7 +1,7 @@
 #ifndef _DIRENT_H_
 #define _DIRENT_H_
 
-/* $Id: dirent.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 /* somewhat POSIX compliant */
 

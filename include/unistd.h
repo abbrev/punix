@@ -1,7 +1,7 @@
 #ifndef _UNISTD_H_
 #define _UNISTD_H_
 
-/* $Id: unistd.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 #include <sys/types.h>
 #include <inttypes.h>

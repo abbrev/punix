@@ -129,4 +129,5 @@ glyphsets/upper.inc: glyphsets/upper.pbm
 
 clean:
 	rm -f *.bin *.o punix-9x.tib
+	${MAKE} -C glyphsets clean
 	#${MAKE} -C ${SYSINC} clean

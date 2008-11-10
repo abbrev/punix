@@ -2,7 +2,7 @@
  * Punix, Puny Unix kernel
  * Copyright 2007, 2008 Christopher Williams
  * 
- * $Id: queue.c,v 1.4 2008/04/18 02:25:10 fredfoobar Exp $
+ * $Id$
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

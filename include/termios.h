@@ -1,7 +1,7 @@
 #ifndef _TERMIOS_H_
 #define _TERMIOS_H_
 
-/* $Id: termios.h,v 1.3 2008/01/16 07:04:47 fredfoobar Exp $ */
+/* $Id$ */
 
 typedef unsigned char	cc_t;
 typedef unsigned int	speed_t;

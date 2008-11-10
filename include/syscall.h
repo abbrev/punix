@@ -1,7 +1,7 @@
 #ifndef _SYSCALL_H_
 #define _SYSCALL_H_
 
-/* $Id: syscall.h,v 1.2 2008/01/24 01:38:59 fredfoobar Exp $ */
+/* $Id$ */
 
 #define SYS_exit		  1
 #define SYS_fork		  2

@@ -34,11 +34,22 @@ STARTUP(static int dirbadentry(struct direct *ep, int entryoffsetinblock))
 STARTUP(static int reclen(int r))
 {
 	int n;
-	if (r & 0xf0)
-		n = r >> 4;
+	n = (r >> 4) & 0x0f;
+	n += r & 0x0f;
+	n &= 0x0f;
+	if (n == 0) n = 16;
+	return 8 * n;
+}
+
+STARTUP(static int toreclen(int n, int prevr))
+{
+	if ((prevr & 0xf0) != 0xf0)
+		panic("can't convert reclen");
+	n = (n + 7) / 8; /* round up */
+	if ((prevr & 0x0f) == 0x0f)
+		return (n | 0xf0) & 0xff;
 	else
-		n = r;
-	return r * 8;
+		return (n << 4) & 0xf0;
 }
 
 /* FIXME: this might need to be adapted for Punix */
@@ -119,8 +130,8 @@ STARTUP(struct buf *blkatoff(struct inode *ip, off_t offset, char **res))
  * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode,
  *       but unlocked.
  */
-#define mapin(x) 0
-#define mapout(x) 0
+#define mapin(bp) ((bp)->b_addr)
+#define mapout(bp) ((void)0)
 
 STARTUP(struct inode *namei(struct nameidata *ndp))
 {

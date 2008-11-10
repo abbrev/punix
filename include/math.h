@@ -1,7 +1,7 @@
 #ifndef _MATH_H_
 #define _MATH_H_
 
-/* $Id: math.h,v 1.2 2008/01/11 13:35:45 fredfoobar Exp $ */
+/* $Id$ */
 
 #ifndef FLT_EVAL_METHOD
 #define FLT_EVAL_METHOD 0
