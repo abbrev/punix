@@ -12,7 +12,7 @@ DATE	:= \"`date +'%Y-%m-%d %H:%M:%S%z'`\"
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DBUILD="${DATE}"
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}"
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
@@ -47,7 +47,7 @@ punix-9x.tib:	${OBJ}
 
 obj:	${OBJ}
 
-${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h
+${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h ${SYSINC}/param.h
 
 ########################################
 # source dependencies
@@ -72,7 +72,7 @@ setjmp.o: setjmp.s
 ${SYSINC}/proc.h: ${SYSINC}/file.h ${STDINC}/sys/types.h \
 	${STDINC}/time.h ${STDINC}/signal.h
 ${SYSINC}/process.h: ${SYSINC}/proc.h
-dev_vt.o: dev_vt.c glyphsets/uk.inc glyphsets/us.inc glyphsets/sg.inc glyphsets/tcs.inc glyphsets/upper.inc
+dev_vt.o: dev_vt.c glyphsets/all
 
 md5.o: md5.c
 qsort.o: qsort.c
@@ -116,16 +116,8 @@ ${SYSINC}/procglo.def ${SYSINC}/vectorsglo.def ${SYSINC}/heapglo.def
 # Data (images, glyphs)
 ########################################
 
-glyphsets/uk.inc: glyphsets/uk.pbm
-	${MAKE} -C glyphsets
-glyphsets/us.inc: glyphsets/us.pbm
-	${MAKE} -C glyphsets
-glyphsets/sg.inc: glyphsets/sg.pbm
-	${MAKE} -C glyphsets
-glyphsets/tcs.inc: glyphsets/tcs.pbm
-	${MAKE} -C glyphsets
-glyphsets/upper.inc: glyphsets/upper.pbm
-	${MAKE} -C glyphsets
+glyphsets/all:
+	${MAKE} -C glyphsets all
 
 clean:
 	rm -f *.bin *.o punix-9x.tib

@@ -136,6 +136,25 @@ static void transition(int ch, int newstate,
 #define GLYPHSET_ALTSG 4
 
 static struct glyphset glyphsets[] = {
+#ifdef SMALLGLYPHS
+{
+#include "glyphsets/upper.inc"
+},
+{
+#include "glyphsets/uk.inc"
+},
+{
+#include "glyphsets/small-us.inc"
+},
+{
+#include "glyphsets/sg.inc"
+},
+/* alt char ROM standard chars here */
+{
+/* alt char ROM special graphics (technical character set) */
+#include "glyphsets/tcs.inc" 
+},
+#else
 {
 #include "glyphsets/upper.inc"
 },
@@ -153,6 +172,7 @@ static struct glyphset glyphsets[] = {
 /* alt char ROM special graphics (technical character set) */
 #include "glyphsets/tcs.inc" 
 },
+#endif
 };
 
 #define SPACEGLYPH (glyphsets[GLYPHSET_US].glyphs[' ' - 0x20])
