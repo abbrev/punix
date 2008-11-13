@@ -42,73 +42,91 @@ void meminit()
 	hp->pid = -1;
 	G.heapsize = 2;
 	
-#if 0
-	/* XXX run some tests */
-#define SIZEOF(v) kprintf("%5ld %-13s ", sizeof(G.v), #v)
-	SIZEOF(exec_ram);
-	SIZEOF(_walltime);
-	SIZEOF(_runrun);
-	SIZEOF(_istick);
-	SIZEOF(_ioport);
-	SIZEOF(_cputime);
-	SIZEOF(_updlock);
-	SIZEOF(lowestpri);
-	SIZEOF(freeproc);
-	SIZEOF(current);
-	SIZEOF(proc);
-	SIZEOF(file);
-	SIZEOF(loadavg);
-	SIZEOF(audiosamp);
-	SIZEOF(audiosamples);
-	SIZEOF(audiolowat);
-	SIZEOF(audioplay);
-	SIZEOF(audiooptr);
+#if 1
+	struct var {
+		size_t size;
+		char *name;
+	} var[50];
+	int numvars = 0;
+#define ADDVAR(n) do { var[numvars].size = sizeof(G.n); var[numvars++].name = #n; } while (0)
+	ADDVAR(exec_ram);
+	ADDVAR(_walltime);
+	ADDVAR(_runrun);
+	ADDVAR(_istick);
+	ADDVAR(_ioport);
+	ADDVAR(_cputime);
+	ADDVAR(_updlock);
+	ADDVAR(_current);
+	ADDVAR(lowestpri);
+	ADDVAR(freeproc);
+	ADDVAR(proc);
+	ADDVAR(file);
+	ADDVAR(loadavg);
+	ADDVAR(audiosamp);
+	ADDVAR(audiosamples);
+	ADDVAR(audiolowat);
+	ADDVAR(audioplay);
+	ADDVAR(audiooptr);
 	
-	SIZEOF(linklowat);
+	ADDVAR(linklowat);
 	
-	SIZEOF(linkreadq);
-	SIZEOF(linkwriteq);
-	SIZEOF(audioq);
+	ADDVAR(linkreadq);
+	ADDVAR(linkwriteq);
+	ADDVAR(audioq);
 	
-	SIZEOF(prngseed);
+	ADDVAR(prngseed);
 	
-	SIZEOF(rootdev);
-	SIZEOF(pipedev);
-	SIZEOF(rootdir);
+	ADDVAR(rootdev);
+	ADDVAR(pipedev);
+	ADDVAR(rootdir);
 	
-	SIZEOF(canonb);
-	SIZEOF(inode);
-	SIZEOF(mpid);
-	SIZEOF(pidchecked);
-	SIZEOF(callout);
+	ADDVAR(canonb);
+	ADDVAR(inode);
+	ADDVAR(mpid);
+	ADDVAR(pidchecked);
+	ADDVAR(callout);
 	
-	SIZEOF(avbuflist);
-	SIZEOF(buffers);
+	ADDVAR(avbuflist);
+	ADDVAR(buffers);
 	
-	SIZEOF(currentfblock);
-	SIZEOF(flash_cache);
+	ADDVAR(currentfblock);
+	ADDVAR(flash_cache);
 	
-	SIZEOF(contrast);
-	SIZEOF(vt);
+	ADDVAR(contrast);
+	ADDVAR(vt);
 	
-	SIZEOF(batt_level);
+	ADDVAR(batt_level);
 	
-	SIZEOF(heapsize);
-	SIZEOF(heaplist);
-	SIZEOF(heap);
+	ADDVAR(heapsize);
+	ADDVAR(heaplist);
+	ADDVAR(heap);
+	/* sort */
+	int i, j;
+	struct var t;
+	for (i = 0; i < numvars - 1; ++i) {
+		for (j = i; j >= 0; --j) {
+			if (var[j].size >= var[j+1].size) break; /* in order */
+			t = var[j];
+			var[j] = var[j+1];
+			var[j+1] = t;
+		}
+	}
+	size_t totalsize = 0;
+	for (i = 0; i < numvars; ++i)
+		totalsize += var[i].size;
+	kprintf("totalsize = %ld\n", totalsize);
+	for (i = 0; i < numvars; ++i)
+		kprintf("%2ld.%02ld%% %-13.13s", 100 * var[i].size / totalsize, (10000 * var[i].size / totalsize) % 100, var[i].name);
+	kputchar('\n');
 	kprintf("%5ld largest unallocated chunk size\n", largest_unallocated_chunk_size());
 	size_t size;
 	void *p;
-	size_t s = (size_t)256 * 1024;
-	do {
-		size = s;
-		p = memalloc(&size, 0);
-		if (!p) {
-			s /= 2;
-			continue;
-		}
-		kprintf("%6ld 0x%06lx\n", size, p);
-	} while (s);
+	size_t s = (size_t)128;
+	for (i = 0; i < 32000; ++i) {
+		p = memalloc(&s, 0);
+		if (p)
+			memfree(p, 0);
+	}
 	printheaplist();
 	abort();
 #endif
@@ -143,7 +161,7 @@ void *memalloc(size_t *sizep, pid_t pid)
 		*sizep = largest_unallocated_chunk_size();
 		return NULL;
 	}
-
+	
 	if (G.heapsize >= HEAPSIZE) return NULL;
 	
 	/*
@@ -155,8 +173,8 @@ void *memalloc(size_t *sizep, pid_t pid)
 	if (size == 0)
 		return NULL;
 	
-#define SIZETHRESHOLD (32768 / HEAPBLOCKSIZE)
-	if (size < SIZETHRESHOLD) {
+#define SIZETHRESHOLD 2048
+	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heaplist[G.heapsize-1].start;
 		for (hp = &G.heaplist[G.heapsize-2]; hp >= &G.heaplist[0]; --hp) {
 			if (size <= (prevstart - hp->end)) {
@@ -174,7 +192,7 @@ void *memalloc(size_t *sizep, pid_t pid)
 	}
 	
 	int prevend = 0;
-	for (hp = &G.heaplist[0]; hp < &G.heaplist[G.heapsize]; ++hp) {
+	for (hp = &G.heaplist[1]; hp < &G.heaplist[G.heapsize]; ++hp) {
 		if (size <= hp->start - prevend) {
 			/*
 			 * insert this entry here and return
@@ -228,26 +246,47 @@ void memfree(void *ptr, pid_t pid)
 	if (ptr == NULL)
 		return;
 	start = (ptr - (void *)G.heap) / HEAPBLOCKSIZE;
-	lower = 0;
-	upper = G.heapsize;
+	lower = 1;
+	upper = G.heapsize - 1;
 	
-	while (lower < upper) {
+	do {
 		middle = (lower + upper) / 2;
 		hp = &G.heaplist[middle];
-		if (start >= hp->start) {
-			if (start < hp->end && hp->pid >= 0) {
-				/* remove this heap entry */
-				if (!pid || pid == hp->pid)
-					removeentry(hp);
-				else
-					P.p_error = EFAULT;
-				return;
-			} else {
-				lower = middle + 1;
-			}
-		} else {
+		if (start < hp->start) {
 			upper = middle;
+			continue;
+		} else if (start >= hp->end) {
+			lower = middle + 1;
+			continue;
 		}
-	}
+		/* remove this heap entry */
+		if (!pid || pid == hp->pid)
+			removeentry(hp);
+		else
+			P.p_error = EFAULT;
+		break;
+	} while (lower < upper);
 }
 #endif
+
+void sys_memalloc()
+{
+	struct a {
+		size_t *sizep;
+	} *ap = (struct a *)P.p_arg;
+	
+	if (ap->sizep)
+		P.p_retval = (unsigned long)memalloc(ap->sizep, P.p_pid);
+	else
+		P.p_error = EINVAL;
+}
+
+void sys_memfree()
+{
+	struct a {
+		void *ptr;
+	} *ap = (struct a *)P.p_arg;
+	
+	if (ap->ptr)
+		memfree(ap->ptr, P.p_pid);
+}
