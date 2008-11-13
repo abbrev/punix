@@ -21,39 +21,6 @@
 /* FIXME: XXX */
 STARTUP(void cpuidle(void)) { }
 
-STARTUP(void procinit())
-{
-	struct proc **pp;
-	int i;
-	
-	/* initialize proc structure */
-	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
-		*pp = 0;
-	
-	current = palloc();
-	assert(current);
-	
-	for (i = 0; i < NOFILE; ++i)
-		P.p_ofile[i] = NULL;
-	
-	/* construct our first proc (awww, how cute!) */
-	P.p_pid = 1;
-	P.p_uid = P.p_ruid = P.p_svuid = 0;
-	P.p_gid = P.p_rgid = P.p_svgid = 0;
-	P.p_status = P_RUNNING;
-	P.p_cputime = 0;
-	P.p_nice = NZERO;
-	P.p_basepri = PUSER;
-	
-	/* set some resource limits. XXX: put more here! */
-	for (i = 0; i < 7; ++i)
-		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
-	
-	setpri(&P);
-	cputime = 0;
-	setrun(&P);
-}
-
 STARTUP(void setrun(struct proc *p))
 {
 	void *w;
@@ -72,14 +39,16 @@ STARTUP(void setrun(struct proc *p))
 
 /*
  * Set user priority.
- * The rescheduling flag (runrun) is set if the priority is better than the currently running process.
+ * The rescheduling flag (runrun) is set if the priority is better than the
+ * currently running process.
  *
  * This should be called only when the proc's priority is known to have changed.
  */
 STARTUP(int setpri(struct proc *p))
 {
 	int pri;
-	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT + p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
+	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT 
+	                           + p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
 	if (pri > 255)
 		pri = 255;
 	if (pri < P.p_pri)
@@ -451,4 +420,37 @@ STARTUP(struct proc *pfind(pid_t pid))
 			return p;
 	
 	return NULL;
+}
+
+STARTUP(void procinit())
+{
+	struct proc **pp;
+	int i;
+	
+	/* initialize proc structure */
+	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
+		*pp = 0;
+	
+	current = palloc();
+	assert(current);
+	
+	for (i = 0; i < NOFILE; ++i)
+		P.p_ofile[i] = NULL;
+	
+	/* construct our first proc (awww, how cute!) */
+	P.p_pid = 1;
+	P.p_uid = P.p_ruid = P.p_svuid = 0;
+	P.p_gid = P.p_rgid = P.p_svgid = 0;
+	P.p_status = P_RUNNING;
+	P.p_cputime = 0;
+	P.p_nice = NZERO;
+	P.p_basepri = PUSER;
+	
+	/* set some resource limits. XXX: put more here! */
+	for (i = 0; i < 7; ++i)
+		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
+	
+	setpri(&P);
+	cputime = 0;
+	setrun(&P);
 }
