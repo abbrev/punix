@@ -226,7 +226,9 @@ static void reset(struct tty *tp)
 	
 	G.vt.xon = 1;
 	memset((void *)LCD_MEM, 0, 3600); /* XXX constant */
+#if 0
 	memset(G.vt.screen, 0, sizeof(G.vt.screen));
+#endif
 	cleartabstops();
 	for (i = 0; i < WINWIDTH; i += 8)
 		settabstop(i);

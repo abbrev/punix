@@ -73,6 +73,7 @@ struct globals {
 		struct pos {
 			int row, column;
 		} pos;
+#if 0
 		struct row {
 			struct cell {
 				struct attrib {
@@ -84,6 +85,7 @@ struct globals {
 				int c;
 			} cells[60];
 		} screen[20];
+#endif
 		struct tty vt[1];
 		
 		char key_array[KEY_NBR_ROW];
