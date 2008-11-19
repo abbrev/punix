@@ -297,8 +297,8 @@ void doexit(int status)
 	/* ruadd(&P.p_rusage, &P.p_crusage); */
 	for EACHPROC(q) {
 		if (q->p_pptr == &P) {
-			q->p_pptr = G.proc[1];
-			wakeup(G.proc[0]);
+			q->p_pptr = G.initproc;
+			wakeup(G.proclist);
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
 				psignal(q, SIGKILL);
@@ -505,8 +505,8 @@ void sys_getppid()
 static void donice(struct proc *p, int n)
 {
 
-        if (P.p_uid && P.p_ruid &&
-            P.p_uid != p->p_uid && P.p_ruid != p->p_uid) {
+        if (P.p_euid != p->p_euid && P.p_ruid != p->p_euid &&
+	    P.p_euid != 0 && P.p_ruid != 0) {
                 P.p_error = EPERM;
                 return;
         }
@@ -514,7 +514,7 @@ static void donice(struct proc *p, int n)
                 n = PRIO_MAX;
         if (n < PRIO_MIN)
                 n = PRIO_MIN;
-        if (n < p->p_nice && !suser()) {
+        if (n < p->p_nice && P.p_euid != 0) {
                 P.p_error = EACCES;
                 return;
         }
@@ -529,6 +529,16 @@ void sys_nice()
 	
 	donice(&P, P.p_nice + ap->inc);
 	P.p_retval = P.p_nice - NZERO;
+	
+	/*
+	 * setpriority() returns EACCES if process
+	 * attempts to lower the nice value if the
+	 * user does not have the appropriate
+	 * privileges, but nice() returns EPERM
+	 * instead. Curious.
+	 */
+	if (P.p_error == EACCES)
+		P.p_error = EPERM;
 }
 
 void sys_getpriority()
@@ -565,10 +575,10 @@ void sys_getpriority()
 	case PRIO_USER:
 		uid = ap->who;
 		if (uid == 0) /* current user */
-			uid = P.p_uid;
+			uid = P.p_euid;
 		
 		for EACHPROC(p) {
-			if (p->p_uid == uid && p->p_nice < nice)
+			if (p->p_euid == uid && p->p_nice < nice)
 				nice = p->p_nice;
 		}
 		break;
@@ -621,10 +631,10 @@ void sys_setpriority()
 	case PRIO_USER:
 		uid = ap->who;
 		if (uid == 0) /* current user */
-			uid = P.p_uid;
+			uid = P.p_euid;
 		
 		for EACHPROC(p) {
-			if (p->p_uid == uid) {
+			if (p->p_euid == uid) {
 				++found;
 				donice(p, ap->value);
 			}

@@ -320,21 +320,13 @@ STARTUP(void wakeup(void *event))
 STARTUP(struct proc *palloc())
 {
 	size_t psize = sizeof(struct proc);
-	struct proc **pp;
 	struct proc *p = memalloc(&psize, 0);
 	
-	if (!p) return NULL;
-	/* XXX: for faster lookup maintain the first
-	 * free slot in the G.proc table */
-	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
-		if (!*pp) {
-			*pp = p;
-			p->p_next = G.proclist;
-			G.proclist = p;
-			return p;
-		}
-	memfree(p, 0);
-	return NULL;
+	if (p) {
+		p->p_next = G.proclist;
+		G.proclist = p;
+	}
+	return p;
 }
 
 /* free a process structure */
@@ -424,23 +416,19 @@ STARTUP(struct proc *pfind(pid_t pid))
 
 STARTUP(void procinit())
 {
-	struct proc **pp;
 	int i;
-	
-	/* initialize proc structure */
-	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
-		*pp = 0;
 	
 	current = palloc();
 	assert(current);
+	G.initproc = current;
 	
 	for (i = 0; i < NOFILE; ++i)
 		P.p_ofile[i] = NULL;
 	
 	/* construct our first proc (awww, how cute!) */
 	P.p_pid = 1;
-	P.p_uid = P.p_ruid = P.p_svuid = 0;
-	P.p_gid = P.p_rgid = P.p_svgid = 0;
+	P.p_ruid = P.p_euid = P.p_svuid = 0;
+	P.p_rgid = P.p_egid = P.p_svgid = 0;
 	P.p_status = P_RUNNING;
 	P.p_cputime = 0;
 	P.p_nice = NZERO;

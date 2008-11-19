@@ -62,11 +62,11 @@ STARTUP(int CURSIG(struct proc *p))
 
 STARTUP(int cansignal(struct proc *p, int signum))
 {
-	if (P.p_uid == 0                /* c effective root */
+	if (P.p_euid == 0               /* c effective root */
 	    || P.p_ruid == p->p_ruid    /* c real = t real */
-	    || P.p_uid == p->p_ruid     /* c effective = t real */
-	    || P.p_ruid == p->p_uid     /* c real = t effective */
-	    || P.p_uid == p->p_uid      /* c effective = t effective */
+	    || P.p_euid == p->p_ruid    /* c effective = t real */
+	    || P.p_ruid == p->p_euid    /* c real = t effective */
+	    || P.p_euid == p->p_euid    /* c effective = t effective */
 	    || (signum == SIGCONT && inferior(p)))
 		return 1;
 	return 0;
@@ -124,7 +124,7 @@ STARTUP(void psignal(struct proc *p, int sig))
 		p->p_sig &= ~STOPSIGMASK;
 	
 	if (prop & SA_STOP) {
-		if (prop & SA_TTYSTOP && (p->p_pptr == G.proc[1])
+		if (prop & SA_TTYSTOP && (p->p_pptr == G.initproc)
 		    && action == SIG_DFL)
 			return;
 		p->p_sig &= ~CONTSIGMASK;
@@ -256,7 +256,7 @@ STARTUP(int issignal(struct proc *p))
 				break;
 			}
 			if (prop & SA_STOP) {
-				if ((p->p_pptr==G.proc[1] && prop&SA_TTYSTOP)
+				if ((p->p_pptr==G.initproc && prop&SA_TTYSTOP)
 				   || (p->p_flag&P_TRACED))
 					break;
 				p->p_ptracesig = sig;

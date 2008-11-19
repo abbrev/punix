@@ -253,8 +253,8 @@ STARTUP(struct inode *maknode(int mode))
 	
 	ip->i_mode = mode & ~P.p_cmask;
 	ip->i_nlink = 1;
-	ip->i_uid = P.p_uid;
-	ip->i_gid = P.p_gid;
+	ip->i_uid = P.p_euid;
+	ip->i_gid = P.p_egid;
 	wdir(ip);
 	return ip;
 }

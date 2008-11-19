@@ -183,16 +183,16 @@ STARTUP(int canaccess(struct inode *ip, int mode))
 			return 1;
 		}
 	}
-	if (P.p_uid == 0) {
+	if (P.p_euid == 0) {
 		if (mode == IEXEC && (ip->i_mode &
 		 (IEXEC | (IEXEC >> 3) | (IEXEC >> 6))) == 0)
 			goto bad;
 		return 0;
 	}
 	/* check whether we are the owner or in the group of the file */
-	if (P.p_uid != ip->i_uid) {
+	if (P.p_euid != ip->i_uid) {
 		mode >>= 3;
-		if (P.p_gid != ip->i_gid)
+		if (P.p_egid != ip->i_gid)
 			mode >>= 3;
 	}
 	if ((ip->i_mode & mode) != 0)

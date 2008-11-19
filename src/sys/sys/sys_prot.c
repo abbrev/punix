@@ -35,24 +35,28 @@
 #include "queue.h"
 #include "globals.h"
 
+/* POSIX.1 */
 STARTUP(void sys_getuid())
 {
 	P.p_retval = P.p_ruid;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_geteuid())
 {
-	P.p_retval = P.p_uid;
+	P.p_retval = P.p_euid;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_getgid())
 {
 	P.p_retval = P.p_rgid;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_getegid())
 {
-	P.p_retval = P.p_gid;
+	P.p_retval = P.p_egid;
 }
 
 struct groupsa {
@@ -60,15 +64,17 @@ struct groupsa {
 	gid_t *list;
 };
 
+/* POSIX.1 */
 STARTUP(void sys_getgroups())
 {
 	struct groupsa *ap = (struct groupsa *)P.p_arg;
 	gid_t *gp;
 	int size;
 	
-	for (gp = &P.p_groups[0]; gp < &P.p_groups[NGROUPS]; ++gp)
-		if (*gp == NOGROUP)
-			break;
+	for (gp = &P.p_groups[0];
+	     gp < &P.p_groups[NGROUPS] && *gp != NOGROUP;
+	     ++gp)
+		;
 	
 	/* return the actual number of group ID's */
 	P.p_retval = size = gp - P.p_groups;
@@ -79,6 +85,11 @@ STARTUP(void sys_getgroups())
 	
 	if (ap->size < size) {
 		P.p_error = EINVAL;
+		return;
+	}
+	
+	if (!ap->list) {
+		P.p_error = EFAULT;
 		return;
 	}
 	
@@ -109,6 +120,7 @@ STARTUP(static int validgid(gid_t gid))
 #define validgid(gid) validuid(gid)
 #endif
 
+/* POSIX.1 */
 STARTUP(void sys_setuid())
 {
 	struct a {
@@ -119,16 +131,15 @@ STARTUP(void sys_setuid())
 	if (!validuid(uid))
 		return;
 	
-	if (P.p_uid == 0)
-		P.p_uid =
-		P.p_ruid =
-		P.p_svuid = uid;
+	if (0 == P.p_euid)
+		P.p_ruid = P.p_euid = P.p_svuid = uid;
 	else if (uid == P.p_ruid || uid == P.p_svuid)
-		P.p_uid = uid;
+		P.p_euid = uid;
 	else
 		P.p_error = EPERM;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_setgid())
 {
 	struct a {
@@ -139,19 +150,17 @@ STARTUP(void sys_setgid())
 	if (!validgid(gid))
 		return;
 	
-	if (P.p_uid == 0)
-		P.p_gid =
-		P.p_rgid =
-		P.p_svgid = gid;
+	if (0 == P.p_euid)
+		P.p_rgid = P.p_egid = P.p_svgid = gid;
 	else if (gid == P.p_rgid || gid == P.p_svgid)
-		P.p_gid = gid;
+		P.p_egid = gid;
 	else
 		P.p_error = EPERM;
 }
 
-STARTUP(int suser())
+STARTUP(static int suser())
 {
-        if (P.p_uid == 0)
+        if (P.p_euid == 0)
                 return 1;
 
         P.p_error = EPERM;
@@ -172,16 +181,22 @@ STARTUP(void sys_setgroups())
 		return;
 	}
 	
-	P.p_error = copyin(P.p_groups, ap->list,
-	 ap->size * sizeof(P.p_groups[0]));
+	if (!ap->list) {
+		P.p_error = EFAULT;
+		return;
+	}
+	
+	P.p_error =
+	 copyin(P.p_groups, ap->list, ap->size * sizeof(P.p_groups[0]));
 	
 	if (P.p_error)
 		return;
 	
-	for (gp = &P.p_groups[ap->size]; gp < &P.p_groups[NGROUPS]; ++gp)
-		*gp = NOGROUP;
+	if (ap->size < NGROUPS)
+		P.p_groups[ap->size] = NOGROUP;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_seteuid())
 {
 	struct a {
@@ -192,10 +207,11 @@ STARTUP(void sys_seteuid())
 	if (!validuid(euid))
 		return;
 	
-	if (euid == P.p_ruid || euid == P.p_svuid || euid == P.p_uid || suser())
-		P.p_uid = euid;
+	if (euid == P.p_ruid || euid == P.p_svuid || suser())
+		P.p_euid = euid;
 }
 
+/* POSIX.1 */
 STARTUP(void sys_setegid())
 {
 	struct a {
@@ -206,10 +222,11 @@ STARTUP(void sys_setegid())
 	if (!validgid(egid))
 		return;
 	
-	if (egid == P.p_rgid || egid == P.p_svgid || egid == P.p_gid || suser())
-		P.p_gid = egid;
+	if (egid == P.p_rgid || egid == P.p_svgid || suser())
+		P.p_egid = egid;
 }
 
+/* XSI */
 STARTUP(void sys_setreuid())
 {
 	struct a {
@@ -219,14 +236,15 @@ STARTUP(void sys_setreuid())
 	uid_t oldruid = P.p_ruid;
 	
 	if (ruid != -1 && validuid(ruid)
-	&& (ruid == P.p_uid || ruid == P.p_ruid || suser()))
+	&& (ruid == P.p_ruid || ruid == P.p_euid || suser()))
 		P.p_ruid = ruid;
 	
 	if (euid != -1 && validuid(euid)
-	&& (euid == oldruid || euid == P.p_svuid || euid == P.p_uid || suser()))
-		P.p_uid = euid;
+	&& (euid == oldruid || euid == P.p_euid || euid == P.p_svuid || suser()))
+		P.p_euid = euid;
 }
 
+/* XSI */
 STARTUP(void sys_setregid())
 {
 	struct a {
@@ -240,7 +258,54 @@ STARTUP(void sys_setregid())
 		P.p_rgid = rgid;
 	
 	if (egid != -1 && validgid(egid)
-	&& (egid == oldrgid || egid == P.p_svgid || egid == P.p_gid || suser()))
-		P.p_gid = egid;
+	&& (egid == oldrgid || egid == P.p_egid || egid == P.p_svgid || suser()))
+		P.p_egid = egid;
 }
 
+/* BSD */
+STARTUP(void sys_setresuid())
+{
+	struct a {
+		uid_t ruid, euid, suid;
+	} *ap = (struct a *)P.p_arg;
+	uid_t ruid = ap->ruid, euid = ap->euid, suid = ap->suid;
+	uid_t oldruid = P.p_ruid;
+	uid_t oldeuid = P.p_euid;
+	uid_t oldsuid = P.p_svuid;
+	
+	if (ruid != -1 && validuid(ruid) &&
+	    (ruid == oldruid || ruid == oldeuid || ruid == oldsuid || suser()))
+		P.p_ruid = ruid;
+	
+	if (euid != -1 && validuid(euid) &&
+	    (euid == oldruid || euid == oldeuid || euid == oldsuid || suser()))
+		P.p_euid = euid;
+	
+	if (suid != -1 && validuid(suid) &&
+	    (suid == oldruid || suid == oldeuid || suid == oldsuid || suser()))
+		P.p_svuid = suid;
+}
+
+/* BSD */
+STARTUP(void sys_setresgid())
+{
+	struct a {
+		gid_t rgid, egid, sgid;
+	} *ap = (struct a *)P.p_arg;
+	gid_t rgid = ap->rgid, egid = ap->egid, sgid = ap->sgid;
+	gid_t oldrgid = P.p_rgid;
+	gid_t oldegid = P.p_egid;
+	gid_t oldsgid = P.p_svgid;
+	
+	if (rgid != -1 && validgid(rgid) &&
+	    (rgid == oldrgid || rgid == oldegid || rgid == oldsgid || suser()))
+		P.p_rgid = rgid;
+	
+	if (egid != -1 && validgid(egid) &&
+	    (egid == oldrgid || egid == oldegid || egid == oldsgid || suser()))
+		P.p_egid = egid;
+	
+	if (sgid != -1 && validgid(sgid) &&
+	    (sgid == oldrgid || sgid == oldegid || sgid == oldsgid || suser()))
+		P.p_svgid = sgid;
+}

@@ -20,9 +20,9 @@ struct globals {
 	int _updlock;
 	struct proc *_current;
 	int lowestpri;
-	struct proc *freeproc;
+	/* struct proc *freeproc; */
+	struct proc *initproc;
 	struct proc *proclist;
-	struct proc *proc[NPROC];
 	struct file file[NFILE];
 	unsigned long loadavg[3];
 	
@@ -43,14 +43,14 @@ struct globals {
 	struct inode *rootdir;
 	
 	char canonb[CANBSIZ];
-	/* struct inode inode[NINODE]; */
+	struct inode inode[NINODE];
 	struct inode *inodelist;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
 	
 	struct buf avbuflist; /* list of buf */
-	struct buffer buffers[NBUF];
+	/* struct buf buf[NBUF]; */
 	
 	struct flashblock *currentfblock;
 	struct flash_cache_entry flash_cache[FLASH_CACHE_SIZE];

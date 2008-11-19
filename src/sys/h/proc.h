@@ -157,13 +157,13 @@ struct proc {
 	pid_t p_pgrp;		/* process group */
 	struct proc *p_pptr;	/* parent proc */
 	
-	uid_t p_uid;		/* effective user id */
-	uid_t p_svuid;		/* saved user id */
 	uid_t p_ruid;		/* real user id */
-	gid_t p_gid;		/* effective group id */
+	uid_t p_euid;		/* effective user id */
+	uid_t p_svuid;		/* saved user id */
 	gid_t p_rgid;		/* real group id */
+	gid_t p_egid;		/* effective group id */
 	gid_t p_svgid;		/* saved group id */
-	gid_t p_groups[NGROUPS];	/* groups, 0 terminated */
+	gid_t p_groups[NGROUPS];	/* groups, -1 terminated */
 	
 	/* signals */
 	/* 2.11BSD => Punix
