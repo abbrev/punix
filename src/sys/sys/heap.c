@@ -128,7 +128,7 @@ void meminit()
 			memfree(p, 0);
 	}
 	printheaplist();
-	abort();
+	/* abort(); */
 #endif
 }
 

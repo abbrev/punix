@@ -329,8 +329,8 @@ STARTUP(struct proc *palloc())
 	for (pp = &G.proc[0]; pp < &G.proc[NPROC]; ++pp)
 		if (!*pp) {
 			*pp = p;
-			p->p_next = G.prochead;
-			G.prochead = p;
+			p->p_next = G.proclist;
+			G.proclist = p;
 			return p;
 		}
 	memfree(p, 0);
@@ -342,8 +342,8 @@ STARTUP(void pfree(struct proc *p))
 {
 	if (p) {
 		/* remove this proc from the list */
-		if (G.prochead == p) {
-			G.prochead = p->p_next;
+		if (G.proclist == p) {
+			G.proclist = p->p_next;
 		} else {
 			struct proc *p2;
 			for EACHPROC(p2) {

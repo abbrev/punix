@@ -21,7 +21,7 @@ struct globals {
 	struct proc *_current;
 	int lowestpri;
 	struct proc *freeproc;
-	struct proc *prochead;
+	struct proc *proclist;
 	struct proc *proc[NPROC];
 	struct file file[NFILE];
 	unsigned long loadavg[3];
@@ -43,7 +43,8 @@ struct globals {
 	struct inode *rootdir;
 	
 	char canonb[CANBSIZ];
-	struct inode inode[NINODE];
+	/* struct inode inode[NINODE]; */
+	struct inode *inodelist;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
