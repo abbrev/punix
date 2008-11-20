@@ -296,7 +296,7 @@ _du32u32:
 		move.l	%d2,%d5
 		swap	%d5
 		cmp.w	#0x0080,%d5
-		bls.s	0f
+		blo.s	0f
 			lsr.w	#8,%d5
 			moveq	#1,%d4
 0:		add.b	CountLeadingZerosTable(%pc,%d5.w),%d4
