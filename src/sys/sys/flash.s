@@ -88,11 +88,10 @@ FlashWrite:
 	move.w	#((FlashWrite_ExecuteInRam_End-FlashWrite_ExecuteInRam)/2-1),%d0
 	lea	FlashWrite_ExecuteInRam(%pc),%a0
 	lea	exec_ram,%a1
-0:	
-	move.w	(%a0)+,(%a1)+
+0:	move.w	(%a0)+,(%a1)+
 	dbra	%d0,0b
 	
-	jmp	exec_ram	| Execute code in RAM
+	jsr	exec_ram	| Execute code in RAM
 FlashWrite_Return:
 	moveq	#1,%d5		| Of it is done
 
@@ -126,8 +125,7 @@ FlashWrite_ExecuteInRam:
 	blt.s	9f
 	move.l	%a3,%a4			| A4 = Command register
 	move.w	#0x5050,(%a4)		| Clear Statut Register
-0:
-		move.w	(%a2)+,%d7	| Read value to write
+0:		move.w	(%a2)+,%d7	| Read value to write
 		move.w	#0x1010,(%a3)	| Write Setup -- CHANGE HERE %a4 to %a3
 		move.w	%d7,(%a3)+	| Write word
 1:			move.w	(%a4),%d0	| Check it
@@ -136,7 +134,7 @@ FlashWrite_ExecuteInRam:
 		dbra	%d3,0b
 	move.w	#0x5050,(%a4)
 	move.w	#0xFFFF,(%a4)	| Read Memory
-9:	jmp	(FlashWrite_Return).l
+9:	rts
 FlashWrite_ExecuteInRam_End:
 
 
@@ -186,9 +184,9 @@ FlashErase:
 	move.w	#((FlashErase_ExecuteInRam_End-FlashErase_ExecuteInRam)/2-1),%d0
 	lea	FlashErase_ExecuteInRam(%pc),%a0
 	lea	exec_ram,%a1
-0:		move.w	(%a0)+,(%a1)+
-		dbf	%d0,0b
-	jmp	exec_ram	| Execute code in RAM
+0:	move.w	(%a0)+,(%a1)+
+	dbra	%d0,0b
+	jsr	exec_ram	| Execute code in RAM
 FlashErase_Return:
 	
 	moveq	#1,%d5		| Of it is done
@@ -225,7 +223,7 @@ FlashErase_ExecuteInRam:
 		beq.s	0b
 	move.w	#0x5050,(%a2)
 	move.w	#0xFFFF,(%a2)	| Read Memory
-	jmp	(FlashErase_Return).l
+	rts
 FlashErase_ExecuteInRam_End:
 
 | In:
