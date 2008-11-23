@@ -6,9 +6,7 @@ Punix kernel TODO, in roughly chronological order:
 	* exec (same as vfork; also needs to handle binary format; this depends partly on the filesystem)
 
 * write device drivers
-	* tty (working but not complete)
-	* flash (see PedroM for FlashWrite, FlashErase, etc.)
-	* link port (see PedroM)
+	* tty middle layer (dev_vt works almost completely)
 
 * write filesystem (log-structured filesystem)
 
