@@ -13,6 +13,7 @@
 #define	B_ASYNC    0400	/* don't wait for I/O completion */
 #define	B_DELWRI  01000	/* don't write till block leaves available list */
 
+/* clean up these #defines */
 #define	B_COPY    02000	/* this is a copy of the flash block */
 #define B_DELETE  04000	/* mark this block as "deleted" but in use */
 #define B_FREE   010000 /* free this flash block */
@@ -40,10 +41,6 @@
  * Most of the routines which manipulate these things
  * are in bio.c.
  */
-
-/* This is a copy-on-write buffer. Normally "b_addr" will point to the block in
- * flash ROM and will be read-only, but when data needs to be written to the
- * buffer, it is copied and the B_COPY bit is set in the flags. */
 struct buf {
 	struct buf *b_next, *b_prev;
 	struct buf *b_avnext, *b_avprev;
@@ -54,11 +51,6 @@ struct buf {
 	long b_blkno;
 	int b_error;
 	size_t b_resid; /* bytes not transferred after error */
-};
-
-struct buffer {
-	char data[BLOCKSIZE];
-	int used;
 };
 
 /*
@@ -87,7 +79,5 @@ struct devtab
 void brelse(struct buf *bp);
 struct buf *getblk(dev_t dev, long blkno);
 struct buf *bread(dev_t dev, long blkno);
-
-extern struct buf avbuflist; /* list of buf */
 
 #endif

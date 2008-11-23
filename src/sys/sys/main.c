@@ -47,6 +47,7 @@ STARTUP(void kmain())
 	linkinit();
 	audioinit();
 	procinit();
+	bufinit();
 	
 #if 1
 	kputs(OS_NAME " build " BUILD "\n");

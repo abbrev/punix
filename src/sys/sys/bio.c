@@ -7,6 +7,7 @@
 #include <sys/types.h>
 */
 #include <string.h>
+#include <assert.h>
 
 #include "punix.h"
 #include "process.h"
@@ -21,22 +22,55 @@
 
 #define DEBUG()
 
-STARTUP(char *bufalloc())
+STARTUP(struct buf *bufalloc())
 {
-	struct buffer *bfp;
-	for (bfp = &G.buffers[0]; bfp < &G.buffers[NBUF]; ++bfp) {
-		if (!bfp->used) {
-			bfp->used = 1;
-			return bfp->data;
-		}
-	}
-	return NULL;
+	size_t sb = sizeof(struct buf);
+	size_t sd = BLOCKSIZE;
+	struct buf *bp;
+	char *cp;
+	
+	bp = memalloc(&sb, 0);
+	if (!bp) goto end;
+	cp = memalloc(&sd, 0);
+	if (!cp) goto freebp;
+	
+	++G.numbufs;
+	bp->b_flags = 0;
+	bp->b_dev = 0;
+	bp->b_bcount = 0;
+	bp->b_addr = cp;
+	bp->b_blkno = 0;
+	bp->b_error = 0;
+	bp->b_resid = 0;
+	bp->b_next = bp->b_prev = bp;
+	
+	/* insert this buf at the beginning of the available buf list */
+	bp->b_avnext = G.avbuflist.b_avnext;
+	bp->b_avprev = &G.avbuflist;
+	G.avbuflist.b_avnext->b_avprev = bp;
+	G.avbuflist.b_avnext = bp;
+	goto end;
+
+freebp:
+	memfree(bp, 0);
+end:
+	return bp;
 }
 
-STARTUP(void buffree(char *cp))
+/* free a buffer if possible, and return 1 if it was freed */
+STARTUP(int buffree(struct buf *bp))
 {
-	struct buffer *bfp = (struct buffer *)cp;
-	bfp->used = 0;
+	if (G.numbufs <= MINBUF) return 0;
+	
+	/* remove this buf from each list */
+	bp->b_next->b_prev = bp->b_prev;
+	bp->b_prev->b_next = bp->b_next;
+	bp->b_avnext->b_avprev = bp->b_avprev;
+	bp->b_avprev->b_avnext = bp->b_avnext;
+	memfree(bp->b_addr, 0);
+	memfree(bp, 0);
+	--G.numbufs;
+	return 1;
 }
 
 /* FIXME: finish this */
@@ -45,11 +79,20 @@ STARTUP(void brelse(struct buf *bp))
 	int sps;
 	
 	if (bp->b_flags & B_WANTED)
-		/*wakeup(rbp)*/;
+		wakeup(bp);
+	if (G.avbuflist.b_flags & B_WANTED)
+		wakeup(&G.avbuflist);
 	/* ... */
 	if (bp->b_flags & B_ERROR)
 		MINOR(bp->b_dev) = -1;
 	/* ... */
+	if (bp->b_flags & B_BUSY) {
+		/* insert this buf at the end of the avbuflist */
+		bp->b_avnext = &G.avbuflist;
+		bp->b_avprev = G.avbuflist.b_avprev;
+		G.avbuflist.b_avprev->b_avnext = bp;
+		G.avbuflist.b_avprev = bp;
+	}
 	bp->b_flags &= ~(B_WANTED|B_BUSY|B_ASYNC);
 	/* ... */
 	bp->b_next->b_prev = bp->b_prev;
@@ -70,7 +113,8 @@ STARTUP(struct buf *incore(dev_t dev, long blkno))
 	return NULL;
 }
 
-STARTUP(void notavail(struct buf *bp))
+/* take this buf off of the available buf list and set its B_BUSY flag */
+STARTUP(static void notavail(struct buf *bp))
 {
 	bp->b_avprev->b_avnext = bp->b_avnext;
 	bp->b_avnext->b_avprev = bp->b_avprev;
@@ -116,9 +160,6 @@ STARTUP(void bwrite(struct buf *bp))
 	bp->b_bcount = BLOCKSIZE;
 	bdevsw[MAJOR(bp->b_dev)].d_strategy(bp);
 	iowait(bp);
-	if (bp->b_flags & B_COPY) {
-		buffree(bp->b_addr);
-	}
 	brelse(bp);
 	/* */
 }
@@ -135,16 +176,10 @@ STARTUP(void bdwrite(struct buf *bp))
 	brelse(bp);
 }
 
-/* FIXME: make this do what it should do, not what it currently does do */
 STARTUP(void clrbuf(struct buf *bp))
 {
 	int i;
 	int n = 0;
-	
-	if ((bp->b_flags & B_WRITABLE) == 0) {
-		bp->b_addr = bufalloc();
-		bp->b_flags |= B_COPY | B_WRITABLE;
-	}
 	
 	if (bp->b_flags & B_CLEAR)
 		n = -1;
@@ -191,7 +226,7 @@ loop:
 	 * buffer list */
 	
 	/* the list is empty, so sleep on it */
-	if (G.avbuflist.b_avnext == &G.avbuflist) {
+	if (G.avbuflist.b_avnext == &G.avbuflist && !bufalloc()) {
 		G.avbuflist.b_flags |= B_WANTED;
 		slp(&G.avbuflist, PRIBIO+1);
 		goto loop;
@@ -220,4 +255,12 @@ loop:
 
 STARTUP(void bflush(dev_t dev))
 {
+}
+
+STARTUP(void bufinit())
+{
+	G.avbuflist.b_avnext = G.avbuflist.b_avprev = &G.avbuflist;
+	G.numbufs = 0;
+	while (G.numbufs < MINBUF)
+		assert(bufalloc());
 }

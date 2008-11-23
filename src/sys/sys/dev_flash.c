@@ -167,19 +167,6 @@ out:
 	return fbp;
 }
 
-extern char *bufalloc();
-
-static void makecopy(struct buf *bp)
-{
-	char *cp;
-	if (bp->b_flags & B_COPY) return;
-	
-	cp = bufalloc();
-	memcpy(cp, bp->b_addr, BLOCKSIZE);
-	bp->b_addr = cp;
-	bp->b_flags |= B_COPY;
-}
-
 /* FIXME: advance the currentfblock pointer to the next free one */
 static void nextblock()
 {
@@ -193,13 +180,8 @@ STARTUP(static void flread(struct buf *bp))
 	bp->b_flags |= B_DONE;
 	
 	if (fbp) {
-		bp->b_addr = fbp->data;
-		bp->b_flags &= ~B_COPY;
-		if (bp->b_flags & B_WRITABLE) {
-			makecopy(bp);
-		}
+		memcpy(bp->b_addr, fbp->data, BLOCKSIZE);
 	} else {
-		bp->b_flags &= ~B_WRITABLE;
 		clrbuf(bp);
 	}
 }

@@ -5,6 +5,11 @@
 #include "heap.h"
 #include "globals.h"
 
+/*
+ * These routines implement a memory allocator using an array of heap entries
+ * to represent current allocations.
+ */
+
 static void printheaplist()
 {
 	int i;
@@ -50,7 +55,7 @@ void meminit()
 	int numvars = 0;
 #define ADDVAR(n) do { var[numvars].size = sizeof(G.n); var[numvars++].name = #n; } while (0)
 	ADDVAR(exec_ram);
-	ADDVAR(_walltime);
+	ADDVAR(_realtime);
 	ADDVAR(_runrun);
 	ADDVAR(_istick);
 	ADDVAR(_ioport);
@@ -58,8 +63,8 @@ void meminit()
 	ADDVAR(_updlock);
 	ADDVAR(_current);
 	ADDVAR(lowestpri);
-	ADDVAR(freeproc);
-	ADDVAR(proc);
+	ADDVAR(initproc);
+	ADDVAR(proclist);
 	ADDVAR(file);
 	ADDVAR(loadavg);
 	ADDVAR(audiosamp);
@@ -87,7 +92,6 @@ void meminit()
 	ADDVAR(callout);
 	
 	ADDVAR(avbuflist);
-	ADDVAR(buffers);
 	
 	ADDVAR(currentfblock);
 	ADDVAR(flash_cache);
@@ -119,10 +123,9 @@ void meminit()
 		kprintf("%2ld.%02ld%% %-13.13s", 100 * var[i].size / totalsize, (10000 * var[i].size / totalsize) % 100, var[i].name);
 	kputchar('\n');
 	kprintf("%5ld largest unallocated chunk size\n", largest_unallocated_chunk_size());
-	size_t size;
 	void *p;
 	size_t s = (size_t)128;
-	for (i = 0; i < 32000; ++i) {
+	for (i = 0; i < 8000; ++i) {
 		p = memalloc(&s, 0);
 		if (p)
 			memfree(p, 0);
@@ -173,6 +176,7 @@ void *memalloc(size_t *sizep, pid_t pid)
 	if (size == 0)
 		return NULL;
 	
+loop:
 #define SIZETHRESHOLD 2048
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heaplist[G.heapsize-1].start;
@@ -203,6 +207,20 @@ void *memalloc(size_t *sizep, pid_t pid)
 			return &G.heap[hp->start];
 		}
 		prevend = hp->end;
+	}
+	/* we couldn't find a slot big enough, so let's write out the oldest
+	 * buffer in the avbuflist and try again if we could free that buffer */
+	/* FIXME: first check to see if freeing buffers would possibly free up
+	 * enough memory for this allocation to succeed. If the largest
+	 * unallocated chunk size plus the size of all the buffers in the
+	 * avbuflist (leaving at least MINBUF buffers) is less than the
+	 * requested chunk size, then it would not do any good to flush any of
+	 * the buffers */
+	/* FIXME: maybe move this into a function in bio.c */
+	if (pid != 0 && G.avbuflist.b_avnext != &G.avbuflist) {
+		struct buf *bp = G.avbuflist.b_avnext;
+		if (bp->b_flags & B_DELWRI) bwrite(bp);
+		if (buffree(bp)) goto loop;
 	}
 	return NULL;
 }
@@ -274,11 +292,18 @@ void sys_memalloc()
 	struct a {
 		size_t *sizep;
 	} *ap = (struct a *)P.p_arg;
+	void *p = NULL;
 	
-	if (ap->sizep)
-		P.p_retval = (unsigned long)memalloc(ap->sizep, P.p_pid);
-	else
+	if (!ap->sizep) {
 		P.p_error = EINVAL;
+		return;
+	}
+	
+	p = memalloc(ap->sizep, P.p_pid);
+	if (p) {
+		P.p_retval = (unsigned long)p;
+		memset(p, 0, *ap->sizep);
+	}
 }
 
 void sys_memfree()
