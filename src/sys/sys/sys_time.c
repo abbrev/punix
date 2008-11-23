@@ -27,7 +27,7 @@ STARTUP(int itimerdecr(struct itimerspec *itp, long nsec))
 			nsec = itp->it_value.tv_nsec;
 			goto expire;
 		}
-		itp->it_value.tv_nsec += 1000000000L;
+		itp->it_value.tv_nsec += SECOND;
 		itp->it_value.tv_sec--;
 	}
 	if (timespecisset(&itp->it_value))
@@ -38,7 +38,7 @@ expire:
 		itp->it_value = itp->it_interval;
 		itp->it_value.tv_nsec += nsec;
 		if (itp->it_value.tv_nsec < 0) {
-			itp->it_value.tv_nsec += 1000000000L;
+			itp->it_value.tv_nsec += SECOND;
 			itp->it_value.tv_sec--;
 		}
 	} else {
@@ -117,7 +117,7 @@ STARTUP(void sys_getitimer())
 STARTUP(static int itimerfix(struct timespec *tv))
 {
 	if (tv->tv_sec < 0 || tv->tv_sec > 100000000L ||
-	    tv->tv_nsec < 0 || tv->tv_nsec >= 1000000000L)
+	    tv->tv_nsec < 0 || tv->tv_nsec >= SECOND)
 		return EINVAL;
 	if (tv->tv_sec == 0 && tv->tv_nsec != 0 && tv->tv_nsec < TICK)
 		tv->tv_nsec = TICK;
@@ -200,9 +200,9 @@ STARTUP(void sys_setitimer())
 	 * signal earlier than it should */
 	itv.it_value.tv_nsec += TICK - 1;
 	itv.it_value.tv_nsec -= (itv.it_value.tv_nsec % TICK);
-	if (itv.it_value.tv_nsec >= 1000000000L) {
+	if (itv.it_value.tv_nsec >= SECOND) {
 		itv.it_value.tv_sec++;
-		itv.it_value.tv_nsec -= 1000000000L;
+		itv.it_value.tv_nsec -= SECOND;
 	}
 #endif
 	

@@ -9,10 +9,11 @@ PUNIXBASE	= ../../..
 STDINC	= ${PUNIXBASE}/include
 SYSINC	= ${PUNIXBASE}/src/sys/h
 DATE	:= \"`date +'%Y-%m-%d %H:%M:%S%z'`\"
+REALTIME := `date +%s`
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}"
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}" -DREALTIME=${REALTIME}
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l

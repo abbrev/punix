@@ -23,7 +23,7 @@
 #define	NTEXT	40		/* max number of pure texts */
 #define	NCLIST	100		/* max total clist size */
 #define	HZ	256		/* clock rate (ticks/second) */
-#define	SECOND	1000000000L
+#define	SECOND  1000000000L	/* nanoseconds in a second */
 #define TICK	(SECOND / HZ) /* nanoseconds/tick of the clock */
 #define FLASH_CACHE_SIZE 32
 #define HEAPSIZE 512

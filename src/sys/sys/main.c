@@ -62,4 +62,8 @@ STARTUP(void kmain())
 	 "You may redistribute copies of this program\n"
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
+	if (realtime.tv_sec == 0) {
+		realtime.tv_sec = REALTIME;
+		realtime.tv_nsec = 0;
+	}
 }

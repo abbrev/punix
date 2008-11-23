@@ -15,7 +15,7 @@
 void timespecadd(struct timespec *a, struct timespec *b, struct timespec *res);
 void timespecsub(struct timespec *a, struct timespec *b, struct timespec *res);
 
-#define timespecclear(tvp) (tvp)->tv_sec = (tvp)->tv_nsec = 0
+#define timespecclear(tvp) ((tvp)->tv_sec = (tvp)->tv_nsec = 0)
 #define timespecisset(tvp) ((tvp)->tv_sec || (tvp)->tv_nsec)
 #define timespeccmp(tvp, uvp, cmp) \
         ((tvp)->tv_sec cmp (uvp)->tv_sec || \

@@ -25,6 +25,7 @@
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <time.h>
 #include <sys/time.h>
 
 #include "setjmp.h"
@@ -56,6 +57,34 @@ STARTUP(static void println(char *s))
 }
 
 int printf(const char *format, ...);
+
+/* simple implementations of some C standard library functions */
+STARTUP(time_t time(time_t *tp))
+{
+	struct timeval tv;
+	time_t t;
+	gettimeofday(&tv, NULL);
+	t = tv.tv_sec;
+	if (tp) *tp = t;
+	return t;
+}
+
+STARTUP(struct tm *gmtime_r(const time_t *tp, struct tm *tmp))
+{
+	int sec, min, hour, day;
+	time_t t = *tp;
+	sec = t % 60;
+	t /= 60;
+	min = t % 60;
+	t /= 60;
+	hour = t % 24;
+	t /= 24;
+	tmp->tm_sec = sec;
+	tmp->tm_min = min;
+	tmp->tm_hour = hour;
+	/* FIXME: do the rest! */
+	return tmp;
+}
 
 STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 {
