@@ -105,7 +105,7 @@ the_beginning:
 	move.b	%d0,0x17(%a6)		| Set LCD memory address on HW2.
 	move.b	#0x21,0x1C(%a5)		| Set LCD RS
 	move.b	#0xB2,0x17(%a5)		| Reset 0x600017 cycles on HW1.
-	move.b	#0x1B,0x15(%a5)		| Enable Timer Interrupts / Increment rate of 0x600017 (OSC2/2^9) / Enable 0x600017 / Disable Int 3 / Enable OSC2 / Enable LCD on HW1
+	move.b	#0x1F,0x15(%a5)		| Enable Timer Interrupts / Increment rate of 0x600017 (OSC2/2^9) / Enable 0x600017 / Enable Int 3 / Enable OSC2 / Enable LCD on HW1
 	bset.b	#1,0x1D(%a6)		| Enable LCD on HW2
 	move.w	#0xFFFF,0x1A(%a5)	| acknowledge AutoInt 6 & AutoInt 2
 	
@@ -166,6 +166,7 @@ SYS_exit	= 1	/* put these in a header please */
 SYS_write	= 4
 SYS_open	= 5
 SYS_execve	= 59
+SYS_gettimeofday = 116
 .macro	sys call
 	move	#SYS_\call,%d0
 	trap	#0
@@ -194,6 +195,12 @@ write:
 	.global execve
 execve:
 	sys	execve
+	bcs	cerror
+	rts
+
+	.global gettimeofday
+gettimeofday:
+	sys	gettimeofday
 	bcs	cerror
 	rts
 
