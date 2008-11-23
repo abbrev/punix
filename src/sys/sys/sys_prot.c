@@ -88,11 +88,6 @@ STARTUP(void sys_getgroups())
 		return;
 	}
 	
-	if (!ap->list) {
-		P.p_error = EFAULT;
-		return;
-	}
-	
 	P.p_error = copyout(ap->list, P.p_groups, size*sizeof(P.p_groups[0]));
 }
 
@@ -178,11 +173,6 @@ STARTUP(void sys_setgroups())
 	
 	if (ap->size > sizeof(P.p_groups) / sizeof(P.p_groups[0])) {
 		P.p_error = EINVAL;
-		return;
-	}
-	
-	if (!ap->list) {
-		P.p_error = EFAULT;
 		return;
 	}
 	

@@ -25,6 +25,7 @@
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <sys/time.h>
 
 #include "setjmp.h"
 #include "proc.h"
@@ -74,6 +75,32 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 		println("open failed!");
 	else
 		printf("fd = %d\n", fd);
+	
+	int i;
+	struct timeval starttv;
+	struct timeval endtv;
+	struct timeval tv;
+	printf("waiting for the clock to settle...");
+	gettimeofday(&starttv, 0);
+	do {
+		gettimeofday(&tv, 0);
+	} while (tv.tv_sec < starttv.tv_sec + 3);
+	printf("starting\n");
+	gettimeofday(&starttv, 0);
+	for (i = 0; i < 30000; ++i) {
+		gettimeofday(&endtv, 0);
+	}
+	tv.tv_sec = endtv.tv_sec - starttv.tv_sec;
+	tv.tv_usec = endtv.tv_usec - starttv.tv_usec;
+	if (tv.tv_usec < 0) {
+		tv.tv_usec += 1000000L;
+		tv.tv_sec--;
+	}
+	long x = tv.tv_usec + 1000000L * tv.tv_sec;
+	x /= 30;
+	printf("%ld.%06ld = 0.%09ld per call\n", tv.tv_sec, tv.tv_usec, x);
+	int error = gettimeofday((void *)0x40000 - 1, 0);
+	printf("error = %d\n", error);
 	
 	return 0;
 }
@@ -704,11 +731,6 @@ void sys_getrusage()
 	
 	P.p_error = ENOSYS;
 	return;
-	
-	if (!ap->r_usage) {
-		P.p_error = EFAULT;
-		return;
-	}
 	
 	switch (ap->who) {
 	case RUSAGE_SELF:
