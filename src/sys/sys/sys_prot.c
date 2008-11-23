@@ -166,7 +166,6 @@ STARTUP(static int suser())
 STARTUP(void sys_setgroups())
 {
 	struct groupsa *ap = (struct groupsa *)P.p_arg;
-	gid_t *gp;
 	
 	if (!suser())
 		return;

@@ -171,8 +171,11 @@ STARTUP(void printf(const char *fmt, ...))
 				for (; width > 0; --width) putchar(fill);
 			}
 			if (fill == ' ' && i < 0) putchar('-');
-			for (; len > 0; --len)
-				putchar((unsigned char) *p++);
+			if (len > 0) {
+				write(2, p, len);
+				p += len;
+				len = 0;
+			}
 			for (; width > 0; --width)
 				putchar(fill);
 			break;
