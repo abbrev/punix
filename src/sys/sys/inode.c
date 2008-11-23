@@ -134,7 +134,7 @@ STARTUP(void iput(struct inode *ip))
 			ip->i_flag |= IUPD | ICHG;
 			ifree(ip->i_dev, ip->i_number);
 		}
-		iupdat(ip, &walltime.tv_sec, &walltime.tv_sec);
+		iupdat(ip, &realtime.tv_sec, &realtime.tv_sec);
 		prele(ip);
 		ip->i_flag = 0;
 		ip->i_number = 0;

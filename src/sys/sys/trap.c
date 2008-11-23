@@ -54,20 +54,17 @@ STARTUP(void hardclock(unsigned short ps))
 	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
 	
+	spl5();
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
 	++*(long *)(0x4c00+0xf00-8);
 	
-	/* nsec cannot get up to or over 1e9 (one second); we just have to wait
-	 * for the RTC to catch up to us */
-	if (walltime.tv_nsec < 1000000000L - TICK) {
-		walltime.tv_nsec += TICK;
-		if (walltime.tv_nsec < 0)
-			walltime.tv_nsec = 0;
-	}
+	realtime.tv_nsec += TICK;
+	if (realtime.tv_nsec >= SECOND)
+		realtime.tv_nsec -= TICK - TICK / HZ;
 	
-	if ((walltime.tv_sec % 5) == 0 && walltime.tv_nsec < TICK) {
+	if ((realtime.tv_sec % 5) == 0 && realtime.tv_nsec < TICK) {
 		struct proc *p;
 		int n = 0;
 		for EACHPROC(p)
@@ -87,7 +84,6 @@ STARTUP(void hardclock(unsigned short ps))
 	if (!USERMODE(ps))
 		goto out;
 	
-	spl5();
 	if (G.callout[0].c_time <= 0) {
 		int t = 0;
 		c2 = &G.callout[0];
@@ -139,30 +135,19 @@ out:
 	}
 }
 
+#if 0
 /*
  * RTC interrupt handler. This runs even when the calc is off, when hardclock()
  * does not run.
  */
-/* 2,000,000 ns = 0.002 seconds */
-#define SKEW 2000000L
-
-STARTUP(void updwalltime())
+STARTUP(void updrealtime())
 {
-	walltime.tv_sec++;
+	/* XXX: this shows the number of times this function has been called.
+	 * It draws in the bottom-right corner of the screen.
+	 */
+	++*(long *)(0x4c00+0xf00-16);
 	
-	if (walltime.tv_nsec <= 0) {
-		/* if the calc is turned off */
-		walltime.tv_nsec = 0;
-		return;
-	}
-	walltime.tv_nsec -= 1000000000L;
-	
-	/* this interrupt handler runs before the hardclock handler, so we
-	 * account for this by testing against -TICK. */
-	if (walltime.tv_nsec <= -TICK - SKEW)
-		walltime.tv_nsec += SKEW;
-	else if (walltime.tv_nsec >= -TICK + SKEW)
-		walltime.tv_nsec -= SKEW;
-	else
-		walltime.tv_nsec = -TICK;
+	++realtime.tv_sec;
+	realtime.tv_nsec = 0;
 }
+#endif

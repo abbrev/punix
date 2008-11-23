@@ -16,6 +16,8 @@ void sys_wait4();
 
 void sys_getitimer();
 void sys_setitimer();
+void sys_gettimeofday();
+void sys_settimeofday();
 
 void sys_read();
 void sys_write();
@@ -82,9 +84,7 @@ void sys_getdtablesize();
 #define sys_setpgrp	sys_NONE
 #define sys_select	sys_NONE
 #define sys_fsync	sys_NONE
-#define sys_gettimeofday	sys_NONE
 #define sys_getrusage	sys_NONE
-#define sys_settimeofday	sys_NONE
 #define sys_fchown	sys_NONE
 #define sys_fchmod	sys_NONE
 #define sys_rename	sys_NONE

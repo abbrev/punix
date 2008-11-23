@@ -177,9 +177,17 @@ Int_2:	move.w	#0x2600,%sr
 	move.w	#0x00FF,0x60001A	| acknowledge Int2
 oldInt_3:	rte				| Clock for int 3 ?
 
+G = 0x5c00
+
 Int_3:
-	bsr	updwalltime
-	| addq.l	#1,G+0 | realtime
+.if 1
+	addq.l	#1,G+0	| realtime.tv_sec++
+	clr.l	G+4	| realtime.tv_nsec = 0
+.else
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	jbsr	updrealtime
+	movem.l	(%sp)+,%d0-%d2/%a0-%a1
+.endif
 	rte
 
 | Link Auto-Int

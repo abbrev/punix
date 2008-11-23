@@ -21,6 +21,8 @@ spl\level:
 defspl	0 | 
 defspl	1 | 256Hz timer
 |defspl	2 | key press (never used)
+.global splclock
+splclock:
 defspl	3 | time
 defspl	4 | link port
 defspl	5 | audio (link port)

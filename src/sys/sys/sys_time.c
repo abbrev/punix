@@ -47,29 +47,24 @@ expire:
 	return 0;
 }
 
-STARTUP(void timespecfix(struct timespec *t1))
+STARTUP(void timespecadd(struct timespec *a, struct timespec *b, struct timespec *res))
 {
-	if (t1->tv_nsec < 0) {
-		t1->tv_sec--;
-		t1->tv_nsec += 1000000000L;
-	} else if (t1->tv_nsec >= 1000000000L) {
-		t1->tv_sec++;
-		t1->tv_nsec -= 1000000000L;
+	res->tv_sec = a->tv_sec + b->tv_sec;
+	res->tv_nsec = a->tv_nsec + b->tv_nsec;
+	if (res->tv_nsec >= SECOND) {
+		res->tv_nsec -= SECOND;
+		++res->tv_sec;
 	}
 }
 
-STARTUP(void timespecadd(struct timespec *t1, struct timespec *t2))
+STARTUP(void timespecsub(struct timespec *a, struct timespec *b, struct timespec *res))
 {
-	t1->tv_sec += t2->tv_sec;
-	t1->tv_nsec += t2->tv_nsec;
-	timespecfix(t1);
-}
-
-STARTUP(void timespecsub(struct timespec *t1, struct timespec *t2))
-{
-	t1->tv_sec -= t2->tv_sec;
-	t1->tv_nsec -= t2->tv_nsec;
-	timespecfix(t1);
+	res->tv_sec = a->tv_sec - b->tv_sec;
+	res->tv_nsec = a->tv_nsec - b->tv_nsec;
+	if (res->tv_nsec < 0) {
+		res->tv_nsec += SECOND;
+		--res->tv_sec;
+	}
 }
 
 /* internal getitimer, used by sys_getitimer and sys_setitimer */
@@ -79,15 +74,15 @@ STARTUP(static void getit(int which, struct itimerval *value))
 	struct itimerspec tv;
 	int x;
 	
-	x = spl1();
+	x = splclock();
 	tv = P.p_itimer[which];
 	if (which == ITIMER_REAL) {
 		/* convert from absolute to relative time */
 		if (timespecisset(&tv.it_value)) {
-			if (timespeccmp(&tv.it_value, &walltime, <))
+			if (timespeccmp(&tv.it_value, &realtime, <))
 				timespecclear(&tv.it_value);
 			else
-				timespecsub(&tv.it_value, &walltime);
+				timespecsub(&tv.it_value, &realtime, &tv.it_value);
 		}
 	}
 	
@@ -98,7 +93,7 @@ STARTUP(static void getit(int which, struct itimerval *value))
 	itv.it_value.tv_sec = tv.it_value.tv_sec;
 	itv.it_value.tv_usec = tv.it_value.tv_nsec / 1000;
 	
-	copyout(value, &itv, sizeof(itv));
+	P.p_error = copyout(value, &itv, sizeof(itv));
 }
 
 /* int getitimer(int which, struct itimerval *value); */
@@ -137,7 +132,7 @@ STARTUP(int realitexpire(void *vp))
 	struct proc *p = (struct proc *)vp;
 	struct itimerspec *tp = &p->p_itimer[ITIMER_REAL];
 	
-	x = spl1();
+	x = splclock();
 	/*
 	 * It's possible for us to be called before the real timer actually
 	 * ought to go off, such as if the timespec is too large to be 
@@ -145,7 +140,7 @@ STARTUP(int realitexpire(void *vp))
 	 * process is not signalled, but another timeout is set for this routine
 	 * to be called again, possibly when the real timer really goes off.
 	 */
-	if (!timespeccmp(&tp->it_value, &walltime, <)) {
+	if (!timespeccmp(&tp->it_value, &realtime, <)) {
 		psignal(p, SIGALRM);
 		
 		if (!timespecisset(&tp->it_interval)) {
@@ -155,11 +150,11 @@ STARTUP(int realitexpire(void *vp))
 	}
 	
 	for (;;) {
-		if (timespeccmp(&tp->it_value, &walltime, >)) {
+		if (timespeccmp(&tp->it_value, &realtime, >)) {
 			timeout(realitexpire, p, hzto(&tp->it_value));
 			goto out;
 		}
-		timespecadd(&tp->it_value, &tp->it_interval);
+		timespecadd(&tp->it_value, &tp->it_interval, &tp->it_value);
 	}
 out:
 	splx(x);
@@ -187,7 +182,8 @@ STARTUP(void sys_setitimer())
 	if (!ap->value)
 		return;
 	
-	copyin(&aitv, ap->value, sizeof(aitv));
+	if ((P.p_error = copyin(&aitv, ap->value, sizeof(aitv))))
+		return;
 	
 	itv.it_interval.tv_sec = aitv.it_interval.tv_sec;
 	itv.it_interval.tv_nsec = 1000 * aitv.it_interval.tv_usec;
@@ -210,14 +206,14 @@ STARTUP(void sys_setitimer())
 	}
 #endif
 	
-	x = spl1();
+	x = splclock();
 	
 	P.p_itimer[ap->which] = itv;
 	
 	if (ap->which == ITIMER_REAL) {
 		untimeout(realitexpire, &P);
 		if (timespecisset(&itv.it_value)) {
-			timespecadd(&itv.it_value, &walltime);
+			timespecadd(&itv.it_value, &realtime, &itv.it_value);
 			timeout(realitexpire, &P, hzto(&itv.it_value));
 		}
 	}
@@ -235,4 +231,42 @@ STARTUP(void sys_utime())
 	
 	(void)ap;
 	P.p_error = ENOSYS;
+}
+
+/*
+ * int gettimeofday(struct timeval *tv, struct timezone *tz);
+ * int settimeofday(const struct timeval *tv , const struct timezone *tz);
+ */
+
+struct tod {
+	struct timeval *tv;
+	struct timezone *tz;
+};
+
+STARTUP(void sys_gettimeofday())
+{
+	struct tod *ap = (struct tod *)P.p_arg;
+	int error = 0;
+	
+	if (ap->tv) {
+		struct timeval tv;
+		int x = splclock();
+		struct timespec ts = realtime;
+		splx(x);
+		tv.tv_sec = ts.tv_sec;
+		tv.tv_usec = ts.tv_nsec / 1000;
+		error = copyout(ap->tv, &tv, sizeof(tv));
+		if (error) P.p_error = error;
+	}
+	
+#if 0
+	if (ap->tz) {
+		P.p_error = copyout(ap->tz, &tz, sizeof(tz));
+	}
+#endif
+}
+
+STARTUP(void sys_settimeofday())
+{
+	/* TODO: write this */
 }

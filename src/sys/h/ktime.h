@@ -11,20 +11,9 @@
  * an integral number of nanoseconds (3,906,250 nanoseconds). It can also be
  * converted to struct timeval easily.
  */
-#if 0
-struct ktimeval {
-	long tv_sec; /* seconds */
-	int tv_tick; /* ticks */
-};
 
-struct kitimerval {
-	struct ktimeval it_interval;
-	struct ktimeval it_value;
-};
-#endif
-
-void timespecadd(struct timespec *t1, struct timespec *t2);
-void timespecsub(struct timespec *t1, struct timespec *t2);
+void timespecadd(struct timespec *a, struct timespec *b, struct timespec *res);
+void timespecsub(struct timespec *a, struct timespec *b, struct timespec *res);
 
 #define timespecclear(tvp) (tvp)->tv_sec = (tvp)->tv_nsec = 0
 #define timespecisset(tvp) ((tvp)->tv_sec || (tvp)->tv_nsec)

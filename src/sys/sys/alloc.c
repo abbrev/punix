@@ -189,7 +189,7 @@ STARTUP(void update())
 				continue;
 			
 			fp->fs_fmod = 0;
-			fp->fs_time = walltime.tv_sec;
+			fp->fs_time = realtime.tv_sec;
 			memcpy(bp->b_addr, fp, BSIZE);
 			bwrite(bp);
 		}
@@ -198,7 +198,7 @@ STARTUP(void update())
 		if ((ip->i_flag & ILOCKED) == 0 && ip->i_count != 0) {
 			ip->i_flag |= ILOCKED;
 			++ip->i_count;
-			iupdat(ip, &walltime.tv_sec, &walltime.tv_sec);
+			iupdat(ip, &realtime.tv_sec, &realtime.tv_sec);
 			iput(ip);
 		}
 	

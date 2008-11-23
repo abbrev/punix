@@ -6,13 +6,12 @@
  */
 
 #define	NBUF	29		/* size of buffer cache */
+#define	MINBUF	8		/* minimum number of buffers */
 #define	NINODE	200		/* number of in core inodes */
 #define	NFILE	175		/* number of in core file structures */
 #define	NMOUNT	8		/* number of mountable file systems */
 #define	MAXMEM	(64*32)		/* max core per process - first # is Kw */
 #define	MAXUPRC	25		/* max processes per user */
-#define	SSIZE	20		/* initial stack size (*64 bytes) */
-#define	SINCR	20		/* increment of stack (*64 bytes) */
 #define	NOFILE	32		/* max open files per process */
 #define	CANBSIZ	256		/* max size of typewriter line */
 #define	CMAPSIZ	50		/* size of core allocation area */
@@ -20,21 +19,18 @@
 #define	NCALL	20		/* max simultaneous time callouts */
 #define	NPROC	64		/* max number of processes */
 #define	NGROUPS	16		/* max number of groups */
-#define	NOGROUP	(-1)		
+#define	NOGROUP	((gid_t)-1)		
 #define	NTEXT	40		/* max number of pure texts */
 #define	NCLIST	100		/* max total clist size */
-#define	HZ	256		/* XXX: Ticks/second of the clock */
-#define TICK	(1000000000L / HZ) /* nanoseconds/tick of the clock */
-#define HEAPSIZE 1024
+#define	HZ	256		/* clock rate (ticks/second) */
+#define	SECOND	1000000000L
+#define TICK	(SECOND / HZ) /* nanoseconds/tick of the clock */
 #define FLASH_CACHE_SIZE 32
+#define HEAPSIZE 512
 #define HEAPBLOCKSIZE 16
 
-#define	TIMEZONE (5*60)		/* Minutes westward from Greenwich */
-#define	DSTFLAG	1		/* Daylight Saving Time applies in this locality */
-#define	MSGBUFS	128		/* Characters saved from error messages */
-#if 0 /* use MAX_ARGS */
-#define	NCARGS	5120		/* # characters in exec arglist */
-#endif
+#define	TIMEZONE (7*60)		/* Minutes westward from Greenwich */
+#define	DSTFLAG	0		/* Daylight Saving Time applies in this locality */
 
 #define MAXSYMLINKS 6
 #define MAXPATHLEN 256
@@ -47,8 +43,8 @@
 #define CPUPRIWEIGHT  1
 #define NICEPRIWEIGHT ((CPUMAX - QUANTUM * CPUSCALE) / 20)
 
-#define KEY_REPEAT_START_DELAY  (HZ / 2)
-#define KEY_REPEAT_DELAY        (HZ / 20)
+#define KEY_REPEAT_DELAY	500 /* milliseconds to delay before repeating */
+#define KEY_REPEAT_RATE		20  /* repeats per second */
 
 /*
  * priorities

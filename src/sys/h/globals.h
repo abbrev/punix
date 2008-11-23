@@ -11,8 +11,8 @@
 #include "glyph.h"
 
 struct globals {
+	struct timespec _realtime; /* must be first! see entry.s (Int_3) */
 	char exec_ram[60];
-	struct timespec _walltime;
 	int _runrun;
 	int _istick;
 	int _ioport;
@@ -50,6 +50,7 @@ struct globals {
 	struct callout callout[NCALL];
 	
 	struct buf avbuflist; /* list of buf */
+	int numbufs;
 	/* struct buf buf[NBUF]; */
 	
 	struct flashblock *currentfblock;
@@ -121,7 +122,7 @@ extern int updlock;
 # else
 
 #define G (*(struct globals *)0x5c00)
-#define walltime G._walltime
+#define realtime G._realtime
 #define runrun   G._runrun
 #define istick   G._istick
 #define ioport   G._ioport
