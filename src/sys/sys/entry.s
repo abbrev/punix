@@ -98,7 +98,9 @@ ADDRESS_ERROR:
 	.long 0xbeef1004
 ILLEGAL_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),-(%sp)
 	bsr	illegal_instr
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
@@ -106,21 +108,34 @@ ILLEGAL_INSTR:
 | send signal SIGFPE
 ZERO_DIVIDE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),%a0
+	
+	| get the address of the divs/divu instruction
+	tst	-(%a0)
+	bne	0f
+	subq.l	#2,%a0	| immediate 16-bit operand
+0:	pea.l	(%a0)
+	
 	bsr	zero_divide
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
 	.long 0xbeef1006
 CHK_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),-(%sp)
 	bsr	chk_instr
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
 	.long 0xbeef1007
 I_TRAPV:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),-(%sp)
 	bsr	i_trapv
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
@@ -128,14 +143,18 @@ I_TRAPV:
 | send signal SIGILL
 PRIVILEGE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),-(%sp)
 	bsr	privilege
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
 	.long 0xbeef1009
 TRACE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move.l	5*4+2(%sp),-(%sp)
 	bsr	trace
+	addq.l	#4,%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
@@ -180,12 +199,13 @@ oldInt_3:	rte				| Clock for int 3 ?
 G = 0x5c00
 
 Int_3:
-.if 1
-	addq.l	#1,G+0	| realtime.tv_sec++
-	clr.l	G+4	| realtime.tv_nsec = 0
+.if 0
+	addq.l	#1,G+0	| walltime.tv_sec++
+	|clr.l	G+4	| walltime.tv_nsec = 0
+	move.l	#-1000000000/256,G+4	| walltime.tv_nsec = -TICK
 .else
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	jbsr	updrealtime
+	jbsr	updwalltime
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 .endif
 	rte
