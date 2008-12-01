@@ -11,7 +11,9 @@
 #include "glyph.h"
 
 struct globals {
-	struct timespec _realtime; /* must be first! see entry.s (Int_3) */
+	struct timespec _walltime; /* must be first! see entry.s (Int_3) */
+	struct timespec _realtime;
+	long _timeadj;
 	char exec_ram[60];
 	int _runrun;
 	int _istick;
@@ -25,6 +27,7 @@ struct globals {
 	struct proc *proclist;
 	struct file file[NFILE];
 	unsigned long loadavg[3];
+	long _loadavtime;
 	
 	int audiosamp; /* current samples */
 	int audiosamples; /* number of samples within that byte */
@@ -122,12 +125,15 @@ extern int updlock;
 # else
 
 #define G (*(struct globals *)0x5c00)
+#define walltime G._walltime
 #define realtime G._realtime
+#define timeadj  G._timeadj
 #define runrun   G._runrun
 #define istick   G._istick
 #define ioport   G._ioport
 #define cputime  G._cputime
 #define updlock  G._updlock
 #define current  G._current
+#define loadavtime G._loadavtime
 
 # endif
