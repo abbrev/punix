@@ -52,5 +52,5 @@ STARTUP(void loadav(int numrun))
 	unsigned long n = (unsigned long)numrun << F_SHIFT;
 
 	for (i = 0; i < 3; ++i)
-		G.loadavg[i] = cexp[i] * G.loadavg[i] + (F_ONE - cexp[i]) * n;
+		G.loadavg[i] = (cexp[i] * G.loadavg[i] + (F_ONE - cexp[i]) * n) >> F_SHIFT;
 }
