@@ -62,12 +62,12 @@ STARTUP(int CURSIG(struct proc *p))
 
 STARTUP(int cansignal(struct proc *p, int signum))
 {
-	if (P.p_euid == 0               /* c effective root */
-	    || P.p_ruid == p->p_ruid    /* c real = t real */
-	    || P.p_euid == p->p_ruid    /* c effective = t real */
-	    || P.p_ruid == p->p_euid    /* c real = t effective */
-	    || P.p_euid == p->p_euid    /* c effective = t effective */
-	    || (signum == SIGCONT && inferior(p)))
+	if (P.p_euid == 0 ||           /* c effective root */
+	    P.p_ruid == p->p_ruid ||   /* c real = t real */
+	    P.p_euid == p->p_ruid ||   /* c effective = t real */
+	    P.p_ruid == p->p_euid ||   /* c real = t effective */
+	    P.p_euid == p->p_euid ||   /* c effective = t effective */
+	    (signum == SIGCONT && inferior(p)))
 		return 1;
 	return 0;
 }
@@ -217,7 +217,7 @@ STARTUP(int issignal(struct proc *p))
 			mask &= ~STOPSIGMASK;
 		if (mask == 0)
 			return 0; /* no signals to send */
-		//sig = ffsl(mask);
+		sig = ffsl(mask);
 		mask = sigmask(sig);
 		prop = sigprop[sig];
 		
