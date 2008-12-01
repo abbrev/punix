@@ -67,6 +67,26 @@ STARTUP(void timespecsub(struct timespec *a, struct timespec *b, struct timespec
 	}
 }
 
+STARTUP(void timeradd(struct timeval *a, struct timeval *b, struct timeval *res))
+{
+	res->tv_sec = a->tv_sec + b->tv_sec;
+	res->tv_usec = a->tv_usec + b->tv_usec;
+	if (res->tv_usec >= 1000000L) {
+		res->tv_usec -= 1000000L;
+		++res->tv_sec;
+	}
+}
+
+STARTUP(void timersub(struct timeval *a, struct timeval *b, struct timeval *res))
+{
+	res->tv_sec = a->tv_sec - b->tv_sec;
+	res->tv_usec = a->tv_usec - b->tv_usec;
+	if (res->tv_usec < 0) {
+		res->tv_usec += 1000000L;
+		--res->tv_sec;
+	}
+}
+
 /* internal getitimer, used by sys_getitimer and sys_setitimer */
 STARTUP(static void getit(int which, struct itimerval *value))
 {
@@ -246,7 +266,6 @@ struct tod {
 STARTUP(void sys_gettimeofday())
 {
 	struct tod *ap = (struct tod *)P.p_arg;
-	int error = 0;
 	
 	if (ap->tv) {
 		struct timeval tv;
@@ -255,8 +274,8 @@ STARTUP(void sys_gettimeofday())
 		splx(x);
 		tv.tv_sec = ts.tv_sec;
 		tv.tv_usec = ts.tv_nsec / 1000;
-		error = copyout(ap->tv, &tv, sizeof(tv));
-		if (error) P.p_error = error;
+		if (copyout(ap->tv, &tv, sizeof(tv)))
+			P.p_error = EFAULT;
 	}
 	
 #if 0
@@ -268,5 +287,29 @@ STARTUP(void sys_gettimeofday())
 
 STARTUP(void sys_settimeofday())
 {
-	/* TODO: write this */
+	struct tod *ap = (struct tod *)P.p_arg;
+	struct timeval tv;
+	struct timespec ts;
+	long nsec;
+	
+	if (!suser())
+		return;
+	
+	if (copyin(&tv, ap->tv, sizeof(tv))) {
+		P.p_error = EFAULT;
+		return;
+	}
+	
+	/* This math is probably not correct, so somebody needs to fix it! */
+	int x = splclock();
+	ts.tv_sec = tv.tv_sec + realtime.tv_sec - walltime.tv_sec;
+	ts.tv_nsec = (tv.tv_usec * 1000) + realtime.tv_nsec - walltime.tv_nsec;
+	if (ts.tv_nsec < 0) {
+		--ts.tv_sec;
+		ts.tv_nsec += SECOND;
+	}
+	timespecadd(&ts, &walltime, &walltime);
+	realtime.tv_sec = tv.tv_sec;
+	realtime.tv_nsec = tv.tv_usec * 1000;
+	splx(x);
 }
