@@ -53,7 +53,6 @@ STARTUP(void kmain())
 	kputs(OS_NAME " build " BUILD "\n");
 #else
 	kputs(OS_NAME " v" OS_VERSION "\n");
-#endif
 	kputs(
 	 "Copyright 2005-2008 Christopher Williams <abbrev@gmail.com>\n"
 	 "Some portions copyright 2003, 2005 PpHd\n"
@@ -62,8 +61,9 @@ STARTUP(void kmain())
 	 "You may redistribute copies of this program\n"
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
-	if (realtime.tv_sec == 0) {
-		realtime.tv_sec = REALTIME;
-		realtime.tv_nsec = 0;
+#endif
+	if (0 && walltime.tv_sec == 0) {
+		walltime.tv_sec = REALTIME;
+		walltime.tv_nsec = 0;
 	}
 }
