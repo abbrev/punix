@@ -46,6 +46,7 @@ struct trapframe {
 int spl0(void), spl1(void), spl2(void), spl3(void);
 int spl4(void), spl5(void), spl6(void), spl7(void);
 int splx(int);
+int splclock(void);
 void stop(struct proc *);
 
 void panic(const char *s);

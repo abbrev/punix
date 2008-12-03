@@ -150,6 +150,7 @@ struct proc {
 	size_t p_datasize;
 	
 	struct rusage p_rusage;
+	struct rusage p_crusage; /* children */
 	struct rlimit p_rlimit[7]; /* CONSTANT */
 	
 	/* id */
