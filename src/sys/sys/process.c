@@ -47,8 +47,8 @@ STARTUP(void setrun(struct proc *p))
 STARTUP(int setpri(struct proc *p))
 {
 	int pri;
-	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT 
-	                           + p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
+	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT +
+	                           p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
 	if (pri > 255)
 		pri = 255;
 	if (pri < P.p_pri)
