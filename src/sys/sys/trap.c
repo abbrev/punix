@@ -31,6 +31,7 @@ STARTUP(void illegal_instr())
 
 STARTUP(void zero_divide())
 {
+	psignal(&P, SIGFPE);
 }
 
 STARTUP(void chk_instr())
@@ -43,35 +44,96 @@ STARTUP(void i_trapv())
 
 STARTUP(void privilege())
 {
+	psignal(&P, SIGILL);
 }
 
 STARTUP(void trace())
 {
 }
 
+#define BUMPTIME(tv, usec) do { \
+	register struct timeval *tp = (tv); \
+	tp->tv_usec += (usec); \
+	if (tp->tv_usec >= 1000000) { \
+		tp->tv_usec -= 1000000; \
+		tp->tv_sec++; \
+	} \
+} while (0)
+
+/* SKEW is in microseconds per tick */
+/* 2560 us = 2.56 ms */
+#define SKEW (2560 / HZ)
+
 STARTUP(void hardclock(unsigned short ps))
 {
 	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
 	
-	spl5();
+	splclock();
+	
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
 	++*(long *)(0x4c00+0xf00-8);
 	
-	realtime.tv_nsec += TICK;
-	if (realtime.tv_nsec >= SECOND)
-		realtime.tv_nsec -= TICK - TICK / HZ;
+#if 0
+	if (timedelta) {
+		long delta;
+		if (timedelta < -SKEW) {
+			delta = SKEW;
+			*(long *)(0x4c00+0xf00-20) = 0x888888ff;
+		} else if (SKEW < timedelta) {
+			delta = -SKEW;
+			*(long *)(0x4c00+0xf00-20) = 0xff111111;
+		} else {
+			delta = timedelta;
+			*(long *)(0x4c00+0xf00-20) = 0xffffffff;
+		}
+		realtime.tv_nsec += delta * 1000;
+		walltime.tv_nsec += delta * 1000;
+		timedelta -= delta;
+		
+		if (walltime.tv_nsec >= SECOND) {
+			walltime.tv_nsec -= SECOND;
+			++walltime.tv_sec;
+		} else if (walltime.tv_nsec < 0) {
+			walltime.tv_nsec += SECOND;
+			--walltime.tv_sec;
+		}
+	} else
+		*(long *)(0x4c00+0xf00-20) = 0xffffffff;
+	*(long *)(0x4c00+0xf00-20-30) = walltime.tv_nsec;
+	*(long *)(0x4c00+0xf00-20-30-30) = timedelta;
+#endif
+	if (realtime.tv_nsec >= SECOND) {
+		realtime.tv_nsec -= SECOND;
+		++realtime.tv_sec;
+	}
 	
-	if ((realtime.tv_sec % 5) == 0 && realtime.tv_nsec < TICK) {
+	G.cumulrunning += G.numrunning;
+	++loadavtime;
+	
+	if (loadavtime >= HZ * 5) {
 		struct proc *p;
 		int n = 0;
 		for EACHPROC(p)
 			if (p->p_status == P_RUNNING) ++n;
-		loadav(n);
+		/* sanity check */
+		if (G.numrunning != n) {
+			kprintf("warning: numrunning=%d n=%d\n",
+				G.numrunning, n);
+			G.numrunning = n;
+		}
+		loadav((unsigned long)G.cumulrunning * F_ONE / loadavtime);
 		
 		batt_check();
+		loadavtime -= HZ * 5;
+		G.cumulrunning = 0;
+	}
+	
+	cputime += 2; /* XXX: cputime is in 15.1 fixed point */
+	if (cputime >= 2 * QUANTUM) {
+		++runrun;
 	}
 	
 	/* do call-outs */
@@ -83,6 +145,8 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	if (!USERMODE(ps))
 		goto out;
+	
+	spl0();
 	
 	if (G.callout[0].c_time <= 0) {
 		int t = 0;
@@ -97,27 +161,23 @@ STARTUP(void hardclock(unsigned short ps))
 			*c1 = *c2++;
 		while (c1++->c_func);
 	}
+	splclock();
 	
 out:
-	cputime += 2; /* XXX: cputime is in 15.1 fixed point */
-	if (cputime >= 2 * QUANTUM) {
-		++runrun;
-	}
+	scankb();
 	
-	if (&P) {
+	if (current) {
 		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
-				psignal(&P, SIGPROF);
+				psignal(current, SIGPROF);
 	}
 	
 	if (USERMODE(ps)) {
 		int sig;
-#if 0
-		++P.p_ru.ru_utime;
-#endif
+		BUMPTIME(&P.p_rusage.ru_utime, TICK / 1000);
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
-				psignal(&P, SIGVTALRM);
+			psignal(current, SIGVTALRM);
 		
 		/* preempt a running user process */
 		if (runrun) {
@@ -128,26 +188,30 @@ out:
 		while ((sig = CURSIG(&P)))
 			postsig(sig);
 	} else {
-#if 0
-		if (&P)
-			++P.p_ru.ru_stime;
-#endif
+		BUMPTIME(&P.p_rusage.ru_stime, TICK / 1000);
 	}
 }
 
-#if 0
+#if 1
 /*
  * RTC interrupt handler. This runs even when the calc is off, when hardclock()
  * does not run.
  */
-STARTUP(void updrealtime())
+STARTUP(void updwalltime())
 {
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
 	++*(long *)(0x4c00+0xf00-16);
 	
-	++realtime.tv_sec;
-	realtime.tv_nsec = 0;
+	++walltime.tv_sec;
+	if (walltime.tv_sec < realtime.tv_sec ||
+	    (walltime.tv_sec == realtime.tv_sec &&
+	     walltime.tv_nsec < realtime.tv_nsec)) {
+		++*(short *)(0x4c00+0xf00-30);
+	}
+	*(long *)(0x4c00+0xf00-34) = realtime.tv_nsec;
+	realtime.tv_sec = walltime.tv_sec;
+	realtime.tv_nsec = walltime.tv_nsec;
 }
 #endif

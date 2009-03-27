@@ -13,7 +13,7 @@
 struct globals {
 	struct timespec _walltime; /* must be first! see entry.s (Int_3) */
 	struct timespec _realtime;
-	long _timeadj;
+	long _timedelta;
 	char exec_ram[60];
 	int _runrun;
 	int _istick;
@@ -25,6 +25,8 @@ struct globals {
 	/* struct proc *freeproc; */
 	struct proc *initproc;
 	struct proc *proclist;
+	int numrunning;
+	long cumulrunning;
 	struct file file[NFILE];
 	unsigned long loadavg[3];
 	long _loadavtime;
@@ -104,6 +106,7 @@ struct globals {
 		unsigned char key_repeat_start_delay;
 		unsigned char key_repeat_counter;
 		short key_previous;
+		int lock;
 	} vt;
 	
 	int batt_level;
@@ -127,7 +130,7 @@ extern int updlock;
 #define G (*(struct globals *)0x5c00)
 #define walltime G._walltime
 #define realtime G._realtime
-#define timeadj  G._timeadj
+#define timedelta  G._timedelta
 #define runrun   G._runrun
 #define istick   G._istick
 #define ioport   G._ioport

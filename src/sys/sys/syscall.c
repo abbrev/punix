@@ -47,16 +47,16 @@
  */
 /* callno is the system call number
  * usp is for user arguments to this syscall
- * sr is for setting/clearing carry to indicate error/success (and for vfork)
+ * sfp is for setting/clearing carry to indicate error/success (and for vfork)
  */
-STARTUP(uint32_t syscall(unsigned callno, void **usp, unsigned short *sr))
+STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 {
 	extern const int nsysent;
 	struct sysent *callp;
 	uint32_t retval = 0;
 	
 	/* for vfork(2) and execve(2) */
-	P.p_tfp = (struct trapframe *)sr;
+	P.p_sfp = sfp;
 	P.p_ustack = usp;
 	
 	/* get the system call entry */
@@ -90,11 +90,11 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, unsigned short *sr))
 	
 	if (P.p_error) {
 		/* return the error */
-		*sr |= PS_C; /* set carry */
+		sfp->sr |= PS_C; /* set carry */
 		retval = P.p_error;
 	} else {
 		/* no error */
-		*sr &= ~PS_C; /* clear carry */
+		sfp->sr &= ~PS_C; /* clear carry */
 		retval = P.p_retval;
 	}
 	

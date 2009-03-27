@@ -43,6 +43,22 @@
 #define CPUPRIWEIGHT  1
 #define NICEPRIWEIGHT ((CPUMAX - QUANTUM * CPUSCALE) / 20)
 
+/*
+ * Fixed-point values for load averages (see loadav.c).
+ *
+ * The value of F_SHIFT affects the range of values. The maximum value is
+ * 2^(32-2*F_SHIFT) - 1. For example, when F_SHIFT is 13, the maximum is
+ * 2^(32-2*13) - 1 = 2^6 - 1 = 63. On this system (TI-92+ with 256K RAM), a load
+ * average limit of 63 is probably acceptable, since at this maximum load, each
+ * process would have to be only 3K stack + data + text (about 1K is for the
+ * proc structure itself) on average.
+ */
+#define F_SHIFT 13
+#define F_ONE (1 << F_SHIFT)
+#define EXP_1  7537 /* exp(-5/60) */
+#define EXP_5  8057 /* exp(-5/300) */
+#define EXP_15 8147 /* exp(-5/900) */
+
 #define KEY_REPEAT_DELAY	500 /* milliseconds to delay before repeating */
 #define KEY_REPEAT_RATE		20  /* repeats per second */
 

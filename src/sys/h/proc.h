@@ -136,7 +136,7 @@ struct proc {
 	int p_fpsaved;	/* floating-point state is saved? */
 	/* ??? p_fps; -- floating-point state */
 	
-	struct trapframe *p_tfp;	/* trap frame pointer for vfork(2) */
+	struct syscallframe *p_sfp;	/* syscall frame pointer for vfork(2) */
 	
 	/* segments of user memory (note: the heap is global) */
 	void *p_ustack;

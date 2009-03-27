@@ -19,6 +19,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#define _BSD_SOURCE
+
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
@@ -73,12 +75,10 @@ STARTUP(struct tm *gmtime_r(const time_t *tp, struct tm *tmp))
 {
 	int sec, min, hour, day;
 	time_t t = *tp;
-	sec = t % 60;
-	t /= 60;
-	min = t % 60;
-	t /= 60;
-	hour = t % 24;
-	t /= 24;
+	sec = t % 60;  t /= 60;
+	min = t % 60;  t /= 60;
+	hour = t % 24; t /= 24;
+	day = t;
 	tmp->tm_sec = sec;
 	tmp->tm_min = min;
 	tmp->tm_hour = hour;
@@ -284,7 +284,7 @@ void sys_execve()
 	
 	/* go to the new user context */
 	P.p_ssav->usp = ustack;
-	P.p_tfp->pc = text;
+	P.p_sfp->pc = text;
 	longjmp(P.p_ssav, 1);
 	
 	return;
@@ -390,7 +390,7 @@ void sys_vfork()
 	struct proc *cp = NULL;
 	pid_t pid;
 	void *sp = NULL;
-	void setup_env(jmp_buf env, struct trapframe *tfp, long *sp);
+	void setup_env(jmp_buf env, struct syscallframe *sfp, long *sp);
 	
 	goto nomem; /* XXX: remove this once vfork is completely written */
 	
@@ -415,11 +415,11 @@ void sys_vfork()
 	
 	cp->p_stack = sp;
 	cp->p_stacksize = 0; /* XXX */
-	cp->p_status = P_RUNNING;
+	cp->p_status = P_RUNNING; /* FIXME: use setrun() instead */
 	cp->p_flag |= P_VFORK;
 	
 	/* use the new kernel stack but the same user stack */
-	setup_env(cp->p_ssav, P.p_tfp, sp);
+	setup_env(cp->p_ssav, P.p_sfp, sp);
 	
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
@@ -560,21 +560,20 @@ void sys_getppid()
 
 static void donice(struct proc *p, int n)
 {
-
-        if (P.p_euid != p->p_euid && P.p_ruid != p->p_euid &&
-	    P.p_euid != 0 && P.p_ruid != 0) {
-                P.p_error = EPERM;
-                return;
-        }
-        if (n > PRIO_MAX)
-                n = PRIO_MAX;
-        if (n < PRIO_MIN)
-                n = PRIO_MIN;
-        if (n < p->p_nice && P.p_euid != 0) {
-                P.p_error = EACCES;
-                return;
-        }
-        p->p_nice = n;
+	if (P.p_euid != 0 && P.p_ruid != 0 &&
+	   P.p_euid != p->p_euid && P.p_ruid != p->p_euid) {
+		P.p_error = EPERM;
+		return;
+	}
+	if (n > PRIO_MAX)
+		n = PRIO_MAX;
+	if (n < PRIO_MIN)
+		n = PRIO_MIN;
+	if (n < p->p_nice && P.p_euid != 0) {
+		P.p_error = EACCES;
+		return;
+	}
+	p->p_nice = n;
 }
 
 void sys_nice()

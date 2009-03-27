@@ -25,7 +25,8 @@ struct devmm_t {
 #define MAJOR(d) (((struct devmm_t *)&(d))->d_major)
 #define MINOR(d) (((struct devmm_t *)&(d))->d_minor)
 
-struct trapframe {
+struct syscallframe {
+	void *regs[10];
 	unsigned short sr;
 	void *pc;
 };
@@ -39,6 +40,15 @@ struct trapframe {
 #define BLOCKSHIFT 7
 #define BLOCKSIZE (1<<BLOCKSHIFT)
 #define BLOCKMASK (~BLOCKSIZE)
+
+#define RORB(n, b) (((n) >> (b)) | ((n) << (8 - (b))))
+#define RORW(n, b) (((n) >> (b)) | ((n) << (16 - (b))))
+#define RORL(n, b) (((n) >> (b)) | ((n) << (32 - (b))))
+#define ROR RORW
+#define ROLB(n, b) (((n) << (b)) | ((n) >> (8 - (b))))
+#define ROLW(n, b) (((n) << (b)) | ((n) >> (16 - (b))))
+#define ROLL(n, b) (((n) << (b)) | ((n) >> (32 - (b))))
+#define ROL ROLW
 
 /* useful macro for iterating through each process */
 #define EACHPROC(p)	((p) = G.proclist; (p); (p) = (p)->p_next)
