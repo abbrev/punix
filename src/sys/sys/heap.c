@@ -119,7 +119,7 @@ void meminit()
 	for (i = 0; i < numvars && 100 * var[i].size / totalsize >= 1; ++i)
 		totalsize += var[i].size;
 	kprintf("totalsize = %ld\n", totalsize);
-	for (i = 0; i < numvars; ++i)
+	for (i = 0; i < numvars && 100 * var[i].size / totalsize >= 1; ++i)
 		kprintf("%2ld.%02ld%% %-13.13s", 100 * var[i].size / totalsize, (10000 * var[i].size / totalsize) % 100, var[i].name);
 	kputchar('\n');
 	kprintf("%5ld largest unallocated chunk size\n", largest_unallocated_chunk_size());
