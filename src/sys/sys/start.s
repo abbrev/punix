@@ -260,7 +260,7 @@ userstart:
 	move.l	%a1,-(%sp)	| char **env
 	move.l	%a0,-(%sp)	| char **argv
 	move	%d0,-(%sp)	| int argc
-	bsr	usermain	| usermain(argc, argv, env)
+	jbsr	usermain	| usermain(argc, argv, env)
 	
 	move	%d0,-(%sp)
 	bsr	_exit

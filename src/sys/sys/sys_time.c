@@ -1,5 +1,6 @@
 #define _BSD_SOURCE
 #include <sys/time.h>
+#include <sys/times.h>
 
 #include <errno.h>
 #include <utime.h>
@@ -289,8 +290,8 @@ STARTUP(void sys_settimeofday())
 {
 	struct tod *ap = (struct tod *)P.p_arg;
 	struct timeval tv;
-	struct timespec ts;
-	long nsec;
+	struct timespec newtime, difftime;
+	int x;
 	
 	if (!suser())
 		return;
@@ -300,16 +301,43 @@ STARTUP(void sys_settimeofday())
 		return;
 	}
 	
-	/* This math is probably not correct, so somebody needs to fix it! */
-	int x = splclock();
-	ts.tv_sec = tv.tv_sec + realtime.tv_sec - walltime.tv_sec;
-	ts.tv_nsec = (tv.tv_usec * 1000) + realtime.tv_nsec - walltime.tv_nsec;
-	if (ts.tv_nsec < 0) {
-		--ts.tv_sec;
-		ts.tv_nsec += SECOND;
+	/* microseconds must be in the range [0,1000000) */
+	if (tv.tv_usec < 0 || 1000000L <= tv.tv_usec) {
+		P.p_error = EINVAL;
+		return;
 	}
-	timespecadd(&ts, &walltime, &walltime);
-	realtime.tv_sec = tv.tv_sec;
-	realtime.tv_nsec = tv.tv_usec * 1000;
+	
+	/* convert struct timeval to struct timespec */
+	newtime.tv_sec = tv.tv_sec;
+	newtime.tv_nsec = tv.tv_usec * 1000;
+	
+	x = splclock();
+	
+	/* find the difference between newtime and realtime
+	 * and add that difference to walltime */
+	timespecsub(&newtime, &realtime, &difftime);
+	timespecadd(&newtime, &walltime, &walltime);
+	
+	/* finally, set realtime to the new time */
+	realtime = newtime;
+	
 	splx(x);
 }
+
+
+STARTUP(void sys_time())
+{
+	struct a {
+		time_t *tp;
+	} *ap = (struct a *)P.p_arg;
+	time_t sec;
+	
+	splclock();
+	sec = realtime.tv_sec;
+	spl0();
+	
+	if (ap->tp)
+		P.p_error = copyout(ap->tp, &sec, sizeof(sec));
+	P.p_retval = sec;
+}
+

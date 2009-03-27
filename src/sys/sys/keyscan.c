@@ -379,23 +379,32 @@ end:
 
 void scankb()
 {
-	short rowmask = 1, colmask, key;
+	short rowmask = 1, colmask = 1, key;
 	unsigned char *currow = &G.vt.key_array[0];
-	int row, col;
+	int row, col = 0;
 	short k;
 	unsigned char kdiff;
+	int kp;
+	KBROWMASK = 0;
+	_WaitKeyboard();
+	k = KBCOLMASK;
+	kp = ~k; /* is a key pressed? */
 	for (row = KEY_NBR_ROW - 1; row >= 0; --row, rowmask <<= 1, ++currow) {
-		KBROWMASK = ~rowmask;
-		_WaitKeyboard();
-		k = KBCOLMASK;
+		if (kp) {
+			KBROWMASK = ~rowmask;
+			_WaitKeyboard();
+			k = KBCOLMASK;
+		}
 		kdiff = k ^ *currow;
 		*currow = k;
 		if (!kdiff) continue;
 		
-		while (kdiff) {
-			col = ffs(kdiff) - 1;
-			colmask = 1 << col;
-			kdiff &= ~colmask;
+		do {
+			int c = ffs(kdiff) - 1;
+			col += c;
+			colmask <<= c;
+			kdiff >>= c;
+			kdiff &= ~1;
 			key = Translate_Key_Table[KEY_NBR_ROW-row-1][col];
 			if (!(*currow & colmask)) {
 				/* key was pressed */
@@ -416,7 +425,7 @@ void scankb()
 					G.vt.key_mod &= ~key;
 				}
 			}
-		}
+		} while (kdiff);
 		goto end;
 	}
 	/* no key was pressed or released, so repeat the previous key */

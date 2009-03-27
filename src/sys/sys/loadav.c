@@ -51,4 +51,5 @@ STARTUP(void loadav(long numrun))
 		G.loadavg[i] = ((cexp[i] * G.loadavg[i]
 		                 + (F_ONE - cexp[i]) * numrun)
 		                 + (F_ONE / 2)) >> F_SHIFT;
+	}
 }

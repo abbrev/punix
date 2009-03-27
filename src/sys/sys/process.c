@@ -19,22 +19,36 @@
 #include "process.h"
 
 /* FIXME: XXX */
-STARTUP(void cpuidle(void)) { }
+STARTUP(void cpuidle(void))
+{
+	int x = spl0();
+	nop();
+	splx(x);
+}
 
+/* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
 {
 	void *w;
 	
+	if (p->p_status == P_RUNNING) return;
 	if (p->p_status == P_FREE || p->p_status == P_ZOMBIE)
 		panic("Running a dead proc");
 	
-	if ((w = p->p_waitfor)) {
-		wakeup(w);
-		return;
+	if (p->p_status == P_SLEEPING && (w = p->p_waitfor)) {
+		p->p_waitfor = 0;
+		setpri(p);
 	}
 	p->p_status = P_RUNNING;
+	++G.numrunning;
 	if (p->p_pri < P.p_pri)
 		++runrun;
+}
+
+void setsleep(struct proc *p)
+{
+	if (p->p_status == P_RUNNING) --G.numrunning;
+	p->p_status = P_SLEEPING;
 }
 
 /*
@@ -257,7 +271,7 @@ STARTUP(int tsleep(void *event, int basepri, long timo))
 		if ((sig = CURSIG(p))) {
 			if (p->p_waitfor)
 				unsleep(p);
-			p->p_status = P_RUNNING;
+			p->p_status = P_RUNNING; /* FIXME: use setrun(p); */
 			goto resume;
 		}
 		if (p->p_waitfor == 0) {
@@ -266,7 +280,8 @@ STARTUP(int tsleep(void *event, int basepri, long timo))
 		}
 	} else
 		sig = 0;
-	p->p_status = P_SLEEPING;
+	/* p->p_status = P_SLEEPING; */
+	setsleep(p);
 	++P.p_rusage.ru_nvcsw;
 	swtch();
 resume:
@@ -310,8 +325,7 @@ STARTUP(void wakeup(void *event))
 	
 	for EACHPROC(p) {
 		if (p->p_status == P_SLEEPING && p->p_waitfor == event) {
-			p->p_status = P_RUNNING;
-			setpri(p);
+			setrun(p);
 		}
 	}
 }
@@ -420,6 +434,7 @@ STARTUP(void procinit())
 	
 	current = palloc();
 	assert(current);
+	current->p_next = NULL;
 	G.initproc = current;
 	
 	for (i = 0; i < NOFILE; ++i)
@@ -438,7 +453,8 @@ STARTUP(void procinit())
 	for (i = 0; i < 7; ++i)
 		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
 	
-	setpri(&P);
+	setpri(current);
 	cputime = 0;
-	setrun(&P);
+	G.numrunning = 1;
+	G.cumulrunning = 0;
 }

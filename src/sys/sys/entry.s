@@ -78,22 +78,19 @@
 buserr:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	bus_error
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1002
 SPURIOUS:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	spurious
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1003
 ADDRESS_ERROR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	address_error
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1004
 ILLEGAL_INSTR:
@@ -101,8 +98,7 @@ ILLEGAL_INSTR:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	illegal_instr
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1005
 | send signal SIGFPE
@@ -118,8 +114,7 @@ ZERO_DIVIDE:
 	
 	bsr	zero_divide
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1006
 CHK_INSTR:
@@ -127,8 +122,7 @@ CHK_INSTR:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	chk_instr
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1007
 I_TRAPV:
@@ -136,8 +130,7 @@ I_TRAPV:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	i_trapv
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1008
 | send signal SIGILL
@@ -146,8 +139,7 @@ PRIVILEGE:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	privilege
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef1009
 TRACE:
@@ -155,8 +147,7 @@ TRACE:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	trace
 	addq.l	#4,%sp
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra.s	trapret
 
 	.long 0xbeef100a
 | I don't know (send signal SIGILL?)
@@ -173,13 +164,25 @@ LINE_1111:
 Int_1:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	
-	jbsr	scankb
-
 	move	5*4(%sp),-(%sp)		| old ps
 	bsr	hardclock
 	addq.l	#2,%sp
+
+trapret:
+	move    5*4(%sp),%d0
+	and     #0x2000,%d0
+	bne.b   0f
 	
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
+	move.l  %usp,%a0
+	pea.l   (%a0)                   | void *usp
+	pea.l   (%sp)                   | void **usp
+	move.l  7*4+2(%sp),-(%sp)       | void *pc
+	| call signal handler here (prototype is dosig(void *pc, void **usp))
+	addq.l  #2*4,%sp
+	move.l  (%sp)+,%a0
+	move.l  %a0,%usp
+	
+0:	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
 /*
@@ -239,13 +242,13 @@ _WaitKeyboard:
 	dbf	%d0,.
 	rts
 
+	.long	0xdeadd00d
 | Assembly interface for C version; prototype of C version:
-| uint32_t syscall(unsigned callno, void **usp, short *sr)
+| uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp)
 _syscall:
 	movem.l	%d3-%d7/%a2-%a6,-(%sp)	| XXX: this is needed for vfork!
 	
-	lea.l	10*4(%sp),%a0
-	move.l	%a0,-(%sp)	| short *sr
+	pea.l	(%sp)		| struct syscallframe *sfp
 	
 	move.l	%usp,%a0
 	move.l	%a0,-(%sp)	| void **usp
@@ -264,22 +267,24 @@ _syscall:
 .equ jmp_buf.usp,11*4
 .equ jmp_buf.retaddr,12*4
 
-| struct trapframe
-.equ trapframe.sr,0
-.equ trapframe.pc,2
+| struct syscallframe
+.equ syscallframe.regs,0
+.equ syscallframe.sr,10*4
+.equ syscallframe.pc,10*4+2
 
-/* void setup_env(jmp_buf env, struct trapframe *tfp, long *sp);
- * Setup the execution environment "env" using the trapframe "tfp", the stack
- * pointer "sp", and the current user stack pointer. The trapframe is pushed
+/* void setup_env(jmp_buf env, struct syscallframe *sfp, long *sp);
+ * Setup the execution environment "env" using the syscallframe "sfp", the stack
+ * pointer "sp", and the current user stack pointer. The syscallframe is pushed
  * onto the stack (*sp), and the new stack pointer is saved in the environment.
+ * FIXME: make this routine work with the newer struct syscallframe
  * FIXME: make this routine cleaner and more elegant!
  */
 setup_env:
 	move.l	12(%sp),%a0		| %a0 = sp
-	move.l	8(%sp),%a1		| %a1 = tfp
+	move.l	8(%sp),%a1		| %a1 = sfp
 	
 	| setup the new trap frame
-	move.l	trapframe.pc(%a1),-(%a0)	| push pc
+	move.l	syscallframe.pc(%a1),-(%a0)	| push pc
 	clr	-(%a0)				| clear sr
 	
 	move.l	4(%sp),%a1		| %a1 = env

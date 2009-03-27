@@ -170,7 +170,8 @@ STARTUP(void psignal(struct proc *p, int sig))
 				p->p_sig &= ~mask;
 			if (action == SIG_CATCH || p->p_waitfor == 0)
 				goto run;
-			p->p_status = P_SLEEPING;
+			/* p->p_status = P_SLEEPING; */
+			setsleep(p);
 			goto out;
 		}
 		
