@@ -1,5 +1,0 @@
-#k_reenter	2	1	int	# int k_reenter
-icodestack_top	2000	0	char	# char[2000] icodestack
-icodestack	0	1	void	# void icodestack_end
-cputime	2	1	int	# int cputime
-rootdir	4	1	struct inode *	# struct inode *rootdir
