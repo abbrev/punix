@@ -116,7 +116,7 @@ void meminit()
 		}
 	}
 	size_t totalsize = 0;
-	for (i = 0; i < numvars && 100 * var[i].size / totalsize >= 1; ++i)
+	for (i = 0; i < numvars; ++i)
 		totalsize += var[i].size;
 	kprintf("totalsize = %ld\n", totalsize);
 	for (i = 0; i < numvars && 100 * var[i].size / totalsize >= 1; ++i)
