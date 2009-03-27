@@ -40,17 +40,15 @@
 #include "inode.h"
 #include "globals.h"
 
-#define F_SHIFT 12
-#define F_ONE (1 << F_SHIFT)
-
-STARTUP(void loadav(int numrun))
+STARTUP(void loadav(long numrun))
 {
 	static const unsigned long cexp[3] = {
-		3769, 4028, 4073 /* 4096 * exp(-x/60) */
+		EXP_1, EXP_5, EXP_15
 	};
 	int i;
-	unsigned long n = (unsigned long)numrun << F_SHIFT;
 
-	for (i = 0; i < 3; ++i)
-		G.loadavg[i] = (cexp[i] * G.loadavg[i] + (F_ONE - cexp[i]) * n) >> F_SHIFT;
+	for (i = 0; i < 3; ++i) {
+		G.loadavg[i] = ((cexp[i] * G.loadavg[i]
+		                 + (F_ONE - cexp[i]) * numrun)
+		                 + (F_ONE / 2)) >> F_SHIFT;
 }
