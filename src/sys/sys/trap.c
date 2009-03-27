@@ -76,6 +76,7 @@ STARTUP(void hardclock(unsigned short ps))
 	 */
 	++*(long *)(0x4c00+0xf00-8);
 	
+	realtime.tv_nsec += TICK;
 #if 0
 	if (timedelta) {
 		long delta;
@@ -188,7 +189,8 @@ out:
 		while ((sig = CURSIG(&P)))
 			postsig(sig);
 	} else {
-		BUMPTIME(&P.p_rusage.ru_stime, TICK / 1000);
+		if (current)
+			BUMPTIME(&P.p_rusage.ru_stime, TICK / 1000);
 	}
 }
 
