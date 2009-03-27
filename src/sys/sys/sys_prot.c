@@ -128,7 +128,7 @@ STARTUP(void sys_setuid())
 	
 	if (0 == P.p_euid)
 		P.p_ruid = P.p_euid = P.p_svuid = uid;
-	else if (uid == P.p_ruid || uid == P.p_svuid)
+	else if (uid == P.p_ruid || uid == P.p_euid || uid == P.p_svuid)
 		P.p_euid = uid;
 	else
 		P.p_error = EPERM;
@@ -147,13 +147,13 @@ STARTUP(void sys_setgid())
 	
 	if (0 == P.p_euid)
 		P.p_rgid = P.p_egid = P.p_svgid = gid;
-	else if (gid == P.p_rgid || gid == P.p_svgid)
+	else if (gid == P.p_rgid || gid == P.p_egid || gid == P.p_svgid)
 		P.p_egid = gid;
 	else
 		P.p_error = EPERM;
 }
 
-STARTUP(static int suser())
+STARTUP(int suser())
 {
         if (P.p_euid == 0)
                 return 1;
@@ -191,13 +191,13 @@ STARTUP(void sys_seteuid())
 	struct a {
 		uid_t euid;
 	} *ap = (struct a *)P.p_arg;
-	uid_t euid = ap->euid;
+	uid_t uid = ap->euid;
 	
-	if (!validuid(euid))
+	if (!validuid(uid))
 		return;
 	
-	if (euid == P.p_ruid || euid == P.p_svuid || suser())
-		P.p_euid = euid;
+	if (uid == P.p_ruid || uid == P.p_euid || uid == P.p_svuid || suser())
+		P.p_euid = uid;
 }
 
 /* POSIX.1 */
@@ -206,13 +206,13 @@ STARTUP(void sys_setegid())
 	struct a {
 		gid_t egid;
 	} *ap = (struct a *)P.p_arg;
-	uid_t egid = ap->egid;
+	uid_t gid = ap->egid;
 	
-	if (!validgid(egid))
+	if (!validgid(gid))
 		return;
 	
-	if (egid == P.p_rgid || egid == P.p_svgid || suser())
-		P.p_egid = egid;
+	if (gid == P.p_rgid || gid == P.p_egid || gid == P.p_svgid || suser())
+		P.p_egid = gid;
 }
 
 /* XSI */
