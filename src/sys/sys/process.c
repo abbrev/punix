@@ -411,7 +411,7 @@ retry:
 STARTUP(int inferior(struct proc *p))
 {
 
-        for (; p != &P; p = p->p_pptr)
+        for (; p != current; p = p->p_pptr)
                 if (!p->p_pptr)
                         return 0;
         return 1;
@@ -448,6 +448,7 @@ STARTUP(void procinit())
 	P.p_cputime = 0;
 	P.p_nice = NZERO;
 	P.p_basepri = PUSER;
+	P.p_pptr = current;
 	
 	/* set some resource limits. XXX: put more here! */
 	for (i = 0; i < 7; ++i)
