@@ -60,6 +60,7 @@ int splclock(void);
 void stop(struct proc *);
 
 void panic(const char *s);
+void warn(const char *s, long value);
 
 int copyin(void *dest, const void *src, size_t count);
 int copyout(void *dest, const void *src, size_t count);

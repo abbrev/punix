@@ -18,8 +18,9 @@ struct tty {
 /* default special characters */
 #define CERASE 0x7f        /* DEL */
 #define CEOT   ('D'-0x40)  /* Ctrl-D */
+#define CEOL   '\n'
 #define CKILL  ('U'-0x40)  /* Ctrl-U */
-#define CQUIT  ('\\'-0x40) /* Ctrl-\ */
+#define CQUIT  ('X'-0x40)  /* Ctrl-X */
 #define CINTR  ('C'-0x40)  /* Ctrl-C */
 #define CSTOP  ('S'-0x40)  /* Ctrl-S */
 #define CSTART ('Q'-0x40)  /* Ctrl-Q */

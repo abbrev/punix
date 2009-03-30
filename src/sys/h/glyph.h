@@ -12,5 +12,7 @@ struct glyphset {
 };
 
 void drawglyph(struct glyph *glyph, int row, int col);
+void drawglyphinv(struct glyph *glyph, int row, int col);
+void xorcursor(int row, int col);
 
 #endif

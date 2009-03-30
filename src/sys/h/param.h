@@ -13,7 +13,7 @@
 #define	MAXMEM	(64*32)		/* max core per process - first # is Kw */
 #define	MAXUPRC	25		/* max processes per user */
 #define	NOFILE	32		/* max open files per process */
-#define	CANBSIZ	256		/* max size of typewriter line */
+#define	CANBSIZ	QSIZE		/* max size of typewriter line */
 #define	CMAPSIZ	50		/* size of core allocation area */
 #define	SMAPSIZ	50		/* size of swap allocation area */
 #define	NCALL	20		/* max simultaneous time callouts */
