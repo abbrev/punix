@@ -13,6 +13,8 @@ struct queue {
 
 int qisfull(struct queue *qp);
 int qisempty(struct queue *qp);
+#define qisfull(qp) ((qp)->q_count >= QSIZE)
+#define qisempty(qp) ((qp)->q_count == 0)
 void qclear(struct queue *qp);
 
 int putc(int ch, struct queue *qp);

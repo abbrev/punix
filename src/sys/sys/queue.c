@@ -30,6 +30,7 @@
 #include "inode.h"
 #include "globals.h"
 
+#if 0
 STARTUP(int qisfull(struct queue *qp))
 {
 	return (qp->q_count >= QSIZE);
@@ -39,6 +40,7 @@ STARTUP(int qisempty(struct queue *qp))
 {
 	return (qp->q_count == 0);
 }
+#endif
 
 STARTUP(void qclear(struct queue *qp))
 {
@@ -81,7 +83,7 @@ STARTUP(int getc(struct queue *qp))
 		goto out;
 	}
 	
-	ch = *qp->q_tail++;
+	ch = (unsigned char)*qp->q_tail++;
 	if (qp->q_tail >= &qp->q_buf[QSIZE])
 		qp->q_tail -= QSIZE;
 	
