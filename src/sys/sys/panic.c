@@ -4,8 +4,12 @@ int kputs(const char *s);
 
 STARTUP(void panic(const char *s))
 {
-	kputs("\nkernel panic: ");
-	kputs(s);
+	kprintf("\nkernel panic: %s", s);
 	while (1)
 		nop();
+}
+
+void warn(const char *s, long value)
+{
+	kprintf("%s: %ld\n", s, value);
 }

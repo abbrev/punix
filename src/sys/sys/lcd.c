@@ -11,7 +11,7 @@ STARTUP(int lcd_set_contrast(int cont))
 	int ch;
 	if (cont < 0)
 		cont = 0;
-	if (CONTRASTMAX < cont)
+	else if (CONTRASTMAX < cont)
 		cont = CONTRASTMAX;
 #ifdef TI89
 	ch = CONTRAST_VMUL | cont;

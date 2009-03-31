@@ -40,7 +40,8 @@
 #include "inode.h"
 #include "globals.h"
 
-STARTUP(void loadav(long numrun))
+/* numrun is in fixed point */
+void loadav(unsigned long numrun)
 {
 	static const unsigned long cexp[3] = {
 		EXP_1, EXP_5, EXP_15
