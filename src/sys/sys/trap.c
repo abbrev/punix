@@ -51,12 +51,19 @@ STARTUP(void trace())
 {
 }
 
-#define BUMPTIME(tv, usec) do { \
-	register struct timeval *tp = (tv); \
-	tp->tv_usec += (usec); \
-	if (tp->tv_usec >= 1000000) { \
-		tp->tv_usec -= 1000000; \
-		tp->tv_sec++; \
+#define BUMPUTIME(tv, usec) do { \
+	(tv)->tv_usec += (usec); \
+	if ((tv)->tv_usec >= 1000000L) { \
+		(tv)->tv_usec -= 1000000L; \
+		(tv)->tv_sec++; \
+	} \
+} while (0)
+
+#define BUMPNTIME(tv, nsec) do { \
+	(tv)->tv_nsec += (nsec); \
+	if ((tv)->tv_nsec >= 1000000000L) { \
+		(tv)->tv_nsec -= 1000000000L; \
+		(tv)->tv_sec++; \
 	} \
 } while (0)
 
@@ -68,8 +75,20 @@ STARTUP(void hardclock(unsigned short ps))
 {
 	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
+	int whereami;
 	
 	splclock();
+	
+	whereami = G.whereami;
+
+	if (++G.spin >= 2) {
+		unsigned long *spinner = (long *)(0x4c00+0xf00-7*30+whereami*6);
+		if (*spinner)
+			*spinner = RORL(*spinner, 1);
+		else
+			*spinner = 0x0fffffff;
+		G.spin = 0;
+	}
 	
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
@@ -111,6 +130,7 @@ STARTUP(void hardclock(unsigned short ps))
 		++realtime.tv_sec;
 	}
 	
+	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
 	++loadavtime;
 	
@@ -130,6 +150,7 @@ STARTUP(void hardclock(unsigned short ps))
 		batt_check();
 		loadavtime -= HZ * 5;
 		G.cumulrunning = 0;
+		++*(long *)(0x4c00+0xf00-26);
 	}
 	
 	cputime += 2; /* XXX: cputime is in 15.1 fixed point */
@@ -175,7 +196,7 @@ out:
 	
 	if (USERMODE(ps)) {
 		int sig;
-		BUMPTIME(&P.p_rusage.ru_utime, TICK / 1000);
+		BUMPUTIME(&P.p_rusage.ru_utime, TICK / 1000);
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
 			psignal(current, SIGVTALRM);
@@ -190,7 +211,7 @@ out:
 			postsig(sig);
 	} else {
 		if (current)
-			BUMPTIME(&P.p_rusage.ru_stime, TICK / 1000);
+			BUMPUTIME(&P.p_rusage.ru_stime, TICK / 1000);
 	}
 }
 
@@ -215,5 +236,7 @@ STARTUP(void updwalltime())
 	*(long *)(0x4c00+0xf00-34) = realtime.tv_nsec;
 	realtime.tv_sec = walltime.tv_sec;
 	realtime.tv_nsec = walltime.tv_nsec;
+	
+	wakeup((void *)42); /* BOGUS */
 }
 #endif
