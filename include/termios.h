@@ -7,7 +7,7 @@ typedef unsigned char	cc_t;
 typedef unsigned int	speed_t;
 typedef unsigned int	tcflag_t;
 
-#define NCCS 32
+#define NCCS 15
 struct termios {
 	tcflag_t	c_iflag;	/* input modes */
 	tcflag_t	c_oflag;	/* output modes */
@@ -21,23 +21,24 @@ struct termios {
 };
 
 /* c_cc characters (subscript for c_cc array) */
-#define VINTR    0   /* */
-#define VQUIT    1   /* */
-#define VERASE   2   /* */
-#define VKILL    3   /* */
-#define VEOF     4   /* */
-#define VTIME    5   /* */
-#define VMIN     6   /* */
-#define VSWTC    7   /* not in POSIX */
-#define VSTART   8   /* */
-#define VSTOP    9   /* */
-#define VSUSP    10  /* */
-#define VEOL     11  /* */
-#define VREPRINT 12  /* not in POSIX */
-#define VDISCARD 13  /* not in POSIX */
-#define VWERASE  14  /* not in POSIX */
-#define VLNEXT   15  /* not in POSIX */
-#define VEOL2    16  /* not in POSIX */
+#define VEOF    0  /* EOF character */
+#define VEOL    1  /* EOL character */
+#define VERASE  2  /* ERASE character */
+#define VINTR   3  /* INTR character */
+#define VKILL   4  /* KILL character */
+#define VQUIT   5  /* QUIT character */
+#define VSTART  6  /* START character */
+#define VSTOP   7  /* STOP character */
+#define VSUSP   8  /* SUSP character */
+#define VMIN    0  /* MIN value */
+#define VTIME   1  /* TIME value */
+/* the following are from Linux and are not in POSIX */
+#define VSWTC    9   /* */
+#define VREPRINT 10  /* */
+#define VDISCARD 11  /* */
+#define VWERASE  12  /* */
+#define VLNEXT   13  /* */
+#define VEOL2    14  /* */
 
 /* c_iflag bits */
 #define IGNBRK  0000001  /* Ignore break condition. */
