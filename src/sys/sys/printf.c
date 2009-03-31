@@ -17,7 +17,15 @@
 /* el-cheapo buffered output */
 int fflush(void *stream)
 {
-	write(2, G.charbuf, G.charbufsize);
+	char *b = G.charbuf;
+	ssize_t s = G.charbufsize;
+	while (s > 0) {
+		ssize_t n = write(1, b, s);
+		if (n < 0) break;
+		b += n;
+		s -= n;
+	}
+		
 	G.charbufsize = 0;
 	return 0;
 }
