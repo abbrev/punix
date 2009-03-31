@@ -134,31 +134,9 @@ out:
 	P.p_retval = ap->count - P.p_count;
 }
 
-/* FIXME: read is just a quick hack to produce results */
 STARTUP(void sys_read(void))
 {
-#if 1
-	struct rdwra *ap = (struct rdwra *)P.p_arg;
-	
-	char *buf;
-	size_t count;
-	if (ap->fd != 1 && ap->fd != 2) {
-		P.p_error = EBADF;
-		return;
-	}
-	
-	count = ap->count;
-	if (count > SSIZE_MAX)	/* what should we do here instead? */
-		count = SSIZE_MAX;
-	//P.p_retval = count;
-	
-	P.p_base = ap->buf;
-	P.p_count = count;
-	vtread(0);
-	P.p_retval = count - P.p_count;
-#else
 	rdwr(FREAD);
-#endif
 }
 
 /* FIXME: write is just a quick hack to produce results */
@@ -258,6 +236,7 @@ out:
 }
 
 /* open system call */
+/* FIXME: open is current just a hack to produce results */
 STARTUP(void sys_open())
 {
 	struct a {
@@ -265,8 +244,29 @@ STARTUP(void sys_open())
 		int flags;
 		mode_t mode;
 	} *ap = (struct a *)P.p_arg;
+
+#if 1	
+	int fd;
+	struct file *fp;
+	struct inode *ip;
 	
+	fd = falloc();
+	if (fd < 0)
+		return;
+	ip = &G.inode[0]; /* XXX very hackish :) */
+	ip->i_rdev = 0x0100; /* vt dev number */
+	ip->i_mode = IFCHR;
+	
+	fp = P.p_ofile[fd];
+	fp->f_flag = O_RDWR;
+	fp->f_type = DTYPE_INODE;
+	fp->f_inode = ip;
+	fp->f_count = 1;
+	
+	P.p_retval = fd;
+#else
 	doopen(ap->pathname, ap->flags, ap->mode);
+#endif
 }
 
 /* creat system call */
