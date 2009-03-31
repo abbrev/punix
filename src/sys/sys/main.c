@@ -62,8 +62,10 @@ STARTUP(void kmain())
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
 #endif
-	if (0 && walltime.tv_sec == 0) {
+	if (walltime.tv_sec == 0) {
 		walltime.tv_sec = REALTIME;
 		walltime.tv_nsec = 0;
 	}
+	uptime.tv_sec = uptime.tv_nsec = 0;
+	vtopen(0, 0); /* BOGUS: this actually goes in getty */
 }
