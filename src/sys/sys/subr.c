@@ -30,7 +30,7 @@ STARTUP(int cpass())
 		P.p_error = EFAULT;
 		return -1;
 	}
-	ch = *P.p_base++;
+	ch = (unsigned char)*P.p_base++;
 	++P.p_offset;
 	--P.p_count;
 	return ch;
