@@ -144,28 +144,9 @@ STARTUP(void sys_write())
 {
 	int whereami = G.whereami;
 	G.whereami = 3;
-#if 1
-	struct rdwra *ap = (struct rdwra *)P.p_arg;
 	
-	int kputchar(int c);
-	char *buf;
-	size_t count;
-	if (ap->fd != 1 && ap->fd != 2) {
-		P.p_error = EBADF;
-		G.whereami = whereami;
-		return;
-	}
-	
-	count = ap->count;
-	if (count > SSIZE_MAX)	/* what should we do here instead? */
-		count = SSIZE_MAX;
-	P.p_base = ap->buf;
-	P.p_count = count;
-	vtwrite(0);
-	P.p_retval = count - P.p_count;
-#else
 	rdwr(FWRITE);
-#endif
+	
 	G.whereami = whereami;
 }
 
@@ -236,7 +217,7 @@ out:
 }
 
 /* open system call */
-/* FIXME: open is current just a hack to produce results */
+/* FIXME: open is currently just a hack to produce results */
 STARTUP(void sys_open())
 {
 	struct a {
@@ -254,7 +235,7 @@ STARTUP(void sys_open())
 	if (fd < 0)
 		return;
 	ip = &G.inode[0]; /* XXX very hackish :) */
-	ip->i_rdev = 0x0100; /* vt dev number */
+	ip->i_rdev = 0x0100; /* XXX vt dev number */
 	ip->i_mode = IFCHR;
 	
 	fp = P.p_ofile[fd];
