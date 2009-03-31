@@ -8,14 +8,36 @@
 #include <unistd.h>
 
 #include "punix.h"
+#include "globals.h"
 
 #define isdigit(c)	((unsigned) ((c) - '0') <  (unsigned) 10)
 
+#undef fflush
+
+/* el-cheapo buffered output */
+int fflush(void *stream)
+{
+	write(2, G.charbuf, G.charbufsize);
+	G.charbufsize = 0;
+	return 0;
+}
+
 STARTUP(int putchar(int c))
 {
-	char ch = c;
-	write(2, &ch, 1);
-	return (unsigned char)ch;
+	G.charbuf[G.charbufsize++] = c;
+	if (G.charbufsize >= 128 || c == '\n')
+		fflush(NULL);
+	return (unsigned char)c;
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, void *stream)
+{
+	size_t count = size * nmemb;
+	while (count > 0) {
+		putchar(*(char *)ptr++);
+		--count;
+	}
+	return size * nmemb;
 }
 
 STARTUP(void printf(const char *fmt, ...))
@@ -172,7 +194,8 @@ STARTUP(void printf(const char *fmt, ...))
 			}
 			if (fill == ' ' && i < 0) putchar('-');
 			if (len > 0) {
-				write(2, p, len);
+				fwrite(p, 1, len, NULL);
+				//write(2, p, len);
 				p += len;
 				len = 0;
 			}
@@ -189,6 +212,7 @@ STARTUP(void printf(const char *fmt, ...))
 	
 	/* Mark the end with a null (should be something else, like -1). */
 	/*putchar('\0');*/
+	fflush(NULL);
 	va_end(argp);
 }
 
