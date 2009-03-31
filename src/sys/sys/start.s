@@ -165,6 +165,7 @@ the_beginning:
 SYS_exit	= 1	/* put these in a header please */
 SYS_write	= 4
 SYS_open	= 5
+SYS_dup         = 41
 SYS_execve	= 59
 SYS_gettimeofday = 116
 .macro	sys call
@@ -204,6 +205,12 @@ gettimeofday:
 	bcs	cerror
 	rts
 
+	.global dup
+dup:
+	sys	dup
+	bcs	cerror
+	rts
+	
 /*
  * common routine to handle errors from system calls: set errno appropriately
  * and return -1.

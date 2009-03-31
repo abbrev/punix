@@ -89,6 +89,12 @@ STARTUP(struct tm *gmtime_r(const time_t *tp, struct tm *tmp))
 STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 {
 	int fd;
+	
+	fd = open("/dev/console", O_RDWR); /* 0 */
+	if (fd < 0) _exit(-1);
+	dup(fd); /* 1 */
+	dup(fd); /* 2 */
+	
 	println("This is a user program.");
 	
 	println("\narguments:");
@@ -98,12 +104,6 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 	println("\nenvironment:");
 	for (; *envp; ++envp)
 		println(*envp);
-	
-	fd = open("/etc/init", O_RDONLY);
-	if (fd < 0)
-		println("open failed!");
-	else
-		printf("fd = %d\n", fd);
 	
 	int i;
 	struct timeval starttv;
@@ -116,7 +116,7 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 	} while (tv.tv_sec < starttv.tv_sec + 3);
 	printf("starting\n");
 	gettimeofday(&starttv, 0);
-	for (i = 0; i < 30000; ++i) {
+	for (i = 0; i < 8000; ++i) {
 		gettimeofday(&endtv, 0);
 	}
 	tv.tv_sec = endtv.tv_sec - starttv.tv_sec;
@@ -126,8 +126,9 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 		tv.tv_sec--;
 	}
 	long x = tv.tv_usec + 1000000L * tv.tv_sec;
-	x /= 30;
+	x /= 8;
 	printf("%ld.%06ld = 0.%09ld per call\n", tv.tv_sec, tv.tv_usec, x);
+	printf("testing syscall with an invalid pointer:\n");
 	int error = gettimeofday((void *)0x40000 - 1, 0);
 	printf("error = %d\n", error);
 	
