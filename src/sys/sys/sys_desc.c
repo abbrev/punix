@@ -134,18 +134,12 @@ out:
 	P.p_retval = ap->count - P.p_count;
 }
 
+/* FIXME: read is just a quick hack to produce results */
 STARTUP(void sys_read(void))
-{
-	rdwr(FREAD);
-}
-
-/* FIXME: write is just a quick hack to produce results */
-STARTUP(void sys_write())
 {
 #if 1
 	struct rdwra *ap = (struct rdwra *)P.p_arg;
 	
-	int kputchar(int c);
 	char *buf;
 	size_t count;
 	if (ap->fd != 1 && ap->fd != 2) {
@@ -156,13 +150,45 @@ STARTUP(void sys_write())
 	count = ap->count;
 	if (count > SSIZE_MAX)	/* what should we do here instead? */
 		count = SSIZE_MAX;
-	P.p_retval = count;
+	//P.p_retval = count;
 	
-	for (buf = ap->buf; count; --count, ++buf)
-		kputchar(*buf);
+	P.p_base = ap->buf;
+	P.p_count = count;
+	vtread(0);
+	P.p_retval = count - P.p_count;
+#else
+	rdwr(FREAD);
+#endif
+}
+
+/* FIXME: write is just a quick hack to produce results */
+STARTUP(void sys_write())
+{
+	int whereami = G.whereami;
+	G.whereami = 3;
+#if 1
+	struct rdwra *ap = (struct rdwra *)P.p_arg;
+	
+	int kputchar(int c);
+	char *buf;
+	size_t count;
+	if (ap->fd != 1 && ap->fd != 2) {
+		P.p_error = EBADF;
+		G.whereami = whereami;
+		return;
+	}
+	
+	count = ap->count;
+	if (count > SSIZE_MAX)	/* what should we do here instead? */
+		count = SSIZE_MAX;
+	P.p_base = ap->buf;
+	P.p_count = count;
+	vtwrite(0);
+	P.p_retval = count - P.p_count;
 #else
 	rdwr(FWRITE);
 #endif
+	G.whereami = whereami;
 }
 
 /*
