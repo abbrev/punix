@@ -1,6 +1,6 @@
 /*
  * lcd.h
- * Copyright 2004 Chris Williams
+ * Copyright 2004, 2009 Chris Williams
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,8 +20,6 @@
 #ifndef _LCD_H_
 #define _LCD_H_
 
-/* #include "lcdglo.h" */
-
 #define LCD_MEM		((volatile char *)0x4c00)
 #define LCD_INCY	30
 
@@ -31,7 +29,7 @@
 #define CONTRAST_FIELD	0017
 
 /*
- * Bit Usage
+ * Bit Usage on 0x60001d
  *  7 HW1: Voltage multiplier enable. Keep set (=1).
  *  4 HW1: Screen disable (power down).
  *    HW2: LCD contrast bit 4 (MSb).
