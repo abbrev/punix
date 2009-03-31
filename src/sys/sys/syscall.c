@@ -54,6 +54,8 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	extern const int nsysent;
 	struct sysent *callp;
 	uint32_t retval = 0;
+
+	G.whereami = 2;
 	
 	/* for vfork(2) and execve(2) */
 	P.p_sfp = sfp;
@@ -106,6 +108,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	if (issignal(&P))
 		postsig(&P);
 	
+	G.whereami = 0;
 	return retval;
 }
 
