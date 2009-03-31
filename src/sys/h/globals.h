@@ -29,6 +29,7 @@ struct globals {
 	long cumulrunning;
 	struct file file[NFILE];
 	unsigned long loadavg[3];
+	struct timespec _uptime;
 	long _loadavtime;
 	
 	int audiosamp; /* current samples */
@@ -106,10 +107,20 @@ struct globals {
 		unsigned char key_repeat_start_delay;
 		unsigned char key_repeat_counter;
 		short key_previous;
+		char gr; /* graphics rendition */
 		int lock;
 	} vt;
 	
 	int batt_level;
+	
+	/* temp/debugging variables */
+	int whereami;
+	int spin;
+	struct timeval lasttime;
+	struct rusage lastrusage;
+	char charbuf[128];
+	int charbufsize;
+	/* end temp/debugging variables */
 	
 	int heapsize;
 	struct heapentry heaplist[HEAPSIZE];
@@ -138,5 +149,6 @@ extern int updlock;
 #define updlock  G._updlock
 #define current  G._current
 #define loadavtime G._loadavtime
+#define uptime   G._uptime
 
 # endif
