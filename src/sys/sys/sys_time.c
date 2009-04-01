@@ -267,6 +267,8 @@ struct tod {
 STARTUP(void sys_gettimeofday())
 {
 	struct tod *ap = (struct tod *)P.p_arg;
+	int whereami = G.whereami;
+	G.whereami = 4;
 	
 	if (ap->tv) {
 		struct timeval tv;
@@ -284,6 +286,7 @@ STARTUP(void sys_gettimeofday())
 		P.p_error = copyout(ap->tz, &tz, sizeof(tz));
 	}
 #endif
+	G.whereami = whereami;
 }
 
 STARTUP(void sys_settimeofday())
@@ -324,7 +327,6 @@ STARTUP(void sys_settimeofday())
 	splx(x);
 }
 
-
 STARTUP(void sys_time())
 {
 	struct a {
@@ -339,5 +341,31 @@ STARTUP(void sys_time())
 	if (ap->tp)
 		P.p_error = copyout(ap->tp, &sec, sizeof(sec));
 	P.p_retval = sec;
+}
+
+STARTUP(void sys_getloadavg1())
+{
+	struct a {
+		long *loadavg;
+		int nelem;
+	} *ap = (struct a *)P.p_arg;
+	
+	int whereami = G.whereami;
+	G.whereami = 1;
+	int nelem = ap->nelem;
+	int i;
+	long *la = ap->loadavg;
+	
+	if (nelem < 0) {
+		P.p_error = EINVAL; /* ??? */
+		goto out;
+	}
+	if (nelem > 3) nelem = 3;
+	splclock();
+	for (i = 0; i < nelem; ++i)
+		la[i] = G.loadavg[i] << (16 - F_SHIFT);
+	spl0();
+out:
+	G.whereami = whereami;
 }
 
