@@ -52,7 +52,7 @@ extern void _exit(int status);
 
 extern void userstart();
 
-STARTUP(static void println(char *s))
+static void println(char *s)
 {
 	write(2, s, strlen(s));
 	write(2, "\n", 1);
@@ -61,7 +61,7 @@ STARTUP(static void println(char *s))
 int printf(const char *format, ...);
 
 /* simple implementations of some C standard library functions */
-STARTUP(time_t time(time_t *tp))
+time_t time(time_t *tp)
 {
 	struct timeval tv;
 	time_t t;
@@ -71,7 +71,7 @@ STARTUP(time_t time(time_t *tp))
 	return t;
 }
 
-STARTUP(struct tm *gmtime_r(const time_t *tp, struct tm *tmp))
+struct tm *gmtime_r(const time_t *tp, struct tm *tmp)
 {
 	int sec, min, hour, day;
 	time_t t = *tp;
@@ -86,11 +86,109 @@ STARTUP(struct tm *gmtime_r(const time_t *tp, struct tm *tmp))
 	return tmp;
 }
 
-STARTUP(int usermain(int argc, char *argv[], char *envp[]))
+#define ESC "\x1b"
+/* erase from cursor to end of line (inclusive) */
+static void cleareol()
+{
+	printf(ESC "[K");
+}
+
+static void updatetop()
+{
+	struct timeval tv;
+	struct timeval difftime;
+	long la[3];
+	int day, hour, minute, second;
+	long msec;
+	long umsec, smsec;
+	long t;
+	int i;
+	int ucpu = 42;
+	int scpu = 31;
+	struct rusage rusage;
+	struct timeval ptime;
+	struct timeval diffutime;
+	struct timeval diffstime;
+	
+	gettimeofday(&tv, NULL);
+	getrusage(RUSAGE_SELF, &rusage);
+	
+	if (G.lasttime.tv_sec != 0 || G.lasttime.tv_usec != 0) {
+		timersub(&tv, &G.lasttime, &difftime);
+		timersub(&rusage.ru_utime, &G.lastrusage.ru_utime, &diffutime);
+		timersub(&rusage.ru_stime, &G.lastrusage.ru_stime, &diffstime);
+		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
+		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
+		umsec = diffutime.tv_sec * 1000L + diffutime.tv_usec / 1000;
+		smsec = diffstime.tv_sec * 1000L + diffstime.tv_usec / 1000;
+		ucpu = (1000L * umsec + 500) / msec;
+		scpu = (1000L * smsec + 500) / msec;
+		getloadavg1(la, 3);
+		
+		/* line 1 */
+		t = tv.tv_sec - 25200; /* -7 hours */
+		second = t % 60; t /= 60;
+		minute = t % 60; t /= 60;
+		hour = t % 24;   t /= 24;
+		day = t;
+		printf(ESC "[H" "%02d:%02d:%02d up ",
+		       hour, minute, second);
+		t = uptime.tv_sec;
+		second = t % 60; t /= 60;
+		minute = t % 60; t /= 60;
+		hour = t % 24;   t /= 24;
+		day = t;
+		if (day) {
+			printf("%d+", day);
+		}
+		printf("%02d:%02d, 1 user, load:", hour, minute);
+		for (i = 0; i < 3; ++i) {
+			if (i > 0) putchar(',');
+			printf(" %ld.%02ld", la[i] >> 16,
+			       (100 * la[i] >> 16) % 100);
+		}
+		cleareol();
+		/* line 2 */
+		printf("\nTasks: 1 total, 1 run, 0 slp, 0 stop, 0 zomb");
+		cleareol();
+		/* line 3 */
+		int totalcpu = ucpu+scpu;
+		int idle;
+		if (totalcpu > 1000) totalcpu = 1000;
+		idle = 1000 - totalcpu;
+		printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", ucpu/10, ucpu%10, scpu/10, scpu%10, 0, 0, idle/10, idle%10);
+		cleareol();
+		/* line 4 */
+		printf("\nMem: 0k total, 0k used, 0k free, 0k buffers");
+		cleareol();
+		/* line 5 */
+		putchar('\n');
+		cleareol();
+		/* line 6 */
+		printf("\n" ESC "[7m  PID USER      PR  NI  SHR  RES S  %%CPU   TIME COMMAND" ESC "[m");
+		cleareol();
+		/* line 7- */
+		int pid = getpid();
+		/* BOGUS! we can't really use 'current' in userspace */
+		printf("\n%5d %-8s %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
+		       pid, "root", current->p_pri,
+		       getpriority(PRIO_PROCESS, pid), (long)0, (long)0, 'R',
+		       totalcpu / 10, totalcpu % 10,
+		       (int)(ptime.tv_sec / 60), (int)(ptime.tv_sec % 60),
+		       "top");
+		cleareol();
+		printf(ESC "[J" ESC "[5H");
+	}
+	G.lasttime = tv;
+	G.lastrusage = rusage;
+}
+
+int usermain(int argc, char *argv[], char *envp[])
 {
 	int fd;
+	int audiofd;
 	
-	fd = open("/dev/console", O_RDWR); /* 0 */
+	fd = open("/dev/vt", O_RDWR); /* 0 */
 	if (fd < 0) _exit(-1);
 	dup(fd); /* 1 */
 	dup(fd); /* 2 */
@@ -109,6 +207,7 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 	struct timeval starttv;
 	struct timeval endtv;
 	struct timeval tv;
+#if 1
 	printf("waiting for the clock to settle...");
 	gettimeofday(&starttv, 0);
 	do {
@@ -127,10 +226,63 @@ STARTUP(int usermain(int argc, char *argv[], char *envp[]))
 	}
 	long x = tv.tv_usec + 1000000L * tv.tv_sec;
 	x /= 8;
-	printf("%ld.%06ld = 0.%09ld per call\n", tv.tv_sec, tv.tv_usec, x);
+	printf("%ld.%06ld = %ld ns per call = %ld calls per second\n", tv.tv_sec, tv.tv_usec, x, 1000000000L / x);
+#endif
+	
+	/* test invalid address */
 	printf("testing syscall with an invalid pointer:\n");
 	int error = gettimeofday((void *)0x40000 - 1, 0);
 	printf("error = %d\n", error);
+	
+	long divl(long, long);
+	unsigned long j;
+	volatile unsigned long q;
+#if 0
+	for (j = 100000-1; j < 5000000; j+=101) {
+		q = j / 100000;
+		//q = divl(j, 100000);
+		if (j < q * 100000 || (q+1) * 100000 <= j)
+			printf("%ld %ld %ld\n", j, q, q*100000);
+	}
+#endif
+	for (i = 0; i < 0; ++i) {
+		gettimeofday(&starttv, 0);
+		for (j = 0; j < 10000000L; j+=100) {
+			q = j / 100000;
+		}
+		gettimeofday(&endtv, 0);
+		timersub(&endtv, &starttv, &tv);
+		printf("%ld.%06ld\n", tv.tv_sec, tv.tv_usec);
+	}
+	
+	printf("Testing the tty.\nType ctrl-d to end input and go to the next test.\n");
+	/* cat */
+	char buf[60];
+	ssize_t n;
+	for (;;) {
+		n = read(0, buf, 60);
+		//printf("%ld\n", n);
+		if (n <= 0) break;
+		fwrite(buf, n, (size_t)1, NULL);
+		fflush(NULL);
+	}
+	
+	audiofd = open("/dev/audio", O_RDWR);
+	printf("audiofd = %d\n", audiofd);
+	
+	long audio[1024];
+	for (n = 0; n < 1024; ++n) audio[n] = 0x00cccc00;
+	for (n = 0; n < 1024; ++n) write(audiofd, audio, 4);
+	write(audiofd, audio, sizeof(audio));
+	
+	long lasttime = 0;
+	printf(ESC "[H" ESC "[J");
+	for (;;) {
+		gettimeofday(&tv, NULL);
+		if (tv.tv_sec > lasttime && (tv.tv_sec % 3) == 0)
+			updatetop();
+		lasttime = tv.tv_sec;
+	}
 	
 	return 0;
 }
@@ -447,7 +599,7 @@ static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 	
 loop:
 	for EACHPROC(p)
-	if (p->p_pptr == &P) {
+	if (p->p_pptr == current) {
 		if (pid > 0) {
 			if (p->p_pid != pid) continue;
 		} else if (pid == 0) {
@@ -562,7 +714,7 @@ void sys_getppid()
 static void donice(struct proc *p, int n)
 {
 	if (P.p_euid != 0 && P.p_ruid != 0 &&
-	   P.p_euid != p->p_euid && P.p_ruid != p->p_euid) {
+	    P.p_euid != p->p_euid && P.p_ruid != p->p_euid) {
 		P.p_error = EPERM;
 		return;
 	}
@@ -758,8 +910,10 @@ void sys_getrusage()
 		struct rusage *r_usage;
 	} *ap = (struct a *)P.p_arg;
 	
+/*
 	P.p_error = ENOSYS;
 	return;
+*/
 	
 	switch (ap->who) {
 	case RUSAGE_SELF:
@@ -767,6 +921,7 @@ void sys_getrusage()
 			P.p_error = EFAULT;
 		break;
 	case RUSAGE_CHILDREN:
+		P.p_error = EINVAL; /* FIXME */
 		break;
 	default:
 		P.p_error = EINVAL;
