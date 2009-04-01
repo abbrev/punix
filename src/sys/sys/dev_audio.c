@@ -25,7 +25,8 @@ STARTUP(void audioinit())
 
 STARTUP(static void startaudio())
 {
-	LINK_CONTROL |= LC_DIRECT;
+	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
+	LINK_DIRECT = 0xfc;
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
 	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
 	
@@ -39,7 +40,7 @@ STARTUP(static void stopaudio())
 {
 	G.audioplay = 0;
 	
-	LINK_CONTROL &= ~LC_DIRECT;
+	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX; /* XXX should we just let dev_link set these flags? */
 	INT5RATE |= 0x30;
 	INT5VAL = 0x00;
 }
@@ -63,18 +64,19 @@ STARTUP(void audiointr())
 		return;
 	
 	if (!G.audiosamples) {
-		if ((G.audiosamp = getc(&G.audioq)) < 0)
+		int c;
+		if ((c = getc(&G.audioq)) < 0)
 			return;
-		
+		G.audiosamp = c;
 		G.audiosamples = SAMPLESPERBYTE;
 	}
 	
+	/* put this sample into the lower 2 bits */
+	G.audiosamp = ROLB(G.audiosamp, 2);
+	--G.audiosamples;
+	
 	/* emit the sample */
 	LINK_DIRECT = G.audiosamp & 03;
-	
-	/* prepare for the next sample */
-	G.audiosamp >>= 2;
-	--G.audiosamples;
 	
 	++G.audiooptr;
 	
