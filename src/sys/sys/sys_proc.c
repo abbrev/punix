@@ -270,10 +270,17 @@ int usermain(int argc, char *argv[], char *envp[])
 	audiofd = open("/dev/audio", O_RDWR);
 	printf("audiofd = %d\n", audiofd);
 	
-	long audio[1024];
-	for (n = 0; n < 1024; ++n) audio[n] = 0x00cccc00;
-	for (n = 0; n < 1024; ++n) write(audiofd, audio, 4);
-	write(audiofd, audio, sizeof(audio));
+	long audioleft[1024];
+	long audioright[1024];
+	long audiocenter[1024];
+	for (n = 0; n < 1024; ++n) {
+		audioleft[n] = 0x00aaaa00;
+		audioright[n] = 0x00555500;
+		audiocenter[n] = 0x00ffff00;
+	}
+	write(audiofd, audioleft, sizeof(audioleft));
+	write(audiofd, audioright, sizeof(audioright));
+	write(audiofd, audiocenter, sizeof(audiocenter));
 	
 	long lasttime = 0;
 	printf(ESC "[H" ESC "[J");
