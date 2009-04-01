@@ -61,7 +61,7 @@ const struct cdevsw cdevsw[] = {
 #endif
 { devttyopen, devttyclose, devttyread, devttywrite, devttyioctl }, /* tty */
 { linkopen,   linkclose,   linkread,   linkwrite,   linkioctl   }, /* link */
-{ audioopen,  audioclose,  audioread,  nulldev,     audioioctl  }, /* audio */
+{ audioopen,  audioclose,  audioread,  audiowrite,  audioioctl  }, /* audio */
 { 0, 0, 0, 0, 0 }
 };
 

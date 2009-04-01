@@ -27,7 +27,7 @@ STARTUP(static void startaudio())
 {
 	LINK_CONTROL |= LC_DIRECT;
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
-	INT5VAL = 0xff;
+	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
 	
 	G.audiolowat = -1;
 	G.audiooptr = 0;
@@ -95,7 +95,6 @@ STARTUP(void audioopen(dev_t dev, int rw))
 	++ioport; /* one reference for being open */
 	
 	qclear(&G.audioq);
-	putc(0, &G.audioq);
 	startaudio();
 }
 
@@ -124,11 +123,11 @@ STARTUP(void audiowrite(dev_t dev))
 				return;
 			
 			x = spl5(); /* prevent the audio int from trying to wake
-				    * us up before we go to sleep */
+			             * us up before we go to sleep */
 			
 			/* FIXME: Set the low water value according to the
-			* amount of data we're trying to write, within upper
-			* and lower limits, of course. */
+			 * amount of data we're trying to write (within upper
+			 * and lower limits, of course), . */
 			
 			G.audiolowat = QSIZE - 32; /* XXX constant */
 			

@@ -222,7 +222,9 @@ Int_4:
 
 | System timers.
 Int_5:
-	/* FIXME: do timers */
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	bsr	audiointr	| just call the C routine
+	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 	rte
 
 | ON Int.
