@@ -14,7 +14,6 @@ void sys_waitpid();
 void sys_wait3();
 void sys_wait4();
 void sys_getrusage();
-void sys_utsleep();
 
 void sys_getitimer();
 void sys_setitimer();
@@ -259,7 +258,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{5, sys_utsleep},
+	{0, sys_NONE},
 	{3, sys_getloadavg1},		/* 160 */
 };
 
