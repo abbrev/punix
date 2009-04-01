@@ -63,6 +63,7 @@
 
 #include "proc.h"
 #include "file.h"
+#include "dev.h"
 #include "punix.h"
 #include "process.h"
 /*
@@ -234,8 +235,16 @@ STARTUP(void sys_open())
 	fd = falloc();
 	if (fd < 0)
 		return;
-	ip = &G.inode[0]; /* XXX very hackish :) */
-	ip->i_rdev = 0x0100; /* XXX vt dev number */
+	ip = &G.inode[G.nextinode++]; /* XXX very hackish :) */
+	if (!strcmp(ap->pathname, "/dev/vt"))
+		ip->i_rdev = DEV_VT;
+	else if (!strcmp(ap->pathname, "/dev/audio"))
+		ip->i_rdev = DEV_AUDIO;
+	else {
+		P.p_error = ESRCH;
+		return;
+	}
+	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
 	ip->i_mode = IFCHR;
 	
 	fp = P.p_ofile[fd];

@@ -31,6 +31,7 @@ STARTUP(void ttychars(struct tty *tp))
 	tp->t_termios.c_cc[VSTART] = CSTART;
 	tp->t_termios.c_cc[VSTOP] = CSTOP;
 	tp->t_termios.c_cc[VEOF] = CEOT;
+	tp->t_termios.c_cc[VEOL] = CEOL;
 	/*tp->t_termios.c_cc[VBRK] = CBRK;*/
 	tp->t_termios.c_cc[VERASE] = CERASE;
 	tp->t_termios.c_cc[VKILL] = CKILL;
@@ -55,7 +56,7 @@ STARTUP(void flushtty(struct tty *tp))
 STARTUP(void wflushtty(struct tty *tp))
 {
 	int x = spl5();
-	while (tp->t_outq.q_count && tp->t_state & ISOPEN) {
+	while (!qisempty(&tp->t_outq) && tp->t_state & ISOPEN) {
 		slp(&tp->t_outq, TTOPRI);
 	}
 	flushtty(tp);
@@ -79,9 +80,12 @@ STARTUP(int canon(struct tty *tp))
 	char *bp, *bp1;
 	int ch;
 	int mc;
+	int iflag = tp->t_termios.c_iflag;
+	int lflag = tp->t_termios.c_lflag;
+	cc_t *cc = tp->t_termios.c_cc;
 	
 	int x = spl5();
-	while (tp->t_delct == 0) {
+	while (qisempty(&tp->t_rawq) || (lflag & ICANON && tp->t_delct == 0)) {
 		if (!(tp->t_state & ISOPEN))
 			return 0;
 		slp(&tp->t_rawq, TTIPRI);
@@ -93,18 +97,22 @@ loop:
 	while ((ch = getc(&tp->t_rawq)) >= 0) {
 		if (ch == 0xff) {
 			--tp->t_delct;
-			break;
+			continue;
 		}
 		
-		if (tp->t_termios.c_iflag & ICANON) {
-			if (ch == tp->t_termios.c_cc[VERASE]) {
+		if (lflag & ICANON) {
+/*
+			if (ch == cc[VEOL] || ch == cc[VEOF])
+				--tp->t_delct;
+*/
+			if (ch == cc[VERASE]) {
 				if (bp > &G.canonb[2])
 					--bp;
 				continue;
 			}
-			if (ch == tp->t_termios.c_cc[VKILL])
+			if (ch == cc[VKILL])
 				goto loop;
-			if (ch == tp->t_termios.c_cc[VEOF])
+			if (ch == cc[VEOF])
 				continue;
 		}
 		
@@ -122,8 +130,8 @@ loop:
 
 STARTUP(void ttyread(struct tty *tp))
 {
-	if (((tp->t_state & ISOPEN) && tp->t_canq.q_count) || canon(tp))
-		while (tp->t_canq.q_count && passc(getc(&tp->t_canq)) >= 0)
+	if (((tp->t_state & ISOPEN) && !qisempty(&tp->t_canq)) || canon(tp))
+		while (!qisempty(&tp->t_canq) && passc(getc(&tp->t_canq)) >= 0)
 			;
 }
 

@@ -67,5 +67,4 @@ STARTUP(void kmain())
 		walltime.tv_nsec = 0;
 	}
 	uptime.tv_sec = uptime.tv_nsec = 0;
-	vtopen(0, 0); /* BOGUS: this actually goes in getty */
 }

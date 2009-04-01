@@ -13,11 +13,15 @@ void sys_wait();
 void sys_waitpid();
 void sys_wait3();
 void sys_wait4();
+void sys_getrusage();
+void sys_utsleep();
 
 void sys_getitimer();
 void sys_setitimer();
 void sys_gettimeofday();
 void sys_settimeofday();
+void sys_time();
+void sys_getloadavg1();
 
 void sys_read();
 void sys_write();
@@ -84,7 +88,6 @@ void sys_getdtablesize();
 #define sys_setpgrp	sys_NONE
 #define sys_select	sys_NONE
 #define sys_fsync	sys_NONE
-#define sys_getrusage	sys_NONE
 #define sys_fchown	sys_NONE
 #define sys_fchmod	sys_NONE
 #define sys_rename	sys_NONE
@@ -256,8 +259,8 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_NONE},
-	{0, sys_NONE},
-	{0, sys_NONE},		/* 160 */
+	{5, sys_utsleep},
+	{3, sys_getloadavg1},		/* 160 */
 };
 
 const int nsysent = sizeof(sysent) / sizeof(struct sysent);

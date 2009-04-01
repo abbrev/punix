@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "punix.h"
 #include "cell.h"
@@ -86,6 +87,12 @@ static struct row screen[WINHEIGHT];
 
 #endif
 
+#define GR_NORMAL    0
+#define GR_BOLD      1
+#define GR_UNDERLINE 2
+#define GR_BLINK     4
+#define GR_INVERSE   8
+
 #define STGROUND   0 /* ground */
 #define STESCAPE   1 /* escape */
 #define STESCINT   2 /* escape intermediate */
@@ -117,12 +124,14 @@ static const struct state states[];
 static void transition(int ch, int newstate,
  void (*trans)(int ch, struct tty *), struct tty *tp)
 {
+	if (STLAST < (unsigned)newstate) {
+		warn("vt: bad state", newstate);
+		return;
+	}
 	if (G.vt.vtstate && G.vt.vtstate->exit)
 		G.vt.vtstate->exit(tp);
 	if (trans)
 		trans(ch, tp);
-	if (STLAST < (unsigned)newstate)
-		return;
 	
 	G.vt.vtstate = &states[newstate];
 	if (G.vt.vtstate->entry)
@@ -260,6 +269,7 @@ static void reset(struct tty *tp)
 	G.vt.charsets[1] = &glyphsets[GLYPHSET_SG];
 	G.vt.glyphset = G.vt.charsets[G.vt.charset];
 	G.vt.cursorvisible = 1;
+	G.vt.gr = 0;
 	
 	G.vt.vtstate = NULL;
 	transition(0, STGROUND, NULL, tp);
@@ -286,6 +296,15 @@ static void defaultparams(int n, struct tty *tp)
  * referenced at the top of this file and to observations of behaviour of "real"
  * terminal emulators like xterm and rxvt.
  ******************************************************************************/
+
+/* draw the glyph with the current graphic rendition */
+static void drawgl(struct glyph *glyph, int row, int col)
+{
+	if (G.vt.gr & GR_INVERSE)
+		drawglyphinv(glyph, row, col);
+	else
+		drawglyph(glyph, row, col);
+}
 
 static void print(int ch, struct tty *tp)
 {
@@ -319,10 +338,11 @@ static void print(int ch, struct tty *tp)
 	}
 	
 	/* draw the glyph */
-	if (ch < 0x80)
-		drawglyph(&G.vt.glyphset->glyphs[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
-	else
-		drawglyph(&glyphsets[GLYPHSET_UPPER].glyphs[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
+	if (ch < 0x80) {
+		drawgl(&G.vt.glyphset->glyphs[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
+	} else {
+		drawgl(&glyphsets[GLYPHSET_UPPER].glyphs[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
+	}
 	
 	++G.vt.pos.column;
 }
@@ -726,18 +746,18 @@ static void csi_dispatch(int ch, struct tty *tp)
 			/* Erase from the active position to the end of the
 			 * screen, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
-				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
+				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 			for (r = G.vt.pos.row + 1; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(&SPACEGLYPH, r, c);
+					drawgl(&SPACEGLYPH, r, c);
 		} else if (n == 1) {
 			/* Erase from start of the screen to the active
 			 * position, inclusive */
 			for (r = 0; r < G.vt.pos.row; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(&SPACEGLYPH, r, c);
+					drawgl(&SPACEGLYPH, r, c);
 			for (c = 0; c <= G.vt.pos.column; ++c)
-				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
+				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
 			/* XXX: we could just erase the entire display,
 			 * excluding the status line at the bottom */
@@ -746,7 +766,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 			 * move. */
 			for (r = 0; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
-					drawglyph(&SPACEGLYPH, r, c);
+					drawgl(&SPACEGLYPH, r, c);
 		}
 		break;
 	case 'K':
@@ -758,16 +778,16 @@ static void csi_dispatch(int ch, struct tty *tp)
 			/* Erase from the active position to the end of the
 			 * line, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
-				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
+				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 1) {
 			/* Erase from the start of the line to the active
 			 * position, inclusive */
 			for (c = 0; c <= G.vt.pos.column; ++c)
-				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
+				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
 			/* Erase all of the line, inclusive */
 			for (c = 0; c < WINWIDTH; ++c)
-				drawglyph(&SPACEGLYPH, G.vt.pos.row, c);
+				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		}
 		break;
 	case 'h':
@@ -830,10 +850,16 @@ static void csi_dispatch(int ch, struct tty *tp)
 		/* SGR Ps ... */
 		/* FIXME: Select Graphic Rendition */
 		
+		if (G.vt.numparams == 0) {
+			G.vt.gr = GR_NORMAL;
+			break;
+		}
+		
 		for (i = 0; i < G.vt.numparams; ++i) {
 			switch (G.vt.params[i]) {
 			case 0:
 				/* attributes off */
+				G.vt.gr = GR_NORMAL;
 				break;
 			case 1:
 				/* bold or increased intensity */
@@ -846,6 +872,7 @@ static void csi_dispatch(int ch, struct tty *tp)
 				break;
 			case 7:
 				/* negative (reverse image) */
+				G.vt.gr |= GR_INVERSE;
 				;
 			}
 		}
@@ -1149,12 +1176,11 @@ void vtinit()
 	G.vt.compose = 0;
 	G.vt.key_mod_sticky = 0;
 	G.vt.lock = 1;
+	qclear(&G.vt.vt[0].t_rawq);
+	qclear(&G.vt.vt[0].t_canq);
+	qclear(&G.vt.vt[0].t_outq);
 }
 
-/*
- * vtoutput is similar to ttyoutput, but it bypasses the t_outq FIFO, handling
- * all terminal activity in the same context as the current process.
- */
 /* FIXME: use the tty structure */
 void vtoutput(int ch, struct tty *tp)
 {
@@ -1185,34 +1211,102 @@ void vtoutput(int ch, struct tty *tp)
 }
 
 /*
- * vtinput is similar to ttyinput, but it is
- * designed for the needs of the vt device.
+ * this version of ttyoutput bypasses the t_outq FIFO, handling
+ * all terminal output in the same context as the current process.
  */
-void vtinput(int ch, struct tty *tp)
+static void ttyoutput(int ch, struct tty *tp)
+{
+	int oflag = tp->t_termios.c_oflag;
+	int lflag = tp->t_termios.c_lflag;
+	cc_t *cc = tp->t_termios.c_cc;
+	if (oflag & OPOST) {
+		if (ch == '\n') {
+			if (oflag & ONLCR)
+				ttyoutput('\r', tp);
+			else if (oflag & ONLRET)
+				ch = '\r';
+		}
+		if (oflag & OCRNL && ch == '\r')
+			ch = '\n';
+	}
+	vtoutput(ch, tp);
+}
+
+static void printhihat(int ch, struct tty *tp)
+{
+	if (ch < 32) {
+		ttyoutput('^', tp);
+		ttyoutput(ch + 64, tp);
+	} else
+		ttyoutput(ch, tp);
+}
+
+static void ttyinput(int ch, struct tty *tp)
 {
 	int iflag = tp->t_termios.c_iflag;
 	int lflag = tp->t_termios.c_lflag;
+	cc_t *cc = tp->t_termios.c_cc;
 	
-	if ((ch &= 0x7f) == '\r' && iflag & ICRNL)
-		ch = '\n';
-	if ((lflag & ICANON) && (ch == tp->t_termios.c_cc[VQUIT] ||
-	  ch == tp->t_termios.c_cc[VINTR])) {
-		gsignal(tp->t_pgrp, ch == tp->t_termios.c_cc[VQUIT] ? SIGINT : SIGQUIT);
+	ch &= 0xff;
+	
+	if (ch == '\r') {
+		if (iflag & IGNCR)
+			return;
+		if (iflag & ICRNL)
+			ch = '\n';
+	} else if (ch == '\n' && iflag & INLCR)
+		ch = '\r';
+	if (ch == cc[VSTART]) {
+		if (tp->t_state & TTSTOP) {
+			tp->t_state &= ~TTSTOP;
+			/*ttstart(tp);*/
+		}
+		return;
+	}
+	if (ch == cc[VSTOP]) {
+		if (!(tp->t_state & TTSTOP)) {
+			tp->t_state |= TTSTOP;
+			/*cdevsw[MAJOR(tp->t_dev)].d_stop(tp);*/
+		}
+		return;
+	}
+	if (ch == cc[VINTR] || ch == cc[VQUIT]) {
+		printhihat(ch, tp);
+		if (lflag & ISIG) {
+			gsignal(tp->t_pgrp,
+				ch == tp->t_termios.c_cc[VQUIT]
+				 ? SIGQUIT : SIGINT);
+			flushtty(tp);
+			return;
+		}
+	}
+	if (1 && (tp->t_state & TTSTOP)) {
+		tp->t_state &= ~TTSTOP;
+		/*ttstart(tp);*/
+	}
+	if (putc(ch, &tp->t_rawq) < 0) {
 		flushtty(tp);
 		return;
 	}
-	if (qisfull(&tp->t_rawq)) {
-		flushtty(tp);
-		return;
+	if (lflag & ICANON) {
+		/* icanon processing is currently done in canon() in tty.c */
+		if (ch == cc[VEOL] || ch == cc[VEOF]) {
+			if (putc(0xff, &tp->t_rawq) >= 0)
+				++tp->t_delct;
+		}
 	}
-	putc(ch, &tp->t_rawq);
-	if ((lflag & ICANON) == 0 || ch == '\n' || ch == 004) {
-		wakeup(&tp->t_rawq);
-		if (putc(0xff, &tp->t_rawq) >= 0)
-			++tp->t_delct;
+	wakeup(&tp->t_rawq);
+	if (lflag & ECHO || (lflag & ECHONL && ch == '\n')) {
+		if (lflag & ECHOE && ch == cc[VERASE]) {
+			ttyoutput('\b', tp);
+			ttyoutput(' ', tp);
+			ttyoutput('\b', tp);
+			return;
+		}
+		ttyoutput(ch, tp);
 	}
-	if (lflag & ECHO)
-		vtoutput(ch, tp);
+	if (lflag & ECHOK && ch == cc[VKILL])
+		ttyoutput('\n', tp);
 }
 
 /* NB: there is no vtxint routine */
@@ -1221,10 +1315,10 @@ void vtrint(dev_t dev)
 {
 	int ch = G.vt.key;
 	
-#if 0
-	vtinput(ch, &G.vt.vt[MINOR(dev)]);
+#if 1
+	ttyinput(ch, &G.vt.vt[MINOR(dev)]);
 #else
-	vtoutput(ch, &G.vt.vt[MINOR(dev)]); /* XXX for debugging/testing */
+	ttyoutput(ch, &G.vt.vt[MINOR(dev)]); /* XXX for debugging/testing */
 #endif
 }
 
@@ -1232,7 +1326,7 @@ int kputchar(int ch)
 {
 	struct tty *tp = &G.vt.vt[0]; /* XXX */
 	ch &= 0xff;
-	vtoutput(ch, tp);
+	ttyoutput(ch, tp);
 	return ch;
 }
 
@@ -1247,11 +1341,25 @@ void vtopen(dev_t dev, int rw)
 	}
 	tp = &G.vt.vt[minor];
 	if (!(tp->t_state & ISOPEN)) {
+/*
+   sane          same as cread brkint icrnl 
+                 imaxbel opost onlcr
+                 nl0 cr0 tab0 bs0 vt0 ff0
+                 isig icanon iexten echo echoe echok 
+                 echoctl echoke, all special
+                 characters to their default values.
+input	BRKINT|ICRNL  |IMAXBEL
+output	OPOST|ONLCR|NL0|CR0|TAB0|BS0|VT0|FF0
+control	CREAD
+local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
+*/
+
 		tp->t_state = ISOPEN;
-		tp->t_termios.c_iflag = ICRNL;
-		tp->t_termios.c_oflag = 0;
-		tp->t_termios.c_cflag = CS8;
-		tp->t_termios.c_lflag = ISIG|ICANON|ECHO;
+		/* should I put these in tty.c? */
+		tp->t_termios.c_iflag = /*BRKINT|*/ ICRNL|IXANY;
+		tp->t_termios.c_oflag = OPOST|ONLCR;
+		tp->t_termios.c_cflag = CREAD;
+		tp->t_termios.c_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK;
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);
@@ -1275,7 +1383,7 @@ void vtwrite(dev_t dev)
 		return;
 	
 	while ((ch = cpass()) >= 0)
-		vtoutput(ch, tp);
+		ttyoutput(ch, tp);
 }
 
 void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
