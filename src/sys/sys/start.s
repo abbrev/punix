@@ -162,12 +162,20 @@ the_beginning:
 	/* NB: this works only on M68000. To work on M68010 and up, add another
 	 * word on the stack above the return address */
 	 
-SYS_exit	= 1	/* put these in a header please */
-SYS_write	= 4
-SYS_open	= 5
+SYS_exit        = 1	/* put these in a header please */
+SYS_read        = 3
+SYS_write       = 4
+SYS_open        = 5
+SYS_getpid      = 20
+SYS_getppid     = 27
 SYS_dup         = 41
 SYS_execve	= 59
+SYS_getpriority = 96
 SYS_gettimeofday = 116
+SYS_getrusage   = 117
+SYS_settimeofday = 122
+SYS_getloadavg1  = 160
+
 .macro	sys call
 	move	#SYS_\call,%d0
 	trap	#0
@@ -187,6 +195,12 @@ _exit:
 	sys	exit
 0:	bra.s	0b
 
+	.global read
+read:
+	sys	read
+	bcs	cerror
+	rts
+
 	.global write
 write:
 	sys	write
@@ -205,12 +219,48 @@ gettimeofday:
 	bcs	cerror
 	rts
 
+	.global settimeofday
+settimeofday:
+	sys	settimeofday
+	bcs	cerror
+	rts
+
+	.global getrusage
+getrusage:
+	sys	getrusage
+	bcs	cerror
+	rts
+	
+	.global getpid
+getpid:
+	sys	getpid
+	bcs	cerror
+	rts
+	
+	.global getppid
+getppid:
+	sys	getppid
+	bcs	cerror
+	rts
+	
 	.global dup
 dup:
 	sys	dup
 	bcs	cerror
 	rts
 	
+	.global getpriority
+getpriority:
+	sys	getpriority
+	bcs	cerror
+	rts
+	
+	.global getloadavg1
+getloadavg1:
+	sys	getloadavg1
+	bcs	cerror
+	rts
+
 /*
  * common routine to handle errors from system calls: set errno appropriately
  * and return -1.
