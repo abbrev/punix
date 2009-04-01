@@ -44,6 +44,12 @@ struct	cdevsw
 
 extern const struct cdevsw cdevsw[];
 
+#define DEV_MISC 0x0000
+#define DEV_VT (DEV_MISC+0x0100)
+#define DEV_TTY (DEV_VT+0x0100)
+#define DEV_LINK (DEV_TTY+0x0100)
+#define DEV_AUDIO (DEV_LINK+0x0100)
+
 /*
  * Number of character switch entries.
  * Set by cinit/tty.c

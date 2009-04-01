@@ -120,6 +120,7 @@ struct globals {
 	struct rusage lastrusage;
 	char charbuf[128];
 	int charbufsize;
+	int nextinode;
 	/* end temp/debugging variables */
 	
 	int heapsize;
