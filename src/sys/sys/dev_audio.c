@@ -25,7 +25,7 @@ STARTUP(void audioinit())
 
 STARTUP(static void startaudio())
 {
-	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
+	LINK_CONTROL = 0;
 	LINK_DIRECT = 0xfc;
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
 	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
