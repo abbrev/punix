@@ -55,6 +55,9 @@ void sys_nice();
 void sys_getpriority();
 void sys_setpriority();
 
+void sys_kmalloc();
+void sys_kfree();
+
 void sys_execve();
 
 void sys_getdtablesize();
