@@ -45,7 +45,7 @@ STARTUP(void flushtty(struct tty *tp))
 	wakeup(&tp->t_rawq);
 	wakeup(&tp->t_outq);
 	
-	x = spl5();
+	x = spl1();
 	tp->t_state &= ~TTSTOP;
 	qclear(&tp->t_outq);
 	qclear(&tp->t_rawq);
@@ -55,7 +55,7 @@ STARTUP(void flushtty(struct tty *tp))
 
 STARTUP(void wflushtty(struct tty *tp))
 {
-	int x = spl5();
+	int x = spl1();
 	while (!qisempty(&tp->t_outq) && tp->t_state & ISOPEN) {
 		slp(&tp->t_outq, TTOPRI);
 	}
@@ -84,7 +84,7 @@ STARTUP(int canon(struct tty *tp))
 	int lflag = tp->t_termios.c_lflag;
 	cc_t *cc = tp->t_termios.c_cc;
 	
-	int x = spl5();
+	int x = spl1();
 	while (qisempty(&tp->t_rawq) || (lflag & ICANON && tp->t_delct == 0)) {
 		if (!(tp->t_state & ISOPEN))
 			return 0;
@@ -97,7 +97,7 @@ loop:
 	while ((ch = getc(&tp->t_rawq)) >= 0) {
 		if (ch == 0xff) {
 			--tp->t_delct;
-			continue;
+			break;
 		}
 		
 		if (lflag & ICANON) {

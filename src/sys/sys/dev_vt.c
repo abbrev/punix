@@ -1184,7 +1184,7 @@ void vtinit()
 /* FIXME: use the tty structure */
 void vtoutput(int ch, struct tty *tp)
 {
-	int x = spl5();
+	int x = splclock();
 	cursor(tp);
 	
 	/* process the "anywhere" pseudo-state */
@@ -1326,7 +1326,7 @@ int kputchar(int ch)
 {
 	struct tty *tp = &G.vt.vt[0]; /* XXX */
 	ch &= 0xff;
-	ttyoutput(ch, tp);
+	vtoutput(ch, tp);
 	return ch;
 }
 
