@@ -166,10 +166,12 @@ SYS_exit        = 1	/* put these in a header please */
 SYS_read        = 3
 SYS_write       = 4
 SYS_open        = 5
+SYS_kmalloc     = 17
+SYS_kfree       = 18
 SYS_getpid      = 20
 SYS_getppid     = 27
 SYS_dup         = 41
-SYS_execve	= 59
+SYS_execve      = 59
 SYS_getpriority = 96
 SYS_gettimeofday = 116
 SYS_getrusage   = 117
@@ -258,6 +260,18 @@ getpriority:
 	.global getloadavg1
 getloadavg1:
 	sys	getloadavg1
+	bcs	cerror
+	rts
+
+	.global kmalloc
+kmalloc:
+	sys	kmalloc
+	bcs	cerror
+	rts
+
+	.global kfree
+kfree:
+	sys	kfree
 	bcs	cerror
 	rts
 

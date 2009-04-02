@@ -287,7 +287,7 @@ void memfree(void *ptr, pid_t pid)
 }
 #endif
 
-void sys_memalloc()
+void sys_kmalloc()
 {
 	struct a {
 		size_t *sizep;
@@ -306,7 +306,7 @@ void sys_memalloc()
 	}
 }
 
-void sys_memfree()
+void sys_kfree()
 {
 	struct a {
 		void *ptr;

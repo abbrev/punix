@@ -116,8 +116,8 @@ STARTUP(struct sysent sysent[]) = {
 	{4, sys_mknod},
 	{3, sys_chmod},
 	{4, sys_chown},
-	{0, sys_NONE},
-	{0, sys_NONE},
+	{0, sys_kmalloc},
+	{0, sys_kfree},
 	{4, sys_lseek},
 	{0, sys_getpid},	/* 20 */
 	{0, sys_mount},		/* XXX */
