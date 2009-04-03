@@ -47,7 +47,7 @@ void meminit()
 	hp->pid = -1;
 	G.heapsize = 2;
 	
-#if 1
+#if 0
 	struct var {
 		size_t size;
 		char *name;
