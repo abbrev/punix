@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sound.h>
 
 #include "setjmp.h"
 #include "proc.h"
@@ -278,9 +279,23 @@ int usermain(int argc, char *argv[], char *envp[])
 		audioright[n] = 0x00555500;
 		audiocenter[n] = 0x00ffff00;
 	}
+	
+	printf("playing left...\n");
 	write(audiofd, audioleft, sizeof(audioleft));
+	ioctl(audiofd, SNDCTL_DSP_SYNC);
+	
+	printf("playing right...\n");
 	write(audiofd, audioright, sizeof(audioright));
+	ioctl(audiofd, SNDCTL_DSP_SYNC);
+	
+	printf("playing both...\n");
 	write(audiofd, audiocenter, sizeof(audiocenter));
+#if 0
+	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
+#endif
+	
+	printf("closing audio...\n");
+	close(audiofd);
 	
 	long lasttime = 0;
 	printf(ESC "[H" ESC "[J");
