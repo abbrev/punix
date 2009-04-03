@@ -95,7 +95,7 @@ STARTUP(void closef(struct file *fp))
 		return;
 	
 	ip = fp->f_inode;
-	dev = ip->i_dev;
+	dev = ip->i_rdev;
 	major = MAJOR(dev);
 	rw = fp->f_flag;
 	
@@ -105,7 +105,7 @@ STARTUP(void closef(struct file *fp))
 		wakeup(ip+1); /* XXX */
 		wakeup(ip+2);
 	}
-	iput(ip);
+	//iput(ip);
 	
 	switch (ip->i_mode & IFMT) {
 	case IFCHR:

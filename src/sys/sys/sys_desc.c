@@ -506,5 +506,19 @@ STARTUP(void sys_fcntl())
 
 STARTUP(void sys_ioctl())
 {
+	struct a {
+		int d;
+		int request;
+		void *arg;
+	} *ap = (struct a *)P.p_arg;
+	
+	int fd;
+	struct file *fp;
+	int dev;
+	
+	GETF(fp, ap->d);
+	dev = fp->f_inode->i_rdev;
+	
+	cdevsw[MAJOR(dev)].d_ioctl(dev, ap->request, ap->arg);
 }
 

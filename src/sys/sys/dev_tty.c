@@ -35,8 +35,8 @@ STARTUP(void devttywrite(dev_t dev))
 	cdevsw[MAJOR(dev)].d_write(dev);
 }
 
-STARTUP(void devttyioctl(dev_t dev, int cmd, void *cmarg, int flag))
+STARTUP(void devttyioctl(dev_t dev, int cmd, void *cmarg))
 {
 	/* FIXME: handle the TIOCNOTTY ioctl command */
-	cdevsw[MAJOR(dev)].d_ioctl(dev, cmd, cmarg, flag);
+	cdevsw[MAJOR(dev)].d_ioctl(dev, cmd, cmarg);
 }

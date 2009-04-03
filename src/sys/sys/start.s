@@ -166,11 +166,13 @@ SYS_exit        = 1	/* put these in a header please */
 SYS_read        = 3
 SYS_write       = 4
 SYS_open        = 5
+SYS_close       = 6
 SYS_kmalloc     = 17
 SYS_kfree       = 18
 SYS_getpid      = 20
 SYS_getppid     = 27
 SYS_dup         = 41
+SYS_ioctl       = 54
 SYS_execve      = 59
 SYS_getpriority = 96
 SYS_gettimeofday = 116
@@ -187,6 +189,12 @@ SYS_getloadavg1  = 160
 	.global open
 open:
 	sys	open
+	bcs	cerror
+	rts
+	
+	.global close
+close:
+	sys	close
 	bcs	cerror
 	rts
 	
@@ -275,6 +283,12 @@ kfree:
 	bcs	cerror
 	rts
 
+	.global ioctl
+ioctl:
+	sys	ioctl
+	bcs	cerror
+	rts
+	
 /*
  * common routine to handle errors from system calls: set errno appropriately
  * and return -1.
