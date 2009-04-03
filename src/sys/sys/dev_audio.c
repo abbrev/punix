@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <sound.h>
 
 #include "punix.h"
 #include "param.h"
@@ -48,8 +49,10 @@ STARTUP(static void stopaudio())
 STARTUP(static void dspsync())
 {
 	int x = spl5();
-	G.audiolowat = 0; /* wait until the audio queue is empty */
-	slp(&G.audioq);
+	while (!qisempty(&G.audioq) || G.audiosamples) {
+		G.audiolowat = 0; /* wait until the audio queue is empty */
+		slp(&G.audioq);
+	}
 	splx(x);
 }
 
@@ -63,8 +66,15 @@ STARTUP(void audiointr())
 	if (!G.audioplay)
 		return;
 	
+	/* emit the sample */
+	LINK_DIRECT = G.audiosamp & 03;
+	
 	if (!G.audiosamples) {
 		int c;
+		if (G.audioq.q_count <= G.audiolowat) {
+			G.audiolowat = -1;
+			wakeup(&G.audioq);
+		}
 		if ((c = getc(&G.audioq)) < 0)
 			return;
 		G.audiosamp = c;
@@ -75,16 +85,7 @@ STARTUP(void audiointr())
 	G.audiosamp = ROLB(G.audiosamp, 2);
 	--G.audiosamples;
 	
-	/* emit the sample */
-	LINK_DIRECT = G.audiosamp & 03;
-	
 	++G.audiooptr;
-	
-	if (G.audioq.q_count <= G.audiolowat) {
-		G.audiolowat = -1;
-		spl4(); /* let other audio ints occur while we do wakeup */
-		wakeup(&G.audioq);
-	}
 }
 
 STARTUP(void audioopen(dev_t dev, int rw))
@@ -149,27 +150,21 @@ STARTUP(void audiowrite(dev_t dev))
  * SNDCTL_DSP_HALT{,_OUTPUT}
  */
 
-#if 0
+#if 1
 STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 {
 	int x;
-	struct oss_count_t count;
+	/*struct oss_count_t count;*/
 	int speed;
 	
 	switch (cmd) {
+#if 0
 	case SNDCTL_DSP_SILENCE:
 		qclear(&G.audioq);
 		putc(0, &G.audioq); /* make sure the output is 0 */
 		break;
 	case SNDCTL_DSP_SKIP:
 		qclear(&G.audioq);
-		break;
-	case SNDCTL_DSP_SPEED:
-		speed = 8192; /* XXX constant */
-		copyout(cmarg, &speed);
-		break;
-	case SNDCTL_DSP_SYNC:
-		dspsync();
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		x = spl5();
@@ -181,6 +176,14 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 	case SNDCTL_DSP_HALT:
 	case SNDCTL_DSP_HALT_OUTPUT:
 		stopaudio();
+		break;
+#endif
+	case SNDCTL_DSP_SPEED:
+		speed = 8192; /* XXX constant */
+		copyout(cmarg, &speed, sizeof(speed));
+		break;
+	case SNDCTL_DSP_SYNC:
+		dspsync();
 		break;
 	default:
 		P.p_error = ENOSYS;
