@@ -1,0 +1,39 @@
+TI-92+ Flash ROM
+possible alternative to FlashWrite
+
+Multi Word/Byte Write
+-- write 0 <= 'n' <= 32 bytes from 'src' to 'dst' ('n' is word count in word mode)
+
+void flash_write_multi_byte(volatile char *dst, char *src, int count)
+{
+	int n;
+	
+	*dst = 0x50; /* clear status register */
+	
+	while (count) {
+		/* write up to 32 bytes to FlashROM */
+		
+		n = count;
+		if (n > 32)
+			n = 32;
+		count -= n;
+		
+		/* write the multi setup command until FlashROM is ready */
+		do
+			*dst = 0xe8; /* multi setup */
+		while ((*dst & 0x80) == 0); /* status register */
+		
+		*dst = n - 1; /* byte count */
+		
+		while (n--)
+			*dst++ = *src++; /* write buffer data */
+		
+		*dst++ = 0xd0; /* write confirm */
+	}
+	
+	/* wait until FlashROM is done */
+	while ((*dst & 0x80) == 0)
+		; /* status register */
+	
+	*dst = 0xff; /* read */
+}
