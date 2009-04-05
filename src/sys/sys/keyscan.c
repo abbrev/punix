@@ -3,6 +3,7 @@
 #include <ctype.h>
 
 #include "punix.h"
+#include "dev.h"
 #include "kbd.h"
 #include "lcd.h"
 #include "globals.h"
