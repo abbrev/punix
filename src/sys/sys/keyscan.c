@@ -161,7 +161,7 @@ static void expand(short key)
 			char *cp = ep->expansion;
 			while (*cp != '\0') {
 				G.vt.key = *cp++;
-				vtrint(0x0100); /* XXX dev */
+				vtrint(DEV_VT);
 			}
 			return;
 		}
@@ -365,7 +365,7 @@ void addkey(short key)
 			G.vt.key_compose = 0;
 		}
 		G.vt.key = key;
-		vtrint(0x0100);
+		vtrint(DEV_VT);
 	} else {
 		expand(key);
 	}
