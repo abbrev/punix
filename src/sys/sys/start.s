@@ -170,6 +170,7 @@ SYS_close       = 6
 SYS_kmalloc     = 17
 SYS_kfree       = 18
 SYS_getpid      = 20
+SYS_uname       = 23
 SYS_getppid     = 27
 SYS_dup         = 41
 SYS_ioctl       = 54
@@ -244,6 +245,12 @@ getrusage:
 	.global getpid
 getpid:
 	sys	getpid
+	bcs	cerror
+	rts
+	
+	.global uname
+uname:
+	sys	uname
 	bcs	cerror
 	rts
 	
