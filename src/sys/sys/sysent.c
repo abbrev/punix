@@ -14,6 +14,7 @@ void sys_waitpid();
 void sys_wait3();
 void sys_wait4();
 void sys_getrusage();
+void sys_uname();
 
 void sys_getitimer();
 void sys_setitimer();
@@ -125,7 +126,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_getpid},	/* 20 */
 	{0, sys_mount},		/* XXX */
 	{0, sys_umount},	/* XXX */
-	{0, sys_NONE},
+	{2, sys_uname},
 	{0, sys_getuid},
 	{0, sys_geteuid},
 	{0, sys_NONE},

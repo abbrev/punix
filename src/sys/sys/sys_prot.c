@@ -298,3 +298,93 @@ STARTUP(void sys_setresgid())
 	    (sgid == oldrgid || sgid == oldegid || sgid == oldsgid || suser()))
 		P.p_svgid = sgid;
 }
+
+/*
+ * Look up a pathname and test if the resultant inode is owned by the
+ * current user. If not, try for super-user.
+ * If permission is granted, return inode pointer.
+ */
+static struct inode *owner(const char *path)
+{
+	struct inode *ip = NULL;
+
+#ifdef NOTYET /*XXX*/
+	ip = namei(path, 0);
+#endif
+	if (ip == NULL || P.p_euid == ip->i_uid || suser())
+		return ip;
+	
+	/* we're not the owner of the file nor the superuser :( */
+	iput(ip);
+	return NULL;
+}
+
+void sys_chmod()
+{
+	/* int chmod(const char *path, mode_t mode); */
+	struct a {
+		const char *path;
+		mode_t mode;
+	} *ap = (struct a *)P.p_arg;
+	struct inode *ip;
+	mode_t mode;
+	
+	ip = owner(ap->path);
+	if (!ip) return;
+	ip->i_mode &= ~07777;
+	mode = ap->mode;
+	if (P.p_euid)
+		mode &= ~ISVTX;
+	ip->i_mode |= mode & 07777;
+	ip->i_flag |= ICHG;
+#if 0
+	if (ip->i_flag&ITEXT && !(ip->i_mode&ISVTX))
+		xrele(ip);
+#endif
+	iput(ip);
+}
+
+/* FIXME: make this function less spaghetti-like */
+void sys_chown()
+{
+	struct a {
+		const char *path;
+		uid_t owner;
+		gid_t group;
+	} *ap = (struct a *)P.p_arg;
+	struct inode *ip;
+	
+	if (!(ip = owner(ap->path)))
+		return;
+	
+	if (ap->owner == (uid_t)-1 && ap->group == (gid_t)-1)
+		return;
+	
+	if (!P.p_euid) {
+		goto chown;
+	} else if (ap->owner == P.p_euid || ap->owner == (uid_t)-1) {
+		gid_t *gp;
+		if (ap->group == (gid_t)-1)
+			goto chown;
+		else {
+			/* make sure the new group is our effective group id
+			 * or is one of our supplementary groups */
+			if (ap->group == P.p_egid) goto chown;
+			for (gp = &P.p_groups[0];
+			     gp < &P.p_groups[NGROUPS] && *gp != (gid_t)-1;
+			     ++gp) {
+				if (*gp == ap->group) goto chown;
+			}
+		}
+	}
+	P.p_error = EPERM;
+	goto out;
+	
+chown:
+	if (ap->owner != (uid_t)-1) ip->i_uid = ap->owner;
+	if (ap->group != (gid_t)-1) ip->i_gid = ap->group;
+	ip->i_flag |= ICHG;
+out:
+	iput(ip);
+}
+

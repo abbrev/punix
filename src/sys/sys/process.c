@@ -309,7 +309,7 @@ STARTUP(void slp(void *event, int basepri))
 	int priority = basepri;
 	if (basepri > PZERO)
 		priority |= PCATCH;
-	P.p_error = tsleep(event, priority, NULL);
+	P.p_error = tsleep(event, priority, (long)0);
 	
 	if (!(priority & PCATCH) || P.p_error == 0)
 		return;

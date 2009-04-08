@@ -62,6 +62,8 @@ STARTUP(void audiointr())
 	/* Technically, G.audiosamp and G.audiosamples should be static local
 	 * variables. */
 	
+	++G.lbolt;
+	
 	/* this really ought to go in the assembly glue code for performance */
 	if (!G.audioplay)
 		return;

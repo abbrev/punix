@@ -275,6 +275,11 @@ STARTUP(void sys_gettimeofday())
 		int x = splclock();
 		struct timespec ts = realtime;
 		splx(x);
+		ts.tv_nsec += G.lbolt * SECOND / 8192;
+		if (ts.tv_nsec >= SECOND) {
+			ts.tv_nsec -= SECOND;
+			++ts.tv_sec;
+		}
 		tv.tv_sec = ts.tv_sec;
 		tv.tv_usec = ts.tv_nsec / 1000;
 		if (copyout(ap->tv, &tv, sizeof(tv)))

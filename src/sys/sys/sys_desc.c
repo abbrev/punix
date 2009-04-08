@@ -240,6 +240,10 @@ STARTUP(void sys_open())
 		ip->i_rdev = DEV_VT;
 	else if (!strcmp(ap->pathname, "/dev/audio"))
 		ip->i_rdev = DEV_AUDIO;
+	else if (!strcmp(ap->pathname, "/dev/link"))
+		ip->i_rdev = DEV_LINK;
+	else if (!strcmp(ap->pathname, "/dev/random"))
+		ip->i_rdev = DEV_MISC | 3;
 	else {
 		P.p_error = ESRCH;
 		return;

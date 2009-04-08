@@ -75,6 +75,7 @@ STARTUP(void hardclock(unsigned short ps))
 {
 	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
+	int sig;
 	int whereami;
 	
 	splclock();
@@ -129,6 +130,7 @@ STARTUP(void hardclock(unsigned short ps))
 		realtime.tv_nsec -= SECOND;
 		++realtime.tv_sec;
 	}
+	G.lbolt = 0;
 	
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
@@ -148,7 +150,7 @@ STARTUP(void hardclock(unsigned short ps))
 		loadav((unsigned long)G.cumulrunning * F_ONE / loadavtime);
 		
 		batt_check();
-		loadavtime -= HZ * 5;
+		loadavtime = 0;
 		G.cumulrunning = 0;
 		++*(long *)(0x4c00+0xf00-26);
 	}
@@ -156,6 +158,22 @@ STARTUP(void hardclock(unsigned short ps))
 	cputime += 2; /* XXX: cputime is in 15.1 fixed point */
 	if (cputime >= 2 * QUANTUM) {
 		++runrun;
+	}
+	
+	if (current) {
+		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
+		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
+				psignal(current, SIGPROF);
+	}
+	
+	if (USERMODE(ps)) {
+		BUMPUTIME(&P.p_rusage.ru_utime, TICK / 1000);
+		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
+		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
+			psignal(current, SIGVTALRM);
+	} else {
+		if (current)
+			BUMPUTIME(&P.p_rusage.ru_stime, TICK / 1000);
 	}
 	
 	/* do call-outs */
@@ -183,36 +201,23 @@ STARTUP(void hardclock(unsigned short ps))
 			*c1 = *c2++;
 		while (c1++->c_func);
 	}
-	splclock();
 	
-out:
+out:	spl0();
+	
 	scankb();
 	
-	if (current) {
-		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
-		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
-				psignal(current, SIGPROF);
+	spl1();
+	
+	if (!USERMODE(ps)) return;
+	
+	/* preempt a running user process */
+	if (runrun) {
+		++istick;
+		swtch();
 	}
 	
-	if (USERMODE(ps)) {
-		int sig;
-		BUMPUTIME(&P.p_rusage.ru_utime, TICK / 1000);
-		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
-		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
-			psignal(current, SIGVTALRM);
-		
-		/* preempt a running user process */
-		if (runrun) {
-			++istick;
-			swtch();
-		}
-		
-		while ((sig = CURSIG(&P)))
-			postsig(sig);
-	} else {
-		if (current)
-			BUMPUTIME(&P.p_rusage.ru_stime, TICK / 1000);
-	}
+	while ((sig = CURSIG(&P)))
+		postsig(sig);
 }
 
 #if 1

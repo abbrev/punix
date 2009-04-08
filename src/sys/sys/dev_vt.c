@@ -1175,16 +1175,15 @@ void vtinit()
 	G.vt.key_compose = 0;
 	G.vt.compose = 0;
 	G.vt.key_mod_sticky = 0;
-	G.vt.lock = 1;
+	G.vt.lock = 0;
 	qclear(&G.vt.vt[0].t_rawq);
 	qclear(&G.vt.vt[0].t_canq);
 	qclear(&G.vt.vt[0].t_outq);
 }
 
 /* FIXME: use the tty structure */
-void vtoutput(int ch, struct tty *tp)
+static void dovtoutput(int ch, struct tty *tp)
 {
-	int x = splclock();
 	cursor(tp);
 	
 	/* process the "anywhere" pseudo-state */
@@ -1207,7 +1206,25 @@ void vtoutput(int ch, struct tty *tp)
 		G.vt.vtstate->event(ch, tp);
 	
 	cursor(tp);
+}
+
+/* This hack solves the problem of calling vtoutput() from hardclock() while
+ * not spending too much time in interrupt mode. Meh. */
+static void vtoutput(int ch, struct tty *tp)
+{
+	int c;
+	int x = spl7();
+	if (G.vt.lock) {
+		putc(ch, &tp->t_outq);
+		splx(x);
+		return;
+	}
+	++G.vt.lock;
 	splx(x);
+	while ((c = getc(&tp->t_outq)) != -1)
+		dovtoutput(c, tp);
+	dovtoutput(ch, tp);
+	G.vt.lock = 0;
 }
 
 /*
