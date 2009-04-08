@@ -30,6 +30,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sound.h>
+#include <sys/utsname.h>
 
 #include "setjmp.h"
 #include "proc.h"
@@ -111,8 +112,8 @@ static void updatetop()
 	struct timeval diffutime;
 	struct timeval diffstime;
 	
-	gettimeofday(&tv, NULL);
 	getrusage(RUSAGE_SELF, &rusage);
+	gettimeofday(&tv, NULL);
 	
 	if (G.lasttime.tv_sec != 0 || G.lasttime.tv_usec != 0) {
 		timersub(&tv, &G.lasttime, &difftime);
@@ -120,6 +121,7 @@ static void updatetop()
 		timersub(&rusage.ru_stime, &G.lastrusage.ru_stime, &diffstime);
 		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
 		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
+		if (msec == 0) return;
 		umsec = diffutime.tv_sec * 1000L + diffutime.tv_usec / 1000;
 		smsec = diffstime.tv_sec * 1000L + diffstime.tv_usec / 1000;
 		ucpu = (1000L * umsec + 500) / msec;
@@ -155,6 +157,7 @@ static void updatetop()
 		/* line 3 */
 		int totalcpu = ucpu+scpu;
 		int idle;
+		/* totalcpu is occasionally > 100% */
 		if (totalcpu > 1000) totalcpu = 1000;
 		idle = 1000 - totalcpu;
 		printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", ucpu/10, ucpu%10, scpu/10, scpu%10, 0, 0, idle/10, idle%10);
@@ -184,10 +187,437 @@ static void updatetop()
 	G.lastrusage = rusage;
 }
 
+void userpause()
+{
+	ssize_t n;
+	char buf[60];
+	printf("Type ctrl-d to continue...\n");
+	do
+		n = read(0, buf, sizeof(buf));
+	while (n != 0);
+	putchar('\n');
+}
+
+static void testuname()
+{
+	struct utsname utsname;
+	int err;
+	
+	printf("Testing uname\n");
+	
+	err = uname(&utsname);
+	if (!err) {
+		printf("uname: %s %s %s %s %s\n",
+		       utsname.sysname,
+		       utsname.nodename,
+		       utsname.release,
+		       utsname.version,
+		       utsname.machine);
+	} else {
+		printf("uname returned %d\n", err);
+	}
+}
+
+static void testtty()
+{
+	printf("Testing the tty.\nType ctrl-d to end input and go to the next test.\n");
+	/* cat */
+	char buf[60];
+	ssize_t n;
+	for (;;) {
+		n = read(0, buf, 60);
+		printf("%ld (%d)\n", n, buf[0]);
+		if (n <= 0) break;
+		fwrite(buf, n, (size_t)1, NULL);
+		fflush(NULL);
+	}
+}
+
+static void testrandom()
+{
+	int i;
+	int randomfd;
+	int randombuf[100];
+	
+	printf("Testing /dev/random\n");
+	
+	randomfd = open("/dev/random", O_RDWR);
+	printf("randomfd = %d\n", randomfd);
+	
+	if (randomfd >= 0) {
+		read(randomfd, randombuf, sizeof(randombuf));
+		for (i = 0; i < 100; ++i) {
+			printf("%5u ", randombuf[i]);
+		}
+		printf("\n");
+		close(randomfd);
+	}
+	
+	userpause();
+}
+
+static const unsigned short dftr[] = {
+#include "dftr.c"
+};
+
+static void testaudio()
+{
+	int i;
+	int audiofd;
+	long audioleft[1024];
+	long audioright[1024];
+	long audiocenter[1024];
+	
+	printf("Testing /dev/audio\n");
+	
+	audiofd = open("/dev/audio", O_RDWR);
+	printf("audiofd = %d\n", audiofd);
+	
+	for (i = 0; i < 1024; ++i) {
+		audioleft[i] = 0x00aaaa00;
+		audioright[i] = 0x00555500;
+		audiocenter[i] = 0x00ffff00;
+	}
+	
+	printf("playing left...\n");
+	write(audiofd, audioleft, sizeof(audioleft));
+	ioctl(audiofd, SNDCTL_DSP_SYNC);
+	
+	printf("playing right...\n");
+	write(audiofd, audioright, sizeof(audioright));
+	ioctl(audiofd, SNDCTL_DSP_SYNC);
+	
+	printf("playing both...\n");
+	write(audiofd, audiocenter, sizeof(audiocenter));
+#if 1
+	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
+#endif
+	printf("Gotta have more cowbell...\n");
+	write(audiofd, dftr, sizeof(dftr));
+	
+	printf("closing audio...\n");
+	close(audiofd);
+	
+	userpause();
+}
+
+static const char varpkt1[] = {
+	0x88, 0x56, 0x00, 0x00, /* ACK */
+	0x88, 0x09, 0x00, 0x00, /* CTS */
+};
+static const char varpkt2[] = {
+	0x88, 0x56, 0x00, 0x00, /* ACK */
+};
+
+static const char rdypkt[] = {
+	0x88, 0x92, 0x00, 0x00, /* RDY */
+};
+
+struct pkthead {
+	unsigned char machid;
+	unsigned char commid;
+	unsigned int length;
+};
+
+static const struct machinfo {
+	int id;
+	char desc[80];
+} machinfo[] = {
+	{ 0x08, "PC -> 89/92+/V200" },
+	{ 0x88, "92+/V200 -> PC or 92+/V200 -> 92+/V200" },
+	{ 0x98, "89 (Titanium) -> PC or 89 (Titanium) to 89 (Titanium)" },
+	{ -1, "" },
+};
+
+static const struct comminfo {
+	int id;
+	char desc[5];
+	int hasdata;
+} comminfo[] = {
+	{ 0x06, "VAR",  1 },
+	{ 0x09, "CTS",  0 },
+	{ 0x15, "DATA", 1 },
+	{ 0x2d, "VER",  0 },
+	{ 0x36, "MEM",  1 },
+	{ 0x56, "ACK",  0 },
+	{ 0x5a, "ERR",  0 },
+	{ 0x68, "RDY",  0 },
+	{ 0x6d, "SCR",  0 },
+	{ 0x78, "CONT", 0 },
+	{ 0x87, "CMD",  0 },
+	{ 0x88, "DEL",  1 },
+	{ 0x92, "EOT",  0 },
+	{ 0xa2, "REQ",  1 },
+	{ 0xc9, "RTS",  1 },
+	{ -1, "", 0 }
+};
+#define PKT_COMM_VAR 0x06
+#define PKT_COMM_CTS 0x09
+#define PKT_COMM_DATA 0x15
+#define PKT_COMM_XDP PKT_COMM_DATA
+#define PKT_COMM_VER 0x2d
+#define PKT_COMM_MEM 0x36
+#define PKT_COMM_ACK 0x56
+#define PKT_COMM_OK PKT_COMM_ACK
+#define PKT_COMM_ERR 0x5a
+#define PKT_COMM_RDY 0x68
+#define PKT_COMM_SCR 0x6d
+#define PKT_COMM_CONT 0x78
+#define PKT_COMM_CMD 0x87
+#define PKT_COMM_DEL 0x88
+#define PKT_COMM_EOT 0x92
+#define PKT_COMM_DONE PKT_COMM_EOT
+#define PKT_COMM_REQ 0xa2
+#define PKT_COMM_RTS 0xc9
+
+static unsigned cksum(unsigned char *buf, ssize_t count)
+{
+	unsigned sum = 0;
+	unsigned char *p = buf;
+	for (; count; --count)
+		sum += *p++;
+	sum &= 0xffff;
+	return sum;
+}
+
+static int recvpkthead(struct pkthead *pkt, int fd)
+{
+	unsigned char head[4];
+	ssize_t n;
+	int machid, commid;
+	unsigned length;
+	const struct machinfo *mip;
+	const struct comminfo *cip;
+	
+	/* read packet header */
+	n = read(fd, head, 4);
+	if (n < 4) return -1;
+	
+	machid = head[0];
+	commid = head[1];
+	length = head[2] | (head[3] << 8);
+	for (mip = &machinfo[0]; mip->id != -1; ++mip)
+		if (mip->id == machid) break;
+	for (cip = &comminfo[0]; cip->id != -1; ++cip)
+		if (cip->id == commid) break;
+	printf("machine id: 0x%02x (%s)\n", machid, mip->id == -1 ? "unknown" : mip->desc);
+	printf("command id: 0x%02x (%s)\n", commid, cip->id == -1 ? "unknown" : cip->desc);
+	printf("    length: %u\n", length);
+	pkt->machid = machid;
+	pkt->commid = commid;
+	pkt->length = length;
+	return 0;
+}
+
+static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
+{
+	ssize_t n;
+	unsigned length;
+	unsigned checksum;
+	unsigned char *p;
+	unsigned buf2[2];
+	const struct comminfo *cip;
+	
+	if (recvpkthead(pkt, fd) < 0)
+		return -1;
+	
+	for (cip = &comminfo[0]; cip->id != -1; ++cip)
+		if (cip->id == pkt->commid) break;
+	
+	if (!cip->hasdata) return 0;
+	/* continue reading "length" bytes plus the checksum */
+	length = pkt->length;
+	if (length > count) return -1;
+	p = buf;
+	while (length > 0) {
+		n = read(fd, p, length);
+		if (n <= 0) return -1;
+		length -= n;
+		p += n;
+	}
+	n = read(fd, buf2, 2); /* checksum */
+	if (n < 0) return -1;
+	checksum = buf2[0] | (buf2[1] << 8);
+	printf("checksum: %u (%s)\n", checksum, checksum == cksum(buf, pkt->length) ? "correct" : "INCORRECT");
+	return checksum;
+}
+
+static int sendpkt(const struct pkthead *pkt, int fd)
+{
+	char buf[4];
+	buf[0] = pkt->machid;
+	buf[1] = pkt->commid;
+	buf[2] = pkt->length % 256;
+	buf[3] = pkt->length & 256;
+	if (write(fd, buf, 4) < 4)
+		return -1;
+	return 0;
+}
+
+/* read and discard len bytes and return the checksum */
+static long discard(int fd, unsigned len)
+{
+	unsigned char buf[128];
+	unsigned sum = 0;
+	ssize_t n;
+	int i;
+	while (len) {
+		n = read(fd, buf, len < sizeof(buf) ? len : sizeof(buf));
+		if (n < 0) return -1;
+		for (i = 0; i < n; ++i)
+			sum += buf[i];
+		len -= n;
+	}
+	return sum;
+}
+
+static long getchecksum(int fd)
+{
+	unsigned char buf[2];
+	if (read(fd, buf, 2) < 2) return -1;
+	return buf[0] | (buf[1] << 8);
+}
+
+/* simple variable receiver - doesn't actually save variables anywhere */
+static void getcalc(int fd)
+{
+	struct pkthead pkt;
+	static const struct pkthead ackpkt = { 0x88, PKT_COMM_ACK, 0 };
+	static const struct pkthead ack92ppkt = { 0x88, PKT_COMM_ACK, 0x1001 };
+	static const struct pkthead ctspkt = { 0x88, PKT_COMM_CTS, 0 };
+	static const struct pkthead errpkt = { 0x88, PKT_COMM_ERR, 0 };
+	long n;
+	long sum, checksum;
+	enum {
+		RECV_START, RECV_WAITDATA, RECV_RXDATA
+	} state = RECV_START;
+	
+	for (;;) {
+		n = recvpkthead(&pkt, fd);
+		if (n < 0) goto error;
+		switch (state) {
+		case RECV_START:
+			printf("START\n");
+			if (pkt.commid == PKT_COMM_VAR || pkt.commid == PKT_COMM_RTS) {
+				sum = discard(fd, pkt.length);
+				checksum = getchecksum(fd);
+				if (checksum == sum) {
+					sendpkt(&ackpkt, fd);
+					sendpkt(&ctspkt, fd);
+					state = RECV_WAITDATA;
+				} else {
+					sendpkt(&errpkt, fd);
+				}
+			} else if (pkt.commid == PKT_COMM_RDY) {
+				if (pkt.machid == 0x00) {
+					sendpkt(&ack92ppkt, fd);
+				} else {
+					sendpkt(&ackpkt, fd);
+				}
+			} else if (pkt.commid == PKT_COMM_EOT) {
+				sendpkt(&ackpkt, fd);
+				return;
+			} else {
+				goto error;
+			}
+			break;
+		case RECV_WAITDATA:
+			printf("WAITDATA\n");
+			if (pkt.commid != PKT_COMM_ACK)
+				goto error;
+			state = RECV_RXDATA;
+			break;
+		case RECV_RXDATA:
+			printf("RXDATA\n");
+			if (pkt.commid != PKT_COMM_DATA)
+				goto error;
+			printf("reading and discarding variable data...\n");
+			sum = discard(fd, pkt.length);
+			printf("reading variable data checksum...\n");
+			checksum = getchecksum(fd);
+			if (checksum == sum) {
+				printf("sending ACK\n");
+				sendpkt(&ackpkt, fd);
+				state = RECV_START;
+			} else {
+				printf("sending ERR\n");
+				sendpkt(&errpkt, fd);
+			}
+			break;
+		default:
+			printf("getcalc internal error (%d)\n", state);
+			return;
+		}
+		//userpause();
+	}
+error:
+	printf("ERROR\n");
+	//send something??
+}
+
+#define BPERLINE 8
+static void printhex(char buf[], int length)
+{
+	int i, j;
+	for (i = 0; i < (length + BPERLINE - 1) / BPERLINE * BPERLINE; ++i) {
+		if (i < length)
+			printf("%02x ", buf[i]);
+		else
+			printf("   ");
+		if ((i + 1) % BPERLINE == 0) {
+			for (j = i - BPERLINE + 1; j <= i; ++j) {
+				int ch;
+				ch = j < length ? buf[j] : ' ';
+				if (ch < 31 || 126 < ch)
+					ch = '.';
+				putchar(ch);
+			}
+			putchar('\n');
+		}
+	}
+	putchar('\n');
+}
+
+static void testlink()
+{
+	unsigned char buf[128];
+	ssize_t n, len;
+	int linkfd;
+	int i;
+	const char *p;
+	struct pkthead packet;
+	
+	printf("Testing /dev/link\n");
+	
+	linkfd = open("/dev/link", O_RDWR);
+	printf("linkfd = %d\n", linkfd);
+	if (linkfd < 0) goto out;
+	userpause();
+	
+	printf("Receiving variable...\n");
+	getcalc(linkfd);
+	userpause();
+	getcalc(linkfd);
+	userpause();
+	
+	printf("sending RDY packet...\n");
+	write(linkfd, rdypkt, sizeof(rdypkt));
+	
+	printf("reading packet...\n");
+	recvpkt(&packet, buf, sizeof(buf), linkfd); /* ACK */
+	userpause();
+	
+	printf("closing link...\n");
+	close(linkfd);
+	printf("closed.\n");
+	
+out:
+	userpause();
+}
+
 int usermain(int argc, char *argv[], char *envp[])
 {
 	int fd;
-	int audiofd;
 	
 	fd = open("/dev/vt", O_RDWR); /* 0 */
 	if (fd < 0) _exit(-1);
@@ -256,46 +686,11 @@ int usermain(int argc, char *argv[], char *envp[])
 		printf("%ld.%06ld\n", tv.tv_sec, tv.tv_usec);
 	}
 	
-	printf("Testing the tty.\nType ctrl-d to end input and go to the next test.\n");
-	/* cat */
-	char buf[60];
-	ssize_t n;
-	for (;;) {
-		n = read(0, buf, 60);
-		//printf("%ld\n", n);
-		if (n <= 0) break;
-		fwrite(buf, n, (size_t)1, NULL);
-		fflush(NULL);
-	}
-	
-	audiofd = open("/dev/audio", O_RDWR);
-	printf("audiofd = %d\n", audiofd);
-	
-	long audioleft[1024];
-	long audioright[1024];
-	long audiocenter[1024];
-	for (n = 0; n < 1024; ++n) {
-		audioleft[n] = 0x00aaaa00;
-		audioright[n] = 0x00555500;
-		audiocenter[n] = 0x00ffff00;
-	}
-	
-	printf("playing left...\n");
-	write(audiofd, audioleft, sizeof(audioleft));
-	ioctl(audiofd, SNDCTL_DSP_SYNC);
-	
-	printf("playing right...\n");
-	write(audiofd, audioright, sizeof(audioright));
-	ioctl(audiofd, SNDCTL_DSP_SYNC);
-	
-	printf("playing both...\n");
-	write(audiofd, audiocenter, sizeof(audiocenter));
-#if 0
-	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
-#endif
-	
-	printf("closing audio...\n");
-	close(audiofd);
+	testuname();
+	testtty();
+	testrandom();
+	testlink();
+	testaudio();
 	
 	long lasttime = 0;
 	printf(ESC "[H" ESC "[J");
@@ -527,7 +922,7 @@ void doexit(int status)
 	P.p_waitstat = status;
 	/* ruadd(&P.p_rusage, &P.p_crusage); */
 	for EACHPROC(q) {
-		if (q->p_pptr == &P) {
+		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
 			wakeup(G.proclist);
 			if (q->p_flag & P_TRACED) {
@@ -602,7 +997,7 @@ void sys_vfork()
 	
 	/* reclaim our stuff */
 	cp->p_flag |= P_VFDONE;
-	wakeup(&P);
+	wakeup(current);
 	return;
 stackp:
 	pfree(cp);
@@ -655,7 +1050,7 @@ loop:
 	if (options & WNOHANG) {
 		return;
 	}
-	error = tsleep(&P, PWAIT|PCATCH, 0);
+	error = tsleep(current, PWAIT|PCATCH, 0);
 	if (!error) goto loop;
 	return;
 	
@@ -757,7 +1152,7 @@ void sys_nice()
 		int inc;
 	} *ap = (struct a *)P.p_arg;
 	
-	donice(&P, P.p_nice + ap->inc);
+	donice(current, P.p_nice + ap->inc);
 	P.p_retval = P.p_nice - NZERO;
 	
 	/*
@@ -785,7 +1180,7 @@ void sys_getpriority()
 	switch (ap->which) {
 	case PRIO_PROCESS:
 		if (ap->who == 0) /* current process */
-			p = &P;
+			p = current;
 		else
 			p = pfind(ap->who);
 		
@@ -837,7 +1232,7 @@ void sys_setpriority()
 	switch (ap->which) {
 	case PRIO_PROCESS:
 		if (ap->who == 0) /* current process */
-			p = &P;
+			p = current;
 		else
 			p = pfind(ap->who);
 		
@@ -948,4 +1343,43 @@ void sys_getrusage()
 	default:
 		P.p_error = EINVAL;
 	}
+}
+
+void sys_uname()
+{
+	struct a {
+		struct utsname *name;
+	} *ap = (struct a *)P.p_arg;
+	
+	struct utsname me = {
+		"Punix",
+		"timmy",
+		OS_VERSION,
+		BUILD,
+		"m68k",
+	};
+	P.p_error = copyout(ap->name, &me, sizeof(me));
+}
+
+void sys_chdir()
+{
+	/*  int chdir(const char *path); */
+	struct a {
+		const char *path;
+	} *ap = (struct a *)P.p_arg;
+	struct inode *ip = NULL;
+	
+#ifdef NOTYET
+	ip = namei(ap->path);
+#endif
+	if (!ip)
+		return;
+	if (!(ip->i_mode & IFDIR)) {
+		P.p_error = ENOTDIR;
+		return;
+	}
+	if (ip == P.p_cdir) return;
+	iput(P.p_cdir);
+	++ip->i_count; /* unless namei() does this ?? */
+	P.p_cdir = ip;
 }
