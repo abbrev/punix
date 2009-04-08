@@ -7,7 +7,7 @@
 #include "proc.h"
 
 #define OS_NAME	"Punix"
-#define OS_VERSION	"0.6"
+#define OS_VERSION	"0.06"
 
 #define STARTUP(x) \
 	x __attribute__ ((section ("_st1"))); \

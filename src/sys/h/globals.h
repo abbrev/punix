@@ -11,6 +11,7 @@
 #include "glyph.h"
 
 struct globals {
+/* these must be first -- referenced from assembly code */
 	struct timespec _walltime; /* must be first! see entry.s (Int_3) */
 	struct timespec _realtime;
 	long _timedelta;
@@ -32,15 +33,19 @@ struct globals {
 	struct timespec _uptime;
 	long _loadavtime;
 	
-	int audiosamp; /* current samples */
+	unsigned char audiosamp; /* current samples */
 	int audiosamples; /* number of samples within that byte */
 	int audiolowat; /* low water level in audio queue */
 	int audioplay; /* flag to indicate if audio should play */
 	long long audiooptr;
 	
-	int linklowat;
+	struct {
+		int lowat, hiwat;
+		struct queue readq, writeq;
+		char control;
+	} link;
 	
-	struct queue linkreadq, linkwriteq, audioq;
+	struct queue audioq;
 	
 	/* seed for the pseudo-random number generator */
 	unsigned long prngseed;
@@ -112,6 +117,8 @@ struct globals {
 	} vt;
 	
 	int batt_level;
+	
+	int lbolt;
 	
 	/* temp/debugging variables */
 	int whereami;

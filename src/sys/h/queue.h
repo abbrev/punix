@@ -3,13 +3,21 @@
 
 /* 512 is the minimum queue size because that is the guaranteed minimum atomic
  * write size for a pipe. */
-#define QSIZE 512
+#define QSIZE 2048
 
+#if 0
 struct queue {
 	int q_count;
 	char *q_head, *q_tail; /* write to the head, read from the tail */
 	char q_buf[QSIZE];
 };
+#else
+struct queue {
+	int q_count;
+	int q_head, q_tail;
+	char q_buf[QSIZE];
+};
+#endif
 
 int qisfull(struct queue *qp);
 int qisempty(struct queue *qp);

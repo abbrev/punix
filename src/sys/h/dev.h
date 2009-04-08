@@ -39,7 +39,7 @@ struct	cdevsw
 	void	(*d_close)(dev_t dev, int rw);
 	void	(*d_read)(dev_t dev);
 	void	(*d_write)(dev_t dev);
-	void	(*d_ioctl)(dev_t, int cmd, ...);
+	void	(*d_ioctl)(dev_t, int cmd, void *arg);
 };
 
 extern const struct cdevsw cdevsw[];

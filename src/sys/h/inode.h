@@ -73,7 +73,6 @@ void iput(struct inode *);
 
 struct	inode *getinode();
 struct	inode *ialloc(dev_t dev);
-struct	inode *owner();
 struct	inode *maknode();
 struct	inode *namei();
 
