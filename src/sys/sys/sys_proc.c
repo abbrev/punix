@@ -256,10 +256,6 @@ static void testrandom()
 	userpause();
 }
 
-static const unsigned short dftr[] = {
-#include "dftr.c"
-};
-
 static void testaudio()
 {
 	int i;
@@ -289,11 +285,9 @@ static void testaudio()
 	
 	printf("playing both...\n");
 	write(audiofd, audiocenter, sizeof(audiocenter));
-#if 1
+#if 0
 	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
 #endif
-	printf("Gotta have more cowbell...\n");
-	write(audiofd, dftr, sizeof(dftr));
 	
 	printf("closing audio...\n");
 	close(audiofd);
