@@ -1,4 +1,4 @@
-.equ QSIZE, 2048	/* must be a power of 2. also see h/queue.h */
+.equ QSIZE, 512	/* must be a power of 2. also see h/queue.h */
 .equ QMASK, QSIZE-1
 
 .equ q_count, 0

@@ -43,6 +43,7 @@ struct globals {
 		int lowat, hiwat;
 		struct queue readq, writeq;
 		char control;
+		int readoverflow;
 	} link;
 	
 	struct queue audioq;

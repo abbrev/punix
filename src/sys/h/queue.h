@@ -3,7 +3,7 @@
 
 /* 512 is the minimum queue size because that is the guaranteed minimum atomic
  * write size for a pipe. */
-#define QSIZE 2048
+#define QSIZE 512
 
 #if 0
 struct queue {

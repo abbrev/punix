@@ -54,6 +54,15 @@ STARTUP(static void flush())
 	splx(x);
 }
 
+/* get a byte from the link read buffer and put it on the receive queue */
+STARTUP(static void recvbyte())
+{
+	int ch;
+	ch = LINK_BUFFER;
+	putc(ch, &G.link.readq);
+	//kprintf("<0x%02x ", ch);
+}
+
 STARTUP(void linkintr())
 {
 	int status;
@@ -85,19 +94,19 @@ STARTUP(void linkintr())
 		/* return; */
 	}
 	
-	if (status & LS_RXBYTE) {
+	if ((G.link.control & LC_TRIGRX) && (status & LS_RXBYTE)) {
 	++*(short *)(0x4c00+0xf00-30*4);
-		if (qisfull(&G.link.readq)) /* no room for this byte */
+		if (qisfull(&G.link.readq)) { /* no room for this byte */
+			//kprintf("<.. ");
+			G.link.readoverflow = 1;
 			rxoff();
-		else {
-			/* get the byte and put it on the receive queue */
-			ch = LINK_BUFFER;
-			putc(ch, &G.link.readq);
-			kprintf("<0x%02x ", ch);
+		} else {
+			recvbyte();
 			
 			if (G.link.hiwat >= 0 && G.link.readq.q_count >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
 				wakeup(&G.link.readq);
+				G.link.hiwat = -1;
 			}
 		}
 	}
@@ -107,14 +116,16 @@ STARTUP(void linkintr())
 		/* send the next byte from the send queue */
 		
 		if ((ch = getc(&G.link.writeq)) < 0) { /* nothing to send */
-			//txoff();
+			//kprintf(">.. ");
+			txoff();
 		} else {
 			LINK_BUFFER = ch;
-			kprintf(">0x%02x ", ch);
+			//kprintf(">0x%02x ", ch);
 			
 			if (G.link.writeq.q_count <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
 				wakeup(&G.link.writeq);
+				G.link.lowat = -1;
 			}
 		}
 	}
@@ -154,10 +165,14 @@ STARTUP(void linkread(dev_t dev))
 		x = spl5();
 		while ((ch = getc(&G.link.readq)) < 0) {
 			rxon();
+			if (G.link.readoverflow) {
+				G.link.readoverflow = 0;
+				recvbyte();
+				continue;
+			}
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
 				slp(&G.link.readq, PPIPE);
-				G.link.hiwat = -1;
 			} else /* we got some data already, so just return */
 				return;
 		}
@@ -180,7 +195,6 @@ STARTUP(void linkwrite(dev_t dev))
 			txon();
 			G.link.lowat = QSIZE - 32; /* XXX constant */
 			slp(&G.link.writeq, PPIPE);
-			G.link.lowat = -1;
 		}
 		splx(x);
 	}
