@@ -102,6 +102,7 @@ dev.o: dev.c
 bmap.o: bmap.c
 trap.o: trap.c
 #queue.o: queue.c
+queue.o: queue.s
 dev_link.o: dev_link.c
 dev_audio.o: dev_audio.c
 dev_flash.o: dev_flash.c
