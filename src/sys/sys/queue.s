@@ -9,6 +9,7 @@
 /* void qclear(struct queue *qp); */
 	.global	qclear
 qclear:
+	move.l	4(%sp),%a0	/* qp */
 	clr	(%a0)+
 	clr	(%a0)+
 	clr	(%a0)+
