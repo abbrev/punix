@@ -3,6 +3,7 @@
 #include <ctype.h>
 
 #include "punix.h"
+#include "buf.h"
 #include "dev.h"
 #include "kbd.h"
 #include "lcd.h"
@@ -317,6 +318,16 @@ void addkey(short key)
 		if (k) key = k;
 		else   key |= mod;
 	}
+	
+	if (!!(mod & KEY_SHIFT) ^ G.vt.key_caps) {
+#if 0
+		key = toupper(key);
+#else
+		if ('a' <= key && key <= 'z')
+			key += 'A' - 'a';
+#endif
+	}
+	
 	if (mod & KEY_DIAMOND) {
 		if (key == '+') {
 			lcd_inc_contrast();
@@ -339,16 +350,10 @@ void addkey(short key)
 			key = KEY_DEL;
 		} else if (key == '=') {
 			key = '%'; /* XXX */
+		} else if (('A' <= key && key <= 'Z')
+		           || (0x5b <= key && key <= 0x5f)) {
+			key -= 0x40;
 		}
-	}
-	
-	if (!!(mod & KEY_SHIFT) ^ G.vt.key_caps) {
-#if 0
-		key = toupper(key);
-#else
-		if ('a' <= key && key <= 'z')
-			key += 'A' - 'a';
-#endif
 	}
 	
 	if (key == KEY_COMPOSE) {
