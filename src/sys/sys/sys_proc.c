@@ -940,7 +940,7 @@ void sys_exit()
 		int status;
 	} *ap = (struct a *)P.p_arg;
 	
-	doexit(W_EXITCODE(ap->status, 0));
+	doexit(W_EXITCODE(ap->status));
 }
 
 void sys_fork()
