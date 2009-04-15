@@ -203,8 +203,6 @@ static void testuname()
 	struct utsname utsname;
 	int err;
 	
-	printf("Testing uname\n");
-	
 	err = uname(&utsname);
 	if (!err) {
 		printf("uname: %s %s %s %s %s\n",
@@ -218,16 +216,30 @@ static void testuname()
 	}
 }
 
+static void sigalrm()
+{
+}
+
 static void testtty()
 {
-	printf("Testing the tty.\nType ctrl-d to end input and go to the next test.\n");
+	printf("Type ctrl-d to end input and go to the next test.\n");
 	/* cat */
 	char buf[60];
 	ssize_t n;
+	struct itimerval it = {
+		{ 0, 0 },
+		{ 3, 0 }
+	};
+	struct sigaction sa;
+	sa.sa_handler = sigalrm;
+	sa.sa_flags = SA_RESTART;
+	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	for (;;) {
+		setitimer(ITIMER_REAL, &it, NULL);
 		n = read(0, buf, 60);
-		printf("%ld (%d)\n", n, buf[0]);
-		if (n <= 0) break;
+		printf("read %ld bytes\n", n);
+		if (n == 0) break;
+		if (n < 0) continue;
 		fwrite(buf, n, (size_t)1, NULL);
 		fflush(NULL);
 	}
@@ -238,8 +250,6 @@ static void testrandom()
 	int i;
 	int randomfd;
 	int randombuf[100];
-	
-	printf("Testing /dev/random\n");
 	
 	randomfd = open("/dev/random", O_RDWR);
 	printf("randomfd = %d\n", randomfd);
@@ -263,8 +273,6 @@ static void testaudio()
 	long audioleft[1024];
 	long audioright[1024];
 	long audiocenter[1024];
-	
-	printf("Testing /dev/audio\n");
 	
 	audiofd = open("/dev/audio", O_RDWR);
 	printf("audiofd = %d\n", audiofd);
@@ -436,7 +444,7 @@ static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 	return checksum;
 }
 
-static int sendpkt(const struct pkthead *pkt, int fd)
+static int sendpkthead(const struct pkthead *pkt, int fd)
 {
 	char buf[4];
 	buf[0] = pkt->machid;
@@ -457,6 +465,7 @@ static long discard(int fd, unsigned len)
 	int i;
 	while (len) {
 		n = read(fd, buf, len < sizeof(buf) ? len : sizeof(buf));
+		//printf("discard: read %ld bytes\n", n);
 		if (n < 0) return -1;
 		for (i = 0; i < n; ++i)
 			sum += buf[i];
@@ -486,9 +495,19 @@ static void getcalc(int fd)
 		RECV_START, RECV_WAITDATA, RECV_RXDATA
 	} state = RECV_START;
 	
+	struct itimerval it = {
+		{ 0, 0 },
+		{ 10, 0 }
+	};
+	struct sigaction sa;
+	sa.sa_handler = sigalrm;
+	sa.sa_flags = SA_RESTART;
+	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
+	
 	for (;;) {
+		setitimer(ITIMER_REAL, &it, NULL);
 		n = recvpkthead(&pkt, fd);
-		if (n < 0) goto error;
+		if (n < 0) goto timeout;
 		switch (state) {
 		case RECV_START:
 			printf("START\n");
@@ -496,20 +515,20 @@ static void getcalc(int fd)
 				sum = discard(fd, pkt.length);
 				checksum = getchecksum(fd);
 				if (checksum == sum) {
-					sendpkt(&ackpkt, fd);
-					sendpkt(&ctspkt, fd);
+					sendpkthead(&ackpkt, fd);
+					sendpkthead(&ctspkt, fd);
 					state = RECV_WAITDATA;
 				} else {
-					sendpkt(&errpkt, fd);
+					sendpkthead(&errpkt, fd);
 				}
 			} else if (pkt.commid == PKT_COMM_RDY) {
 				if (pkt.machid == 0x00) {
-					sendpkt(&ack92ppkt, fd);
+					sendpkthead(&ack92ppkt, fd);
 				} else {
-					sendpkt(&ackpkt, fd);
+					sendpkthead(&ackpkt, fd);
 				}
 			} else if (pkt.commid == PKT_COMM_EOT) {
-				sendpkt(&ackpkt, fd);
+				sendpkthead(&ackpkt, fd);
 				return;
 			} else {
 				goto error;
@@ -531,11 +550,11 @@ static void getcalc(int fd)
 			checksum = getchecksum(fd);
 			if (checksum == sum) {
 				printf("sending ACK\n");
-				sendpkt(&ackpkt, fd);
+				sendpkthead(&ackpkt, fd);
 				state = RECV_START;
 			} else {
 				printf("sending ERR\n");
-				sendpkt(&errpkt, fd);
+				sendpkthead(&errpkt, fd);
 			}
 			break;
 		default:
@@ -547,6 +566,9 @@ static void getcalc(int fd)
 error:
 	printf("ERROR\n");
 	//send something??
+	return;
+timeout:
+	printf("TIMEOUT\n");
 }
 
 #define BPERLINE 8
@@ -575,22 +597,14 @@ static void printhex(char buf[], int length)
 static void testlink()
 {
 	unsigned char buf[128];
-	ssize_t n, len;
 	int linkfd;
-	int i;
-	const char *p;
 	struct pkthead packet;
-	
-	printf("Testing /dev/link\n");
 	
 	linkfd = open("/dev/link", O_RDWR);
 	printf("linkfd = %d\n", linkfd);
 	if (linkfd < 0) goto out;
-	userpause();
 	
 	printf("Receiving variable...\n");
-	getcalc(linkfd);
-	userpause();
 	getcalc(linkfd);
 	userpause();
 	
@@ -609,8 +623,32 @@ out:
 	userpause();
 }
 
+static int banner(const char *s)
+{
+	static const char stars[] = "*****************************";
+	int h, i;
+	int l = strlen(s);
+	h = l / 2;
+	return printf("\n%s %s %s\n", &stars[h + (l%2)], s, &stars[h]);
+}
+
+struct test {
+	char name[20];
+	void (*func)();
+};
+
+static const struct test tests[] = {
+	{ "uname() syscall", testuname },
+	{ "/dev/tty", testtty },
+	{ "/dev/random", testrandom },
+	{ "/dev/link", testlink },
+	{ "/dev/audio", testaudio },
+	{ "", NULL }
+};
+
 int usermain(int argc, char *argv[], char *envp[])
 {
+	const struct test *testp;
 	int fd;
 	
 	fd = open("/dev/vt", O_RDWR); /* 0 */
@@ -618,6 +656,7 @@ int usermain(int argc, char *argv[], char *envp[])
 	dup(fd); /* 1 */
 	dup(fd); /* 2 */
 	
+#if 0
 	println("This is a user program.");
 	
 	println("\narguments:");
@@ -627,12 +666,13 @@ int usermain(int argc, char *argv[], char *envp[])
 	println("\nenvironment:");
 	for (; *envp; ++envp)
 		println(*envp);
+#endif
 	
 	int i;
 	struct timeval starttv;
 	struct timeval endtv;
 	struct timeval tv;
-#if 1
+#if 0
 	printf("waiting for the clock to settle...");
 	gettimeofday(&starttv, 0);
 	do {
@@ -654,37 +694,17 @@ int usermain(int argc, char *argv[], char *envp[])
 	printf("%ld.%06ld = %ld ns per call = %ld calls per second\n", tv.tv_sec, tv.tv_usec, x, 1000000000L / x);
 #endif
 	
+#if 0
 	/* test invalid address */
 	printf("testing syscall with an invalid pointer:\n");
 	int error = gettimeofday((void *)0x40000 - 1, 0);
 	printf("error = %d\n", error);
-	
-	long divl(long, long);
-	unsigned long j;
-	volatile unsigned long q;
-#if 0
-	for (j = 100000-1; j < 5000000; j+=101) {
-		q = j / 100000;
-		//q = divl(j, 100000);
-		if (j < q * 100000 || (q+1) * 100000 <= j)
-			printf("%ld %ld %ld\n", j, q, q*100000);
-	}
 #endif
-	for (i = 0; i < 0; ++i) {
-		gettimeofday(&starttv, 0);
-		for (j = 0; j < 10000000L; j+=100) {
-			q = j / 100000;
-		}
-		gettimeofday(&endtv, 0);
-		timersub(&endtv, &starttv, &tv);
-		printf("%ld.%06ld\n", tv.tv_sec, tv.tv_usec);
-	}
 	
-	testuname();
-	testtty();
-	testrandom();
-	testlink();
-	testaudio();
+	for (testp = &tests[0]; testp->func; ++testp) {
+		banner(testp->name);
+		testp->func();
+	}
 	
 	long lasttime = 0;
 	printf(ESC "[H" ESC "[J");
@@ -910,8 +930,22 @@ void doexit(int status)
 	/* mfree(...); */
 #endif
 	
-	if (P.p_pid == 1)
+	if (P.p_pid == 1) {
+#if 1
+		if (WIFEXITED(status))
+			kprintf("init exited normally with status %d\n", WEXITSTATUS(status));
+		else if (WIFSIGNALED(status))
+			kprintf("init terminated with signal %d\n", WTERMSIG(status));
+		else if (WIFSTOPPED(status))
+			kprintf("init stopped with signal %d\n", WSTOPSIG(status));
+		else if (WIFCONTINUED(status))
+			kprintf("init continued\n");
+		else
+			kprintf("init unknown status 0x%04x!\n", status);
+#endif
+
 		panic("init died");
+	}
 	
 	P.p_waitstat = status;
 	/* ruadd(&P.p_rusage, &P.p_crusage); */
