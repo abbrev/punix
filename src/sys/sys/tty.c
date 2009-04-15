@@ -88,7 +88,7 @@ STARTUP(int canon(struct tty *tp))
 	while (qisempty(&tp->t_rawq) || (lflag & ICANON && tp->t_delct == 0)) {
 		if (!(tp->t_state & ISOPEN))
 			return 0;
-		slp(&tp->t_rawq, TTIPRI);
+		slp(&tp->t_rawq, TTIPRI | PCATCH);
 	}
 	splx(x);
 	

@@ -66,5 +66,6 @@ STARTUP(void kmain())
 		walltime.tv_sec = REALTIME;
 		walltime.tv_nsec = 0;
 	}
+	realtime = walltime;
 	uptime.tv_sec = uptime.tv_nsec = 0;
 }

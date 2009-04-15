@@ -16,6 +16,7 @@ STARTUP(void linkinit())
 	qclear(&G.link.readq);
 	qclear(&G.link.writeq);
 	G.link.lowat = G.link.hiwat = -1;
+	G.link.readoverflow = 0;
 }
 
 STARTUP(static void rxon())
