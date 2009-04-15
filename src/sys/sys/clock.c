@@ -37,7 +37,7 @@ STARTUP(long hzto(struct timespec *tv))
 	struct timespec diff;
 	int x = spl7();
 	
-	timespecsub(&realtime, tv, &diff);
+	timespecsub(tv, &realtime, &diff);
 	
 	if ((diff.tv_sec + 1) <= LONG_MAX / HZ)
 		ticks = diff.tv_sec * HZ + diff.tv_nsec / TICK;

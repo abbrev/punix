@@ -6,6 +6,7 @@
 #include "punix.h"
 #include "signal.h"
 #include "globals.h"
+#include "wait.h"
 
 /* FIXME! make sure these signals match those in <signal.h> */
 static const char sigprop[NSIG + 1] = {
@@ -53,11 +54,11 @@ STARTUP(void stop(struct proc *p))
 STARTUP(int CURSIG(struct proc *p))
 {
 	if (p->p_sig == 0
-	    || ((p->p_flag & P_TRACED) == 0
-	    && (p->p_sig & ~p->p_sigmask) == 0))
+	    || (!(p->p_flag & P_TRACED) && !(p->p_sig & ~p->p_sigmask))) {
 		return 0;
-	else
+	} else {
 		return issignal(p);
+	}
 }
 
 STARTUP(int cansignal(struct proc *p, int signum))
@@ -73,7 +74,7 @@ STARTUP(int cansignal(struct proc *p, int signum))
 }
 
 /* handle a signal */
-STARTUP(void sendsig(struct proc *p, int sig, sigset_t mask))
+STARTUP(void sendsig(struct proc *p, int sig, sigset_t returnmask))
 {
 	/* FIXME: write this! */
 	/* the basic idea behind this is to simulate a subroutine call in
@@ -81,6 +82,7 @@ STARTUP(void sendsig(struct proc *p, int sig, sigset_t mask))
 	* system call. */
 	/* This is one of those problems I'll have to sleep on before I get it
 	* right. */
+	P.p_sigmask = returnmask;
 }
 
 STARTUP(void psignal(struct proc *p, int sig))
@@ -253,9 +255,11 @@ STARTUP(int issignal(struct proc *p))
 		
 		switch ((intptr_t)P.p_signal[sig]) {
 		case (intptr_t)SIG_DFL:
+#if 0 /* for testing (but why would a sane init process leave any of its signal handlers at their default?) */
 			if (p->p_pid <= 1) {
 				break;
 			}
+#endif
 			if (prop & SA_STOP) {
 				if ((p->p_pptr==G.initproc && prop&SA_TTYSTOP)
 				   || (p->p_flag&P_TRACED))
@@ -294,6 +298,7 @@ STARTUP(void postsig(int sig))
 	P.p_sig &= ~mask;
 	action = P.p_signal[sig];
 	
+	//kprintf("postsig\n");
 	if (action != SIG_DFL) {
 #if 0
 		if (action == SIG_IGN || (p->p_sigmask & mask))
@@ -320,5 +325,5 @@ STARTUP(void postsig(int sig))
 			sig |= 0200;
 	}
 #endif
-	doexit(sig);
+	doexit(W_TERMCODE(sig));
 }

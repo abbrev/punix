@@ -172,9 +172,11 @@ SYS_kfree       = 18
 SYS_getpid      = 20
 SYS_uname       = 23
 SYS_getppid     = 27
+SYS_sigaction   = 31
 SYS_dup         = 41
 SYS_ioctl       = 54
 SYS_execve      = 59
+SYS_setitimer   = 83
 SYS_getpriority = 96
 SYS_gettimeofday = 116
 SYS_getrusage   = 117
@@ -224,6 +226,12 @@ execve:
 	bcs	cerror
 	rts
 
+	.global setitimer
+setitimer:
+	sys	setitimer
+	bcs	cerror
+	rts
+
 	.global gettimeofday
 gettimeofday:
 	sys	gettimeofday
@@ -257,6 +265,12 @@ uname:
 	.global getppid
 getppid:
 	sys	getppid
+	bcs	cerror
+	rts
+	
+	.global sigaction
+sigaction:
+	sys	sigaction
 	bcs	cerror
 	rts
 	

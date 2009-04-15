@@ -89,3 +89,36 @@ STARTUP(void sys_killpg())
 	
 	P.p_error = error;
 }
+
+void sys_sigaction()
+{
+	struct a {
+		int signum;
+		const struct sigaction *act;
+		struct sigaction *oldact;
+	} *ap = (struct a *)P.p_arg;
+	
+	struct sigaction sa;
+	
+	if (ap->signum >= NSIG) {
+		P.p_error = EINVAL;
+		return;
+	}
+	
+	if (ap->oldact) {
+		/* XXX */
+	}
+	
+	if (ap->act) {
+		P.p_error = copyin(&sa, ap->act, sizeof(sa));
+		if (P.p_error)
+			return;
+		P.p_signal[ap->signum] = sa.sa_sigaction;
+		if (sa.sa_flags & SA_RESTART) {
+			P.p_sigintr &= ~sigmask(ap->signum);
+		} else {
+			P.p_sigintr |= sigmask(ap->signum);
+		}
+	}
+}
+

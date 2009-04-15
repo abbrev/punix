@@ -82,8 +82,8 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	whereami = G.whereami;
 
-	if (++G.spin >= 2) {
-		unsigned long *spinner = (long *)(0x4c00+0xf00-7*30+whereami*6);
+	if (current && ++G.spin >= 2) {
+		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+whereami*4);
 		if (*spinner)
 			*spinner = RORL(*spinner, 1);
 		else
@@ -163,7 +163,7 @@ STARTUP(void hardclock(unsigned short ps))
 	if (current) {
 		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
-				psignal(current, SIGPROF);
+			psignal(current, SIGPROF);
 	}
 	
 	if (USERMODE(ps)) {
@@ -183,9 +183,10 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	--G.callout[0].c_time;
 	
-	if (!USERMODE(ps))
+	if (G.calloutlock)
 		goto out;
 	
+	++G.calloutlock;
 	spl0();
 	
 	if (G.callout[0].c_time <= 0) {
@@ -201,6 +202,7 @@ STARTUP(void hardclock(unsigned short ps))
 			*c1 = *c2++;
 		while (c1++->c_func);
 	}
+	G.calloutlock = 0;
 	
 out:	spl0();
 	
@@ -233,11 +235,6 @@ STARTUP(void updwalltime())
 	++*(long *)(0x4c00+0xf00-16);
 	
 	++walltime.tv_sec;
-	if (walltime.tv_sec < realtime.tv_sec ||
-	    (walltime.tv_sec == realtime.tv_sec &&
-	     walltime.tv_nsec < realtime.tv_nsec)) {
-		++*(short *)(0x4c00+0xf00-30);
-	}
 	*(long *)(0x4c00+0xf00-34) = realtime.tv_nsec;
 	realtime.tv_sec = walltime.tv_sec;
 	realtime.tv_nsec = walltime.tv_nsec;

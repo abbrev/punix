@@ -136,7 +136,7 @@ STARTUP(void audiowrite(dev_t dev))
 			
 			G.audiolowat = QSIZE - 32; /* XXX constant */
 			
-			slp(&G.audioq, PAUDIO);
+			slp(&G.audioq, PAUDIO | PCATCH);
 			splx(x);
 		}
 	}

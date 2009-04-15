@@ -2,9 +2,9 @@ bytes in status returned by wait*() routines (these are set in the appropriate
 places, eg, in stop(), exit(), psig(), etc)
 
 exit normally:
-	[ exit status ] [ signal ] // signal == 0
+	[ signal ] [ exit status ] // signal == 0
 killed by signal:
-	[ exit status ] [ signal ] // exit status == 0
+	[ signal ] [ exit status ] // exit status == 0
 stop by signal:
 	[ signal ] [ 0x7f ]
 continued:

@@ -161,7 +161,8 @@ STARTUP(int realitexpire(void *vp))
 	 * process is not signalled, but another timeout is set for this routine
 	 * to be called again, possibly when the real timer really goes off.
 	 */
-	if (!timespeccmp(&tp->it_value, &realtime, <)) {
+	if (!timespeccmp(&tp->it_value, &realtime, >)) {
+		//kprintf("SIGALRM\n");
 		psignal(p, SIGALRM);
 		
 		if (!timespecisset(&tp->it_interval)) {
@@ -234,7 +235,12 @@ STARTUP(void sys_setitimer())
 	if (ap->which == ITIMER_REAL) {
 		untimeout(realitexpire, &P);
 		if (timespecisset(&itv.it_value)) {
+#if 0
+			kprintf("setitimer: setting realitexpire in %ld.%09ld seconds\n", itv.it_value.tv_sec, itv.it_value.tv_nsec);
+			kprintf("setitimer: realtime=%ld.%09ld\n", realtime.tv_sec, realtime.tv_nsec);
+#endif
 			timespecadd(&itv.it_value, &realtime, &itv.it_value);
+			P.p_itimer[ap->which] = itv;
 			timeout(realitexpire, &P, hzto(&itv.it_value));
 		}
 	}

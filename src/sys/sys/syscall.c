@@ -54,6 +54,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	extern const int nsysent;
 	struct sysent *callp;
 	uint32_t retval = 0;
+	int sig;
 
 	G.whereami = 2;
 	
@@ -105,8 +106,8 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 		swtch();
 	
 	/* XXX */
-	if (issignal(&P))
-		postsig(&P);
+	if (sig = issignal(&P))
+		postsig(sig);
 	
 	G.whereami = 0;
 	return retval;

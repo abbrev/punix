@@ -12,7 +12,7 @@
 #define WTERMSIG(s)    ((s) & 0x7f)
 
 #define WIFSTOPPED(s)  (((s) & 0xff) == 0x7f)
-#define WSTOPSIG(s)    WEXITSTATUS(s)
+#define WSTOPSIG(s)    WTERMSIG(s)
 
 #define WIFCONTINUED(s)     ((s) == 0xff)
 

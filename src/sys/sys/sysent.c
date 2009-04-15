@@ -63,6 +63,8 @@ void sys_execve();
 
 void sys_getdtablesize();
 
+void sys_sigaction();
+
 #define sys_link	sys_NONE
 #define sys_unlink	sys_NONE
 #define sys_chdir	sys_NONE
@@ -72,7 +74,6 @@ void sys_getdtablesize();
 #define sys_chown	sys_NONE
 #define sys_mount	sys_NONE
 #define sys_umount	sys_NONE
-#define sys_sigaction	sys_NONE
 #define sys_sigprocmask	sys_NONE
 #define sys_access	sys_NONE
 #define sys_sigpending	sys_NONE
@@ -186,7 +187,7 @@ STARTUP(struct sysent sysent[]) = {
 	{4, sys_setgroups},	/* 80 */
 	{0, sys_getpgrp},
 	{0, sys_setpgrp},
-	{0, sys_setitimer},
+	{5, sys_setitimer},
 	{0, sys_NONE}, /* sys_wait3 */
 	{0, sys_NONE},
 	{3, sys_getitimer},
