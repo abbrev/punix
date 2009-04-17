@@ -77,16 +77,20 @@ STARTUP(void miscread(dev_t dev))
 STARTUP(void miscwrite(dev_t dev))
 {
 	int minor = MINOR(dev);
+	int c;
 	
 	switch (minor) {
 	case DEVZERO:
 	case DEVNULL:
-	case DEVRANDOM:
 		P.p_count = 0;
 		break;
 	case DEVFULL:
 		P.p_error = ENOSPC;
 		break;
+	case DEVRANDOM:
+		/* stir the pot */
+		while ((c = cpass()) >= 0)
+			G.prngseed = G.prngseed * (c + 1103515245UL) + 12345UL;
 	}
 }
 
