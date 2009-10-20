@@ -2,11 +2,7 @@
 #define _UIO_H_
 
 #include <sys/types.h>
-
-struct iovec {
-	void	*iov_base;	/* base address of memory region for input or output */
-	size_t	iov_len;	/* size of the memory pointed to by iov_base */
-};
+#include <sys/uio.h>
 
 enum uio_rw { UIO_READ, UIO_WRITE };
 
