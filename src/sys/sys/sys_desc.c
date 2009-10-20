@@ -140,7 +140,47 @@ STARTUP(void sys_read(void))
 	rdwr(FREAD);
 }
 
-/* FIXME: write is just a quick hack to produce results */
+#if 0
+/* modified from 4.4BSD-Lite */
+void sys_read(void)
+{
+	struct rdwr *ap = (struct rdwr *)P.p_arg;
+	
+	struct file *fp;
+	struct uio auio;
+	struct iovec aiov;
+	long cnt;
+	int error = 0;
+	
+	GETF(fp, ap->fd);
+	if (!(fp->f_flag & FREAD)) {
+		P.p_error = EBADF;
+		return;
+	}
+	
+	aiov.iov_base = ap->buf;
+	aiov.iov_len = ap->count;
+	auio.uio_iov = &aiov;
+	auio.uio_iovcnt = 1;
+	auio.uio_resid = ap->count;
+	auio.uio_rw = UIO_READ;
+#if 0
+	auio.uio_segflg = UIO_USERSPACE;
+	auio.uio_procp = current;
+#endif
+	cnt = ap->count;
+	//error = f_read(fp, &auio);
+	if (error = (*fp->f_ops->fo_read)(fp, &auio, fp->f_cred))
+		if (auio.uio_resid != cnt && (error == ERESTART
+		     || error == EINTR || error == EWOULDBLOCK))
+			error = 0;
+	cnt -= auio.uio_resid;
+	*retval = cnt;
+	return (error);
+}
+
+#endif
+
 STARTUP(void sys_write())
 {
 	int whereami = G.whereami;
@@ -314,7 +354,7 @@ STARTUP(void sys_dup())
 	
 	GETF(oldfp, ap->oldfd);
 	
-	if ((newfd = ufalloc(0)) < 0)
+	if ((newfd = fdalloc(0)) < 0)
 		return;
 	
 	dupit(newfd, oldfp, P.p_oflag[ap->oldfd] & ~FD_CLOEXEC);
@@ -470,7 +510,7 @@ STARTUP(void sys_fcntl())
 				P.p_error = EINVAL;
 				return;
 			}
-			if ((arg = ufalloc(arg)) < 0)
+			if ((arg = fdalloc(arg)) < 0)
 				return;
 			dupit(arg, fp, *ofp & ~FD_CLOEXEC);
 			break;

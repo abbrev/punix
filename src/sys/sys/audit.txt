@@ -1,0 +1,457 @@
+Audit of functions, listed by file
+
+Legend:
++ written entirely by me (clean)
+* should be clean (from public domain, 3-clause BSD, or GPL)
+! dirty (4-clause BSD or other license incompatible with GPL)
+R should be re-written for other reason (eg, redesign)
+X should be removed for other reason (eg, unused/dead code)
+
++ ******** abort.c ********
++ void abort(void)
+
+! ******** alloc.c ********
+struct inode *ialloc(dev_t dev)
+void ifree(dev_t dev, ino_t ino)
+struct fs *getfs(dev_t dev)
+void update()
+
++ ******** assert.c ********
++ void __assert(const char *expr, const char *file, unsigned line)
+
++ ******** batt.c ********
++ static void reinit()
++ int batt_check()
+Note: I translated this code from assembly language from PedroM
+
+!R ******** bio.c ********
+struct buf *bufalloc()
+int buffree(struct buf *bp)
+void brelse(struct buf *bp)
+struct buf *incore(dev_t dev, long blkno)
+static void notavail(struct buf *bp)
+void iowait(struct buf *bp)
+struct buf *bread(dev_t dev, long blkno)
+void bwrite(struct buf *bp)
+void bdwrite(struct buf *bp)
+void clrbuf(struct buf *bp)
+struct buf *getblk(dev_t dev, long blkno)
+void bflush(dev_t dev)
+void bufinit()
+
+******** bmap.c ********
+R long bmap(struct inode *ip, long bn)
+
+* ******** clock.c ********
+* long hzto(struct timespec *tv)
+* int timeout(void (*func)(void *), void *arg, long time)
+* void untimeout(void (*func)(void *), void *arg)
+
++ ******** dev_audio.c ********
++ void audioinit()
++ static void startaudio()
++ static void stopaudio()
++ static void dspsync()
++ void audiointr()
++ void audioopen(dev_t dev, int rw)
++ void audioclose(dev_t dev, int flag)
++ void audioread(dev_t dev)
++ void audiowrite(dev_t dev)
++ void audioioctl(dev_t dev, int cmd, void *cmarg, int flag)
++ void audioioctl(dev_t dev, int cmd, void *cmarg, int flag)
+
++ ******** dev.c ********
++ void nodev()
++ void nulldev()
+
+R ******** dev_flash.c ********
++ static void makeru(struct flash_cache_entry *cep)
++ static struct flash_cache_entry *cachefind(long blkno)
++ static void cacheadd(long blkno, struct flashblock *fbp)
++ void *blkno_to_addr(long blkno)
+short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"),
++ static struct flashblock *getfblk(long blkno)
++ static void nextblock()
++ static void flread(struct buf *bp)
++ static void flwrite(struct buf *bp)
++ static void fldelete(struct buf *bp)
++ void flopen(dev_t dev)
++ void flclose(dev_t dev)
++ void flstrategy(struct buf *bp)
+int FlashInit(FILE *flashfile)
+int FlashWrite(const short *src, short *dest, size_t size)
+int FlashErase(const short *dest)
+
++ ******** dev_link.c ********
++ void linkinit()
++ static void rxon()
++ static void rxoff()
++ static void txon()
++ static void txoff()
++ static void flush()
++ static void recvbyte()
++ void linkintr()
++ void linkopen(dev_t dev, int rw)
++ void linkclose(dev_t dev, int flag)
++ void linkread(dev_t dev)
++ void linkwrite(dev_t dev)
++ void linkioctl(dev_t dev, int cmd, void *cmarg, int flag)
+
++ ******** dev_misc.c ********
++ int rand()
++ void srand(unsigned s)
++ void miscopen(dev_t dev, int rw)
++ void miscread(dev_t dev)
++ void miscwrite(dev_t dev)
++ void miscioctl(dev_t dev, int cmd, void *cmargs)
+
++ ******** dev_tty.c ********
++ void devttyopen(dev_t dev, int rw)
++ void devttyclose(dev_t dev, int rw)
++ void devttyread(dev_t dev)
++ void devttywrite(dev_t dev)
++ void devttyioctl(dev_t dev, int cmd, void *cmarg)
+
++ ******** dev_vt.c ********
++ static void transition(int ch, int newstate,
++ static void invertcursor(struct tty *tp)
++ static void cursor(struct tty *tp)
++ static void scroll(struct tty *tp)
++ static void cmd_ind(struct tty *tp)
++ static void cmd_nel(struct tty *tp)
++ static void cmd_hts(struct tty *tp)
++ static void cmd_ri(struct tty *tp)
++ static void reset(struct tty *tp)
++ static void defaultparams(int n, struct tty *tp)
++ static void drawgl(struct glyph *glyph, int row, int col)
++ static void print(int ch, struct tty *tp)
++ static void execute(int ch, struct tty *tp)
++ static void clear(struct tty *tp)
++ static void collect(int ch, struct tty *tp)
++ static void param(int ch, struct tty *tp)
++ static void esc_dispatch(int ch, struct tty *tp)
++ static void csi_dispatch(int ch, struct tty *tp)
++ static void hook(struct tty *tp)
++ static void put(int ch, struct tty *tp)
++ static void unhook(struct tty *tp)
++ static void osc_start(struct tty *tp)
++ static void osc_put(int ch, struct tty *tp)
++ static void osc_end(struct tty *tp)
++ static void ground_event(int ch, struct tty *tp)
++ static void escape_event(int ch, struct tty *tp)
++ static void escint_event(int ch, struct tty *tp)
++ static void csient_event(int ch, struct tty *tp)
++ static void csiprm_event(int ch, struct tty *tp)
++ static void csiint_event(int ch, struct tty *tp)
++ static void csiign_event(int ch, struct tty *tp)
++ static void dcsent_event(int ch, struct tty *tp)
++ static void dcsprm_event(int ch, struct tty *tp)
++ static void dcsint_event(int ch, struct tty *tp)
++ static void dcspas_event(int ch, struct tty *tp)
++ static void dcsign_event(int ch, struct tty *tp)
++ static void oscstr_event(int ch, struct tty *tp)
++ static void sosstr_event(int ch, struct tty *tp)
++ void vtinit()
++ static void dovtoutput(int ch, struct tty *tp)
++ static void vtoutput(int ch, struct tty *tp)
++ static void ttyoutput(int ch, struct tty *tp)
++ static void printhihat(int ch, struct tty *tp)
++ static void ttyinput(int ch, struct tty *tp)
++ void vtrint(dev_t dev)
++ int kputchar(int ch)
++ void vtopen(dev_t dev, int rw)
++ void vtclose(dev_t dev, int rw)
++ void vtread(dev_t dev)
++ void vtwrite(dev_t dev)
++ void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
+
+* ******** ffs.c ********
+* int ffsl(long n)
+* int ffs(int n)
+
+******** fio.c ********
+! struct file *getf(int fd)
+! void closef(struct file *fp)
+! void openf(struct file *fp, int rw)
+! int canaccess(struct inode *ip, int mode)
+* int ufalloc(int d)
+* int falloc()
+
++ ******** heap.c ********
++ static void printheaplist()
++ static size_t largest_unallocated_chunk_size()
++ void meminit()
++ static void insertentry(struct heapentry *hp, int start, int end, pid_t pid)
++ void *memalloc(size_t *sizep, pid_t pid)
++ static void removeentry(struct heapentry *hp)
++ void memfree(void *ptr, pid_t pid)
++ void memfree(void *ptr, pid_t pid)
++ void sys_kmalloc()
++ void sys_kfree()
+
+******** inode.c ********
+void iexpand(struct inode *ip, struct dinode *dp)
+struct inode *iget(dev_t dev, struct fs *fs, ino_t ino)
+void iput(struct inode *ip)
+void iupdat(struct inode *ip, time_t *ta, time_t *tm)
+void itrunc(struct inode *ip)
+struct inode *maknode(int mode)
+void wdir(struct inode *ip)
+void ilock(struct inode *ip)
+void iunlock(struct inode *ip)
+
+* ******** keyscan.c ********
+* void _WaitKeyboard(void);
++ static short translate(short key, const struct translate *tp)
++ static void expand(short key)
++ static short compose(short key)
++ void addkey(short key)
++ void scankb()
+Note: most of these were initially translated from assembly from PedroM, but I had to re-write major portions of them to work with Punix and its tty
+
+* ******** kprintf.c ********
+* void kprintf(const char *fmt, ...)
+Note: from Minix
+
++ ******** kputs.c ********
++ int kputs(char *s)
+
++ ******** lcd.c ********
++ int lcd_set_contrast(int cont)
++ int lcd_inc_contrast()
++ int lcd_dec_contrast()
++ void lcdinit()
+Note: I translated this from assembly language from PedroM
+
+! ******** loadav.c ********
+* void loadav(unsigned long numrun)
+Note: this loadav() function is (should be) sufficiently rewritten from the v6 or v7 version
+Note2: comments explaining this function might need to be removed
+
+X ******** lock.c ********
+X int trylock(volatile int *ip)
+X void lock(volatile int *ip, int basepri)
+X void unlock(volatile int *ip)
+Not currently used in Punix
+
++ ******** main.c ********
++ void kmain()
+
+? ******** namei2.c ********
+? static void dirbad(struct inode *ip, off_t offset, char *how)
+? static int dirbadentry(struct direct *ep, int entryoffsetinblock)
+? static int reclen(int r)
+? static int toreclen(int n, int prevr)
+? struct buf *blkatoff(struct inode *ip, off_t offset, char **res)
+? struct inode *namei(struct nameidata *ndp)
+Note: from 2.11BSD (not sure if this is clean) but should be rewritten anyway for the Punix File System (PFS)
+
+! ******** namei.c ********
+! struct inode *namei(char *path, int flag)
+Mostly from v6/v7
+
++ ******** panic.c ********
++ void panic(const char *s)
++ void warn(const char *s, long value)
+
+******** pipe.c ********
+void plock(struct inode *ip)
+void prele(struct inode *ip)
+void sys_pipe()
+void readp(struct file *fp)
+void writep(struct file *fp)
+
+******** printf.c ********
++ int fflush(void *stream)
++ int putchar(int c)
++ size_t fwrite(const void *ptr, size_t size, size_t nmemb, void *stream)
+* void printf(const char *fmt, ...)
+
+******** process.c ********
++ void cpuidle(void)
++ void setrun(struct proc *p)
++ void setsleep(struct proc *p)
++ int setpri(struct proc *p)
++ void decaycputimes()
++ static struct proc *nextready()
++ void swtch()
+* void unsleep(struct proc *p)
+* static void endtsleep(void *vp)
+* int tsleep(void *event, int basepri, long timo)
++ void slp(void *event, int basepri)
++ void wakeup(void *event)
++ struct proc *palloc()
++ void pfree(struct proc *p)
++ int pidalloc()
+int inferior(struct proc *p)
+struct proc *pfind(pid_t pid)
++ void procinit()
+
+! ******** rdwri.c ********
+! unsigned max(unsigned a, unsigned b)
+! unsigned min(unsigned a, unsigned b)
+! void iomove(void *cp, int n, int flag)
+! void readi(struct inode *ip)
+! void writei(struct inode *ip)
+Mostly copied from v7
+
+******** signal.c ********
+void stop(struct proc *p)
+int CURSIG(struct proc *p)
+int cansignal(struct proc *p, int signum)
+void sendsig(struct proc *p, int sig, sigset_t returnmask)
+void psignal(struct proc *p, int sig)
+void gsignal(int pgrp, int sig)
+int issignal(struct proc *p)
+void postsig(int sig)
+
+******** subr.c ********
++ int passc(int ch)
++ int cpass()
+
++ ******** syscall.c ********
++ uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp)
++ void sys_NONE(void)
+
+******** sys_desc.c ********
+void sys_getdtablesize()
+? static void rdwr(int mode)
++ void sys_read(void)
++ void sys_write()
+static void doopen(const char *pathname, int flags, mode_t mode)
+static void open1(struct inode *ip, int mode, int trf)
++ void sys_open()
++ void sys_creat()
+* void sys_close()
+* static void dupit(int newfd, struct file *oldfp, int flags)
+* void sys_dup()
+* void sys_dup2()
+? void sys_lseek()
+* void sys_umask()
+void sys_fstat()
+static int fioctl(struct file *fp, unsigned cmd, char *value)
+static int fgetown(struct file *fp, uint32_t *valuep)
+static int fsetown(struct file *fp, uint32_t value)
+void sys_fcntl()
+* void sys_ioctl()
+
++ ******** sysent.c ********
+
+******** sys_proc.c ********
++ void sys_sigreturn()
++ static void println(char *s)
++ time_t time(time_t *tp)
++ struct tm *gmtime_r(const time_t *tp, struct tm *tmp)
++ static void cleareol()
++ static void updatetop()
++ void userpause()
++ static void testuname()
++ static void sigalrm()
++ static void testtty()
++ static void testrandom()
++ static void testaudio()
++ static unsigned cksum(unsigned char *buf, ssize_t count)
++ static int recvpkthead(struct pkthead *pkt, int fd)
++ static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
++ static int sendpkthead(const struct pkthead *pkt, int fd)
++ static long discard(int fd, unsigned len)
++ static long getchecksum(int fd)
++ static void getcalc(int fd)
++ static void printhex(char buf[], int length)
++ static void testlink()
++ static int banner(const char *s)
++ int usermain(int argc, char *argv[], char *envp[])
++ static void copyenv(char ***vp, char **sp, char **sv)
+static void endvfork()
++ void sys_execve()
+void doexit(int status)
+R void sys_exit()
++ void sys_fork()
+R void sys_vfork()
+? static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
+* void sys_wait()
+* void sys_waitpid()
+* void sys_wait3()
+* void sys_wait4()
+* void sys_getpid()
+* void sys_getppid()
+* static void donice(struct proc *p, int n)
++ void sys_nice()
+* void sys_getpriority()
+* void sys_setpriority()
++ void sys_getrlimit()
++ void sys_setrlimit()
++ void sys_getrusage()
++ void sys_uname()
+? void sys_chdir()
+
+******** sys_prot.c ********
++ void sys_getuid()
++ void sys_geteuid()
++ void sys_getgid()
++ void sys_getegid()
++ void sys_getgroups()
++ static int validuid(uid_t uid)
++ static int validgid(gid_t gid)
++ void sys_setuid()
++ void sys_setgid()
+? int suser()
+* void sys_setgroups()
++ void sys_seteuid()
++ void sys_setegid()
++ void sys_setreuid()
++ void sys_setregid()
++ void sys_setresuid()
++ void sys_setresgid()
+? static struct inode *owner(const char *path)
+? void sys_chmod()
++ void sys_chown()
+
+******** sys_sig.c ********
+static int killpg1(int sig, pid_t pgrp, int all)
+void sys_kill()
+void sys_killpg()
+void sys_sigaction()
+
+******** sys_time.c ********
+* int itimerdecr(struct itimerspec *itp, long nsec)
+* void timespecadd(struct timespec *a, struct timespec *b, struct timespec *res)
+* void timespecsub(struct timespec *a, struct timespec *b, struct timespec *res)
+* void timeradd(struct timeval *a, struct timeval *b, struct timeval *res)
+* void timersub(struct timeval *a, struct timeval *b, struct timeval *res)
++ static void getit(int which, struct itimerval *value)
++ void sys_getitimer()
+* static int itimerfix(struct timespec *tv)
+* int realitexpire(void *vp)
++ void sys_setitimer()
++R void sys_utime()
++ void sys_gettimeofday()
++ void sys_settimeofday()
++ void sys_time()
++ void sys_getloadavg1()
+
++ ******** trap.c ********
++ void bus_error()
++ void spurious()
++ void address_error()
++ void illegal_instr()
++ void zero_divide()
++ void chk_instr()
++ void i_trapv()
++ void privilege()
++ void trace()
++* void hardclock(unsigned short ps)
++ void updwalltime()
+
+******** tty.c ********
+! void ttyopen(dev_t dev, struct tty *tp)
+! void ttychars(struct tty *tp)
+! void flushtty(struct tty *tp)
+! void wflushtty(struct tty *tp)
+! void ttyclose(struct tty *tp)
+! void ttyioctl(dev_t dev, int cmd, void *cmarg)
+! int canon(struct tty *tp)
+! void ttyread(struct tty *tp)
+! void ttyinput(int ch, struct tty *tp)
+! void ttyoutput(int ch, struct tty *tp)
+Mostly from v6/v7

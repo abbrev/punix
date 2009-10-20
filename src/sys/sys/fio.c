@@ -70,6 +70,7 @@
 #include "globals.h"
 
 
+#if 0 /* TAINTED */
 STARTUP(struct file *getf(int fd))
 {
 	struct file *fp = NULL;
@@ -202,10 +203,11 @@ bad:
 	P.p_error = EACCES;
 	return 1;
 }
+#endif /* TAINTED */
 
 /* allocate a file descriptor */
 /* start searching at 'd' */
-STARTUP(int ufalloc(int d))
+STARTUP(int fdalloc(int d))
 {
 	/* look for lowest free fd */
 	for (; d < NOFILE; ++d) {
@@ -231,7 +233,7 @@ STARTUP(int falloc())
 	struct file *fp;
 	int fd;
 	
-	if ((fd = ufalloc(0)) < 0)
+	if ((fd = fdalloc(0)) < 0)
 		return -1;
 	
 	for EACHFILE(fp) {
