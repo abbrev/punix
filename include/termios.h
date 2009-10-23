@@ -129,8 +129,9 @@ struct termios {
 #define ECHOE   0000020  /* Echo erase character as error-correcting backspace. */
 #define ECHOK   0000040  /* Echo KILL. */
 #define ECHONL  0000100  /* Echo NL. */
-#define NOFLSH  0000200  /* Disable flush after interrupt or quit. */
-#define TOSTOP  0000400  /* Send SIGTTOU for background output. */
+#define ECHOCTL 0000200  /* Echo control characters. (Not in POSIX) */
+#define NOFLSH  0000400  /* Disable flush after interrupt or quit. */
+#define TOSTOP  0001000  /* Send SIGTTOU for background output. */
 #define IEXTEN  0100000  /* Enable extended input character processing. */
 
 /* tcsetattr() uses these */
