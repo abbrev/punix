@@ -76,12 +76,16 @@ struct	inode *ialloc(dev_t dev);
 struct	inode *maknode();
 struct	inode *namei();
 
+
+#define NULLINO ((ino_t)0)
+
+
 /* i_flag */
 #define	ILOCKED		0x0001		/* inode is locked */
 #define	IUPD		0x0002		/* file has been modified */
 #define	IACC		0x0004		/* inode access time to be updated */
 #define	IMOUNT		0x0008		/* inode is mounted on */
-#define	IWANT		0x0010		/* some process waiting on lock */
+#define	IWANTED		0x0010		/* some process waiting on lock */
 #define	ITEXT		0x0020		/* inode is pure text prototype */
 #define	ICHG		0x0040		/* inode has been changed */
 #define	ISHLOCK		0x0080		/* file has shared lock */

@@ -297,9 +297,70 @@ static short compose(short key)
 	return key;
 }
 
-void addkey(short key)
+static const unsigned short status[][4] = {
+#include "glyphsets/status-none.inc"
+#include "glyphsets/status-2nd.inc"
+#include "glyphsets/status-diamond.inc"
+#include "glyphsets/status-shift.inc"
+#include "glyphsets/status-alpha.inc"
+#include "glyphsets/status-hand.inc"
+#include "glyphsets/status-capslock.inc"
+#include "glyphsets/status-compose1.inc"
+#include "glyphsets/status-compose2.inc"
+#include "glyphsets/status-bell.inc"
+};
+
+#define STATUS_NONE     0
+#define STATUS_2ND      1
+#define STATUS_DIAMOND  2
+#define STATUS_SHIFT    3
+#define STATUS_ALPHA    4
+#define STATUS_HAND     5
+#define STATUS_CAPSLOCK 6
+#define STATUS_COMPOSE1 7
+#define STATUS_COMPOSE2 8
+#define STATUS_BELL     9
+#define STATUS_LAST     9
+
+static void drawmod(int pos, int m)
 {
-	short mod;
+	/* draw mod 'm' at position 'pos' */
+	char *d;
+	char *s;
+	int i;
+	if (m < 0 || STATUS_LAST < m) return;
+	if (pos < 0 || 30 <= pos) return;
+	//kprintf("drawmod(%d, %d)\n", pos, m);
+	s = (char *)(0x4c00 + pos);
+	s = (char *)(0x4c00 + 0xf00 - 7*30 - 1 - pos);
+	d = (char *)&status[m][0];
+	for (i = 0; i < 8; ++i) {
+		*s = *d;
+		s+=30;
+		++d;
+	}
+}
+
+static void showmods(void)
+{
+	/* TI-92+: */
+	/* compose hand capslock shift diamond 2nd bell */
+	/* 6       5    4        3     2       1   0    */
+	
+	int mod = G.vt.key_mod | G.vt.key_mod_sticky;
+	
+	drawmod(1, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
+	drawmod(2, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
+	drawmod(3, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
+	drawmod(4, G.vt.key_caps ? STATUS_CAPSLOCK : STATUS_NONE);
+	drawmod(5, mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
+	drawmod(6, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
+}
+
+static void addkey(unsigned short key)
+{
+	unsigned short mod;
+	
 	if (key >= 0x1000) {
 		G.vt.key_mod_sticky ^= key;
 		return;
@@ -431,6 +492,7 @@ void scankb()
 					G.vt.key_mod &= ~key;
 				}
 			}
+			showmods();
 		} while (kdiff);
 		goto end;
 	}

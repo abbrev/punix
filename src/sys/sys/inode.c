@@ -30,11 +30,82 @@ void wdir(struct inode *ip);
 
 struct dinode;
 
+void i_trunc(struct inode *inop)
+{
+	pfs_inode_trunc(inop->i_dev, inop->i_number);
+}
+
+struct inode *i_alloc(dev_t dev)
+{
+	struct inode *inop;
+	ino_t ino;
+	ino = pfs_inode_alloc(dev); /* XXX: vfs supports only PFS */
+	if (!ino) return NULL;
+	
+	/* TODO: write this */
+	return NULL;
+}
+
+void i_free(dev_t dev, ino_t ino)
+{
+	pfs_inode_free(dev, ino); /* XXX: vfs supports only PFS */
+}
+
+STARTUP(void i_lock(struct inode *inop))
+{
+	while (inop->i_flag & ILOCKED) {
+		inop->i_flag |= IWANTED;
+		slp(inop, PINOD);
+	}
+	inop->i_flag |= ILOCKED;
+}
+
+STARTUP(void i_unlock(struct inode *inop))
+{
+	inop->i_flag &= ~ILOCKED;
+	if (inop->i_flag & IWANTED) {
+		inop->i_flag &= ~IWANTED;
+		wakeup(inop);
+	}
+}
+// increase reference count
+void i_ref(struct inode *inop)
+{
+	/* FIXME */
+	++inop->i_count;
+}
+
+// decrease reference count, freeing it on disk if nlink=0
+void i_unref(struct inode *inop)
+{
+	if (--inop->i_count) return;
+	/* FIXME */
+	if (inop->i_nlink == 0) {
+		i_trunc(inop);
+		i_free(inop->i_dev, inop->i_number);
+	}
+}
+
+// get an inode from disk, return an inode
+struct inode *i_open(dev_t dev, ino_t ino)
+{
+	struct inode *inop;
+	
+	if (ino == NULLINO) {
+		inop = i_alloc(dev);
+		/* FIXME */
+	}
+	return NULL;
+}
+
 /* expand a disk inode structure to core inode */
+#if 0 /* REWRITE */
 STARTUP(void iexpand(struct inode *ip, struct dinode *dp))
 {
 	/* FIXME */
 }
+#endif
+
 
 /*
  * Look up an inode by device,inumber.
@@ -128,21 +199,6 @@ STARTUP(void wdir(struct inode *ip))
 }
 #endif /* REWRITE */
 
+#if 0
 /* note! this duplicates plock */
-STARTUP(void ilock(struct inode *ip))
-{
-	while (ip->i_flag & ILOCKED) {
-		ip->i_flag |= IWANT;
-		slp(ip, PINOD);
-	}
-	ip->i_flag |= ILOCKED;
-}
-
-STARTUP(void iunlock(struct inode *ip))
-{
-	ip->i_flag &= ~ILOCKED;
-	if (ip->i_flag & IWANT) {
-		ip->i_flag &= ~IWANT;
-		wakeup(ip);
-	}
-}
+#endif

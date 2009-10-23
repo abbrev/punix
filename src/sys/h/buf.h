@@ -76,8 +76,14 @@ struct devtab
 #endif
 };
 
-void brelse(struct buf *bp);
-struct buf *getblk(dev_t dev, long blkno);
-struct buf *bread(dev_t dev, long blkno);
+int buffree(struct buf *bp);
+struct buf *blk_get(dev_t dev, long blkno);
+void blk_release(struct buf *bp);
+struct buf *blk_read(dev_t dev, long blkno);
+void blk_write(struct buf *bp);
+void blk_write_delay(struct buf *bp);
+void blk_clear(struct buf *bp);
+void blk_flush(dev_t dev);
+void bufinit(void);
 
 #endif

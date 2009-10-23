@@ -26,6 +26,8 @@ int qisempty(struct queue *qp);
 void qclear(struct queue *qp);
 
 int putc(int ch, struct queue *qp);
+int unputc(struct queue *qp);
 int getc(struct queue *qp);
+int ungetc(int ch, struct queue *qp);
 
 #endif

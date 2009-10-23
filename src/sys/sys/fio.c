@@ -69,6 +69,117 @@
 #include "queue.h"
 #include "globals.h"
 
+static void iomove(void *cp, int n, int flag)
+{
+        int t;
+        
+        if (n == 0)
+                return;
+        
+        if (flag == B_WRITE)
+                t = copyin(P.p_base, cp, n);
+        else
+                t = copyout(cp, P.p_base, n);
+        
+        if (t) {
+                P.p_error = EFAULT;
+                return;
+        }
+        P.p_base += n;
+        P.p_offset += n;
+        P.p_count -= n;
+        return;
+}
+
+static void rdwr_inode(struct inode *inop, int mode)
+{
+	struct buf *bufp;
+	dev_t dev;
+	long lbn, bn;
+	off_t diff;
+	int on, n;
+	int type;
+	int bmode = mode == FREAD ? B_READ : B_WRITE;
+	
+	if (mode == FREAD && P.p_count == 0) return;
+	if (P.p_offset < 0) {
+		P.p_error = EINVAL;
+		return;
+	}
+        dev = inop->i_rdev;
+        type = inop->i_mode & IFMT;
+	if (mode == FREAD) inop->i_flag != IACC;
+	
+        if (type == IFCHR) {
+		if (mode == FWRITE) {
+			inop->i_flag |= IUPD|ICHG;
+			cdevsw[MAJOR(dev)].d_write(dev);
+		} else {
+			cdevsw[MAJOR(dev)].d_read(dev);
+		}
+                return;
+        }
+	if (mode == FWRITE && P.p_count == 0) return;
+	
+	do {
+		lbn = bn = P.p_offset >> BLOCKSHIFT;
+		on = P.p_offset & BLOCKMASK;
+		n = MIN((unsigned)(BLOCKSIZE-on), P.p_count);
+                if (type != IFBLK) {
+			if (mode == FREAD) {
+				diff = inop->i_size - P.p_offset;
+				if (diff <= 0)
+					return;
+				if (diff < n)
+					n = diff;
+				bn = pfs_bmap(inop, bn, bmode);
+				if (P.p_error)
+					return;
+			} else {
+				bn = pfs_bmap(inop, bn, bmode);
+				if ((long)bn < 0)
+					return;
+			}
+			dev = inop->i_dev;
+                }
+		if (mode == FREAD) {
+			if ((long)bn < 0) {
+				bufp = blk_get(NODEV, 0);
+				blk_clear(bufp);
+			} else
+				bufp = blk_read(dev, bn);
+			n = MIN((unsigned)n, BLOCKSIZE-bufp->b_resid);
+			if (mode == FWRITE || n)
+				iomove(bufp->b_addr + on, n, bmode);
+			blk_release(bufp);
+			if (n <= 0) break;
+		} else {
+			if (n == BLOCKSIZE)
+				bufp = blk_get(dev, bn);
+			else
+				bufp = blk_read(dev, bn);
+			if (mode == FWRITE || n)
+				iomove(bufp->b_addr + on, n, bmode);
+			if (P.p_error)
+				blk_release(bufp);
+			else
+				blk_write_delay(bufp);
+			if (P.p_offset > inop->i_size && (type == IFDIR || type == IFREG))
+				inop->i_size = P.p_offset;
+			inop->i_flag |= IUPD|ICHG;
+		}
+	} while (!P.p_error && P.p_count != 0);
+}
+
+void read_inode(struct inode *inop)
+{
+	rdwr_inode(inop, FREAD);
+}
+
+void write_inode(struct inode *inop)
+{
+	rdwr_inode(inop, FWRITE);
+}
 
 #if 0 /* TAINTED */
 STARTUP(struct file *getf(int fd))

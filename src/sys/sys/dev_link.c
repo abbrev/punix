@@ -150,6 +150,7 @@ STARTUP(void linkopen(dev_t dev, int rw))
 
 STARTUP(void linkclose(dev_t dev, int flag))
 {
+	kprintf("linkclose()\n");
 	flush();
 	qclear(&G.link.readq); /* discard any unread data */
 	ioport = 0; /* free the IO port for other uses */

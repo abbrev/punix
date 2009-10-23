@@ -15,7 +15,7 @@ struct	bdevsw
 	void	(*d_open)(dev_t dev, int rw);
 	void	(*d_close)(dev_t dev, int rw);
 	void	(*d_strategy)(struct buf *);
-	const struct devtab *d_tab;
+	struct devtab *d_tab;
 };
 
 extern const struct bdevsw bdevsw[];

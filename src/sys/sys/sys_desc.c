@@ -119,15 +119,15 @@ STARTUP(static void rdwr(int mode))
 		P.p_offset = fp->f_offset;
 		
 		if (!(ip->i_mode & IFCHR))
-			plock(ip);
+			i_lock(ip);
 		
 		if (mode == FREAD)
-			readi(ip);
+			read_inode(ip);
 		else
-			writei(ip);
+			write_inode(ip);
 		
 		if (!(ip->i_mode & IFCHR))
-			prele(ip);
+			i_unlock(ip);
 		
 		fp->f_offset += ap->count - P.p_count;
 	}
@@ -191,10 +191,6 @@ STARTUP(void sys_write())
 	G.whereami = whereami;
 }
 
-/*
- * open1() is from v7 and does not support the same file-open semantics as newer
- * systems. Change open1() to this:
- */
 STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 {
 	struct inode *ip;
@@ -219,42 +215,6 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	
 	/* ... */
 	P.p_error = EMFILE;
-}
-
-/* FIXME: handle case where file doesn't exist but trf=0 */
-STARTUP(static void open1(struct inode *ip, int mode, int trf))
-{
-	struct file *fp;
-	int fd;
-	int i;
-	
-	if (trf != 2) {
-		if (mode & FREAD)
-			canaccess(ip, IREAD);
-		if (mode & FWRITE) {
-			canaccess(ip, IWRITE);
-			if ((ip->i_mode & IFMT) == IFDIR)
-				P.p_error = EISDIR;
-		}
-		if (P.p_error)
-			goto out;
-	}
-	if (trf == 1)
-		itrunc(ip);
-	prele(ip);
-	if ((fd = falloc()) == -1)
-		goto out;
-	fp = P.p_ofile[fd];
-	fp->f_flag = mode & (FREAD|FWRITE);
-	fp->f_inode = ip;
-	openf(fp, mode & FWRITE);
-	if (P.p_error == 0)
-		return;
-	P.p_ofile[fd] = NULL;
-	--fp->f_count;
-
-out:
-	iput(ip);
 }
 
 /* open system call */
@@ -312,6 +272,44 @@ STARTUP(void sys_creat())
 	} *ap = (struct a *)P.p_arg;
 	
 	doopen(ap->pathname, O_CREAT | O_TRUNC | O_WRONLY, ap->mode);
+}
+
+/* Internal close routine. Decrement reference count on file structure
+ * and call special file close routines on last close. */
+STARTUP(static void closef(struct file *fp))
+{
+	/* TODO: write this */
+        struct inode *inop;
+        dev_t dev;
+        int major;
+        int rw;
+        
+	//kprintf("closef(): %d\n", __LINE__);
+	if (--fp->f_count > 0) return;
+	
+	inop = fp->f_inode;
+	dev = inop->i_rdev;
+	
+	//kprintf("closef(): %d\n", __LINE__);
+	i_lock(inop);
+	if (fp->f_type == DTYPE_PIPE) {
+		inop->i_mode &= ~(IREAD | IWRITE);
+		wakeup(inop); /* XXX */
+	}
+	//i_unref(inop);
+	//kprintf("closef(): %d\n", __LINE__);
+	//kprintf("closef(): inop->i_mode=0%04o\n",inop->i_mode);
+	
+	switch (inop->i_mode & IFMT) {
+	case IFCHR:
+	//kprintf("closef(): %d\n", __LINE__);
+	//kprintf("closef(): dev=0x%04x\n", dev);
+		cdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
+		break;
+	case IFBLK:
+	//kprintf("closef(): %d\n", __LINE__);
+		bdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
+	}
 }
 
 STARTUP(void sys_close())

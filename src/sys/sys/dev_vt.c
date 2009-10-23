@@ -42,6 +42,7 @@
 #define NUMINTCHARS 2
 #define UNDEFPARAM (-1) /* undefined parameter value */
 
+
 #if 0
 static const struct tty vt[NVT];
 
@@ -1233,9 +1234,9 @@ static void vtoutput(int ch, struct tty *tp)
  */
 static void ttyoutput(int ch, struct tty *tp)
 {
-	int oflag = tp->t_termios.c_oflag;
-	int lflag = tp->t_termios.c_lflag;
-	cc_t *cc = tp->t_termios.c_cc;
+	int oflag = tp->t_oflag;
+	int lflag = tp->t_lflag;
+	cc_t *cc = tp->t_cc;
 	if (oflag & OPOST) {
 		if (ch == '\n') {
 			if (oflag & ONLCR)
@@ -1258,11 +1259,79 @@ static void printhihat(int ch, struct tty *tp)
 		ttyoutput(ch, tp);
 }
 
+/* from 4.4BSD-Lite: */
+/*
+ * Echo a typed character to the terminal.
+ */
+static void ttyecho(int c, struct tty *tp)
+{
+#if 0
+	if (!tp->t_state & TS_CNTTB)
+		tp->t_lflag &= ~FLUSHO;
+#endif
+	if ((!(tp->t_lflag & ECHO) &&
+	    (!(tp->t_lflag & ECHONL) || c == '\n')) /* ||
+	    (tp->t_lflag & EXTPROC)*/)
+		return;
+	if ((tp->t_lflag & ECHOCTL) &&
+	    (((c & 0xff) <= 037 && c != '\t' && c != '\n') ||
+	    (c & 0xff) == 0177)) {
+		(void)ttyoutput('^', tp);
+		c &= 0xff;
+		if (c == 0177)
+			c = '?';
+		else
+			c += 'A' - 1;
+	}
+	ttyoutput(c, tp);
+}
+
+void ttyrubo(struct tty *tp, int count)
+{
+	while (count-- > 0) {
+		ttyoutput('\b', tp);
+		ttyoutput(' ', tp);
+		ttyoutput('\b', tp);
+	}
+}
+
+void ttyrub(int ch, struct tty *tp)
+{
+	int lflag = tp->t_lflag;
+	if (!(lflag & ECHO) /* || ISSET(tp->t_lflag, EXTPROC) */)
+		return;
+
+	if ((lflag & ECHOE)) {
+		/* FIXME: handle different character classes */
+		ttyrubo(tp, 1);
+#if 0
+	} else if ((lflag & ECHOPRT)) {
+		if (!(tp->t_state & TS_ERASE)) {
+			tp->t_state |= TS_ERASE;
+			ttyoutput('\\', tp);
+		}
+		ttyecho(ch, tp);
+#endif
+        } else
+                ttyecho(tp->t_cc[VERASE], tp);
+        //--tp->t_rocount;
+
+}
+
+/*
+ * ttyinput is implemented here because it calls ttyoutput which has an
+ * implementation specific to dev_vt
+ */
+/*
+ * TODO: remove redundant code; look at 4.4BSD-Lite for good working
+ * (and clean) code
+ */
 static void ttyinput(int ch, struct tty *tp)
 {
-	int iflag = tp->t_termios.c_iflag;
-	int lflag = tp->t_termios.c_lflag;
-	cc_t *cc = tp->t_termios.c_cc;
+	int i;
+	int iflag = tp->t_iflag;
+	int lflag = tp->t_lflag;
+	cc_t *cc = tp->t_cc;
 	
 	ch &= 0xff;
 	
@@ -1291,8 +1360,7 @@ static void ttyinput(int ch, struct tty *tp)
 		printhihat(ch, tp);
 		if (lflag & ISIG) {
 			gsignal(tp->t_pgrp,
-				ch == tp->t_termios.c_cc[VQUIT]
-				 ? SIGQUIT : SIGINT);
+				ch == cc[VQUIT] ? SIGQUIT : SIGINT);
 			flushtty(tp);
 			return;
 		}
@@ -1301,18 +1369,7 @@ static void ttyinput(int ch, struct tty *tp)
 		tp->t_state &= ~TTSTOP;
 		/*ttstart(tp);*/
 	}
-	if (putc(ch, &tp->t_rawq) < 0) {
-		flushtty(tp);
-		return;
-	}
-	if (lflag & ICANON) {
-		/* icanon processing is currently done in canon() in tty.c */
-		if (ch == cc[VEOL] || ch == cc[VEOF]) {
-			if (putc(0xff, &tp->t_rawq) >= 0)
-				++tp->t_delct;
-		}
-	}
-	wakeup(&tp->t_rawq);
+#if 0 /* bad/old */
 	if (lflag & ECHO || (lflag & ECHONL && ch == '\n')) {
 		if (lflag & ECHOE && ch == cc[VERASE]) {
 			ttyoutput('\b', tp);
@@ -1320,10 +1377,163 @@ static void ttyinput(int ch, struct tty *tp)
 			ttyoutput('\b', tp);
 			return;
 		}
-		ttyoutput(ch, tp);
+		//ttyoutput(ch, tp);
 	}
-	if (lflag & ECHOK && ch == cc[VKILL])
-		ttyoutput('\n', tp);
+#endif
+	if (lflag & ICANON) {
+		if (ch == cc[VERASE]) {
+			if (!qisempty(&tp->t_rawq))
+				ttyrub(unputc(&tp->t_rawq), tp);
+			goto endcase;
+		}
+		if (ch == cc[VKILL]) {
+#if 0
+			if ((lflag & ECHOKE) /* && ... */)
+				while (!qisempty(&tp->t_rawq))
+					ttyrub(unputc(&tp->t_rawq), tp);
+			else {
+#endif
+				ttyecho(ch, tp);
+				if ((lflag & ECHOK) /*|| (lflag & ECHOKE)*/ )
+					ttyecho('\n', tp);
+				qclear(&tp->t_rawq); /* ??? */
+				//tp->t_rocount = 0;
+			//}
+			goto endcase;
+		}
+		if (ch == cc[VWERASE]) {
+			/* first erase whitespace */
+			while ((ch = unputc(&tp->t_rawq)) == ' ' || ch == '\t')
+				ttyrub(ch, tp);
+			while (ch != -1 && ch != ' ' && ch != '\t') {
+				ttyrub(ch, tp);
+				ch = unputc(&tp->t_rawq);
+			}
+			if (ch != -1)
+				putc(ch, &tp->t_rawq);
+			goto endcase;
+		}
+#if 0
+        if (!ISSET(tp->t_lflag, EXTPROC) && ISSET(lflag, ICANON)) {
+                /*
+                 * From here on down canonical mode character
+                 * processing takes place.
+                 */
+                /*
+                 * reprint line (^R)
+                 */
+                if (CCEQ(cc[VREPRINT], c)) {
+                        ttyretype(tp);
+                        goto endcase;
+                }
+                /*
+                 * ^T - kernel info and generate SIGINFO
+                 */
+                if (CCEQ(cc[VSTATUS], c)) {
+                        if (ISSET(lflag, ISIG))
+                                pgsignal(tp->t_pgrp, SIGINFO, 1);
+                        if (!ISSET(lflag, NOKERNINFO))
+                                ttyinfo(tp);
+                        goto endcase;
+                }
+        }
+#endif
+	}
+#if 0
+        /*
+         * Check for input buffer overflow
+         */
+	if (tp->t_rawq.q_count + tp->t_canq.q_count >= TTYHOG) {
+		if (iflag & IMAXBEL) {
+			//if (tp->t_outq.c_count < tp->t_hiwat)
+				ttyoutput(CTRL('g'), tp);
+		} else
+			ttyflush(tp, FREAD | FWRITE);
+		goto endcase;
+	}
+#endif
+
+
+	if (putc(ch, &tp->t_rawq) < 0) {
+		flushtty(tp);
+		return;
+	}
+#if 0 /* from 4.4BSD-Lite (clean) */
+        if (putc(c, &tp->t_rawq) >= 0) {
+                if (!ISSET(lflag, ICANON)) {
+                        ttywakeup(tp);
+                        ttyecho(c, tp);
+                        goto endcase;
+                }
+                if (TTBREAKC(c)) {
+                        tp->t_rocount = 0;
+                        catq(&tp->t_rawq, &tp->t_canq);
+                        ttywakeup(tp);
+                } else if (tp->t_rocount++ == 0)
+                        tp->t_rocol = tp->t_column;
+                if (ISSET(tp->t_state, TS_ERASE)) {
+                        /*
+                         * end of prterase \.../
+                         */
+                        CLR(tp->t_state, TS_ERASE);
+                        (void)ttyoutput('/', tp);
+                }
+                i = tp->t_column;
+                ttyecho(c, tp);
+                if (CCEQ(cc[VEOF], c) && ISSET(lflag, ECHO)) {
+                        /*
+                         * Place the cursor over the '^' of the ^D.
+                         */
+                        i = min(2, tp->t_column - i);
+                        while (i > 0) {
+                                (void)ttyoutput('\b', tp);
+                                i--;
+                        }
+                }
+        }
+#endif
+	/* there is a bug in icanon mode: if there are n non-break bytes in
+	 * canq followed by cc[VEOF], and ttyread reads n bytes, it will read
+	 * only the cc[VEOF] byte, indicating end-of-file on read */
+	if (lflag & ICANON) {
+		if (TTBREAKC(ch)) {
+			//tp->t_rocount = 0;
+			catq(&tp->t_rawq, &tp->t_canq);
+			ttywakeup(tp);
+		} /*else if (tp->t_rocount++ == 0)
+			tp->t_rocol = tp->t_column;*/
+#if 0
+		if (tp->t_state & TS_ERASE) {
+			/* end of prterase \.../ */
+			tp->t_state &= ~TS_ERASE;
+			ttyoutput('/', tp);
+		}
+#endif
+		/*i = tp->t_column;*/
+		ttyecho(ch, tp);
+#if 0 /* ^D isn't echoed (yet) */
+		if (ch == cc[VEOF] && (lflag & ECHO)) {
+			/* Place the cursor over the '^' of the ^D. */
+/*
+			i = MIN(2, tp->t_column - i);
+			while (i-- > 0)
+				ttyoutput('\b', tp);
+*/
+			ttyoutput('\b', tp);
+			ttyoutput('\b', tp);
+		}
+#endif
+/*
+		if (ch == cc[VEOL] || ch == cc[VEOF]) {
+			catq(&tp->t_rawq, &tp->t_canq);
+			ttywakeup(tp);
+		}
+*/
+	} else {
+		ttywakeup(tp);
+		ttyecho(ch, tp);
+	}
+endcase: ;
 }
 
 /* NB: there is no vtxint routine */
@@ -1373,10 +1583,10 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 
 		tp->t_state = ISOPEN;
 		/* should I put these in tty.c? */
-		tp->t_termios.c_iflag = /*BRKINT|*/ ICRNL|IXANY;
-		tp->t_termios.c_oflag = OPOST|ONLCR;
-		tp->t_termios.c_cflag = CREAD;
-		tp->t_termios.c_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK;
+		tp->t_iflag = /*BRKINT|*/ ICRNL|IXANY;
+		tp->t_oflag = OPOST|ONLCR;
+		tp->t_cflag = CREAD;
+		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK;
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);

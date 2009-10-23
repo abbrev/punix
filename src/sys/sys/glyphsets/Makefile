@@ -1,6 +1,10 @@
-PBM2C = (tail -c 1152 | ./bin2c)
+GLYPHS2C = (tail -c 1152 | ./bin2c)
+STATUS2C = (tail -c 8 | ./bin2c)
 
-all: bin2c upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc
+all: bin2c upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
+     status-none.inc status-2nd.inc status-alpha.inc status-bell.inc \
+     status-capslock.inc status-compose1.inc status-compose2.inc \
+     status-diamond.inc status-hand.inc status-shift.inc
 	touch all
 clean:
 	rm -f *.inc all bin2c
@@ -8,14 +12,35 @@ clean:
 bin2c: bin2c.c
 
 upper.inc: upper.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
 uk.inc: uk.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
 us.inc: us.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
 small-us.inc: small-us.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
 sg.inc: sg.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
 tcs.inc: tcs.pbm bin2c
-	${PBM2C} <$< >$@
+	${GLYPHS2C} <$< >$@
+
+status-none.inc: status-none.pbm bin2c
+	${STATUS2C} <$< >$@
+status-2nd.inc: status-2nd.pbm bin2c
+	${STATUS2C} <$< >$@
+status-alpha.inc: status-alpha.pbm bin2c
+	${STATUS2C} <$< >$@
+status-bell.inc: status-bell.pbm bin2c
+	${STATUS2C} <$< >$@
+status-capslock.inc: status-capslock.pbm bin2c
+	${STATUS2C} <$< >$@
+status-compose1.inc: status-compose1.pbm bin2c
+	${STATUS2C} <$< >$@
+status-compose2.inc: status-compose2.pbm bin2c
+	${STATUS2C} <$< >$@
+status-diamond.inc: status-diamond.pbm bin2c
+	${STATUS2C} <$< >$@
+status-hand.inc: status-hand.pbm bin2c
+	${STATUS2C} <$< >$@
+status-shift.inc: status-shift.pbm bin2c
+	${STATUS2C} <$< >$@

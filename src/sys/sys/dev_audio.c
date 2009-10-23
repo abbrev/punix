@@ -92,6 +92,7 @@ STARTUP(void audiointr())
 
 STARTUP(void audioopen(dev_t dev, int rw))
 {
+	kprintf("audioopen(): ioport=%d\n", ioport);
 	if (ioport) {
 		P.p_error = EBUSY;
 		return;

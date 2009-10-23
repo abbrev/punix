@@ -13,25 +13,6 @@
 
 extern void slp(void *, int);
 
-STARTUP(void plock(struct inode *ip))
-{
-	while (ip->i_flag & ILOCKED) {
-		ip->i_flag |= IWANT;
-		slp(ip, PINOD);
-	}
-	
-	ip->i_flag |= ILOCKED;
-}
-
-STARTUP(void prele(struct inode *ip))
-{
-	ip->i_flag &= ~ILOCKED;
-	
-	if (ip->i_flag & IWANT) {
-		ip->i_flag &= ~IWANT;
-		wakeup(ip);
-	}
-}
 
 /* int pipe(int *fd); */
 STARTUP(void sys_pipe())
@@ -50,7 +31,7 @@ STARTUP(void sys_pipe())
 	}
 	
 	/* get our inode and two file structures/descriptors */
-	if ((ip = ialloc(G.pipedev)) == NULL)
+	if ((ip = i_alloc(G.pipedev)) == NULL)
 		goto error_inode;
 	if ((rfd = falloc()) < 0)
 		goto error_readfile;
@@ -76,7 +57,7 @@ error_writefile:
 	P.p_ofile[rfd]->f_count = 0;
 	P.p_ofile[rfd] = NULL;
 error_readfile:
-	iput(ip);
+	i_unref(ip);
 error_inode:
 }
 
@@ -87,11 +68,11 @@ STARTUP(void readp(struct file *fp))
 	ip = fp->f_inode;
 	
 loop:
-	plock(ip);
+	i_lock(ip);
 	if (ip->i_size == 0) {
 		/* If there are not both reader and writer active,
 		 * return without satisfying read. */
-		prele(ip);
+		i_unlock(ip);
 		if (ip->i_count < 2)
 			return;
 		ip->i_mode |= IREAD;
@@ -100,7 +81,7 @@ loop:
 	}
 	
 	P.p_offset = fp->f_offset;
-	readi(ip);
+	read_inode(ip);
 	fp->f_offset = P.p_offset;
 	/* If reader has caught up with writer, reset offset and size to 0. */
 	if (fp->f_offset == ip->i_size) {
@@ -111,7 +92,7 @@ loop:
 			wakeup(ip+1);
 		}
 	}
-	prele(ip);
+	i_unlock(ip);
 }
 
 STARTUP(void writep(struct file *fp))
@@ -123,9 +104,9 @@ STARTUP(void writep(struct file *fp))
 	c = P.p_count;
 	
 loop:
-	plock(ip);
+	i_lock(ip);
 	if (c == 0) {
-		prele(ip);
+		i_unlock(ip);
 		P.p_count = 0;
 		return;
 	}
@@ -134,7 +115,7 @@ loop:
 	 * return error and signal too. */
 	
 	if (ip->i_count < 2) {
-		prele(ip);
+		i_unlock(ip);
 		P.p_error = EPIPE;
 		psignal(&P, SIGPIPE);
 		return;
@@ -142,16 +123,16 @@ loop:
 	
 	if (ip->i_size >= PIPSIZ) {
 		ip->i_mode |= IWRITE;
-		prele(ip);
+		i_unlock(ip);
 		slp(ip+1, PPIPE);
 		goto loop;
 	}
 	
 	P.p_offset = ip->i_size;
-	P.p_count = min((unsigned)c, (unsigned)PIPSIZ);
+	P.p_count = MIN((unsigned)c, (unsigned)PIPSIZ);
 	c -= P.p_count;
-	writei(ip);
-	prele(ip);
+	write_inode(ip);
+	i_unlock(ip);
 	if (ip->i_mode & IREAD) {
 		ip->i_mode &= ~IREAD;
 		wakeup(ip+2);

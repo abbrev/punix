@@ -10,6 +10,7 @@
  * to represent current allocations.
  */
 
+#if 0
 static void printheaplist()
 {
 	int i;
@@ -17,6 +18,7 @@ static void printheaplist()
 		kprintf("%5d: %5d %5d %5d (0x%06lx)\n", i, (int)G.heaplist[i].pid, (int)G.heaplist[i].start, (int)G.heaplist[i].end, (void *)&G.heap[G.heaplist[i].start]);
 	}
 }
+#endif
 
 static size_t largest_unallocated_chunk_size()
 {
@@ -219,7 +221,6 @@ loop:
 	/* FIXME: maybe move this into a function in bio.c */
 	if (pid != 0 && G.avbuflist.b_avnext != &G.avbuflist) {
 		struct buf *bp = G.avbuflist.b_avnext;
-		if (bp->b_flags & B_DELWRI) bwrite(bp);
 		if (buffree(bp)) goto loop;
 	}
 	return NULL;
