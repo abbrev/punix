@@ -1387,7 +1387,7 @@ static void ttyinput(int ch, struct tty *tp)
 			goto endcase;
 		}
 		if (ch == cc[VKILL]) {
-#if 0
+#if 1
 			if ((lflag & ECHOKE) /* && ... */)
 				while (!qisempty(&tp->t_rawq))
 					ttyrub(unputc(&tp->t_rawq), tp);
@@ -1398,7 +1398,7 @@ static void ttyinput(int ch, struct tty *tp)
 					ttyecho('\n', tp);
 				qclear(&tp->t_rawq); /* ??? */
 				//tp->t_rocount = 0;
-			//}
+			}
 			goto endcase;
 		}
 		if (ch == cc[VWERASE]) {
@@ -1586,7 +1586,7 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 		tp->t_iflag = /*BRKINT|*/ ICRNL|IXANY;
 		tp->t_oflag = OPOST|ONLCR;
 		tp->t_cflag = CREAD;
-		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK;
+		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK|ECHOKE;
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);
