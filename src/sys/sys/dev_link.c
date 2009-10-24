@@ -69,20 +69,26 @@ STARTUP(void linkintr())
 	int status;
 	int ch;
 	
+#if 0
 	++*(short *)(0x4c00+0xf00-30*1);
+#endif
 	(void)LINK_CONTROL; /* read to acknowledge interrupt */
 	
 	status = LINK_STATUS;
 	
 	if (status & LS_ACTIVITY) {
+#if 0
 	++*(short *)(0x4c00+0xf00-30*2);
+#endif
 		//kprintf("ac ");
 		/* do nothing */
 		return;
 	}
 	
 	if (status & LS_ERROR) {
+#if 0
 	++*(short *)(0x4c00+0xf00-30*3);
+#endif
 		//kprintf("er ");
 		/* acknowledge the error */
 		
@@ -96,7 +102,9 @@ STARTUP(void linkintr())
 	}
 	
 	if ((G.link.control & LC_TRIGRX) && (status & LS_RXBYTE)) {
+#if 0
 	++*(short *)(0x4c00+0xf00-30*4);
+#endif
 		if (qisfull(&G.link.readq)) { /* no room for this byte */
 			//kprintf("<.. ");
 			G.link.readoverflow = 1;
@@ -113,7 +121,9 @@ STARTUP(void linkintr())
 	}
 	
 	if ((G.link.control & LC_TRIGTX) && (status & LS_TXEMPTY)) {
+#if 0
 	++*(short *)(0x4c00+0xf00-30*5);
+#endif
 		/* send the next byte from the send queue */
 		
 		if ((ch = getc(&G.link.writeq)) < 0) { /* nothing to send */
@@ -150,7 +160,6 @@ STARTUP(void linkopen(dev_t dev, int rw))
 
 STARTUP(void linkclose(dev_t dev, int flag))
 {
-	kprintf("linkclose()\n");
 	flush();
 	qclear(&G.link.readq); /* discard any unread data */
 	ioport = 0; /* free the IO port for other uses */

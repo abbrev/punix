@@ -91,10 +91,12 @@ STARTUP(void hardclock(unsigned short ps))
 		G.spin = 0;
 	}
 	
+#if 0
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
 	++*(long *)(0x4c00+0xf00-8);
+#endif
 	
 	realtime.tv_nsec += TICK;
 #if 0
@@ -152,7 +154,9 @@ STARTUP(void hardclock(unsigned short ps))
 		batt_check();
 		loadavtime = 0;
 		G.cumulrunning = 0;
+#if 0
 		++*(long *)(0x4c00+0xf00-26);
+#endif
 	}
 	
 	cputime += 2; /* XXX: cputime is in 15.1 fixed point */
@@ -229,13 +233,17 @@ out:	spl0();
  */
 STARTUP(void updwalltime())
 {
+#if 0
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
 	++*(long *)(0x4c00+0xf00-16);
+#endif
 	
 	++walltime.tv_sec;
+#if 0
 	*(long *)(0x4c00+0xf00-34) = realtime.tv_nsec;
+#endif
 	realtime.tv_sec = walltime.tv_sec;
 	realtime.tv_nsec = walltime.tv_nsec;
 	

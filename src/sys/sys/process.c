@@ -117,7 +117,9 @@ STARTUP(void swtch())
 	/* XXX: this shows the number of times this function has been called.
 	 * It draws in the bottom-right corner of the screen.
 	 */
+#if 0
 	++*(long *)(0x4c00+0xf00-4);
+#endif
 	
 	/*
 	 * When a process switches between clock ticks, we keep track of this
