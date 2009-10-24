@@ -297,13 +297,18 @@ static short compose(short key)
 	return key;
 }
 
+/* The status bitmaps and drawmod()/showmods() are kind of a hack. It would be
+ * nice if they were rewritten (but not essential since it works as it is) */
 static const unsigned short status[][4] = {
 #include "glyphsets/status-none.inc"
 #include "glyphsets/status-2nd.inc"
 #include "glyphsets/status-diamond.inc"
 #include "glyphsets/status-shift.inc"
-#include "glyphsets/status-alpha.inc"
+#ifdef TI92P
 #include "glyphsets/status-hand.inc"
+#else
+#include "glyphsets/status-alpha.inc"
+#endif
 #include "glyphsets/status-capslock.inc"
 #include "glyphsets/status-compose1.inc"
 #include "glyphsets/status-compose2.inc"
@@ -314,13 +319,16 @@ static const unsigned short status[][4] = {
 #define STATUS_2ND      1
 #define STATUS_DIAMOND  2
 #define STATUS_SHIFT    3
+#ifdef TI92P
+#define STATUS_HAND     4
+#else
 #define STATUS_ALPHA    4
-#define STATUS_HAND     5
-#define STATUS_CAPSLOCK 6
-#define STATUS_COMPOSE1 7
-#define STATUS_COMPOSE2 8
-#define STATUS_BELL     9
-#define STATUS_LAST     9
+#endif
+#define STATUS_CAPSLOCK 5
+#define STATUS_COMPOSE1 6
+#define STATUS_COMPOSE2 7
+#define STATUS_BELL     8
+#define STATUS_LAST     8
 
 static void drawmod(int pos, int m)
 {
@@ -331,8 +339,7 @@ static void drawmod(int pos, int m)
 	if (m < 0 || STATUS_LAST < m) return;
 	if (pos < 0 || 30 <= pos) return;
 	//kprintf("drawmod(%d, %d)\n", pos, m);
-	s = (char *)(0x4c00 + pos);
-	s = (char *)(0x4c00 + 0xf00 - 7*30 - 1 - pos);
+	s = (char *)(0x4c00L + 0xf00 - 7*30 - 1 - pos);
 	d = (char *)&status[m][0];
 	for (i = 0; i < 8; ++i) {
 		*s = *d;
@@ -418,7 +425,10 @@ static void addkey(unsigned short key)
 	}
 	
 	if (key == KEY_COMPOSE) {
-		G.vt.compose = 1;
+		if (G.vt.compose)
+			G.vt.compose = G.vt.key_compose = 0;
+		else
+			G.vt.compose = 1;
 		goto end;
 	}
 	
