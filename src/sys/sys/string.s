@@ -236,6 +236,7 @@ strncmp:
 		subq.l	#1,%d1
 		bne.s	0b
 1:
+	sub.b	(%a1),%d0
 	ext.w	%d0
 9:	rts
 
