@@ -226,17 +226,16 @@ strncmp:
 	move.l	4(%a7),%a0	| s1
 	move.l	8(%a7),%a1	| s2
 	move.l	12(%a7),%d1	| n
+	move	%d1,%d0
 	beq.s	9f
-	subq.l	#1,%d1
+	|subq.l	#1,%d1
 0:		move.b	(%a0)+,%d0
-		beq.s	1f
-		cmp.b	(%a1)+,%d0
+		beq.s	1f	| is it '\0'?
+		sub.b	(%a1)+,%d0
+		bne.s	1f
 		subq.l	#1,%d1
 		bne.s	0b
-	subq.l	#1,%a1
 1:
-	move.b	-(%a0),%d0
-	sub.b	(%a1),%d0
 	ext.w	%d0
 9:	rts
 
