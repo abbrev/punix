@@ -355,6 +355,9 @@ static void execute(int ch, struct tty *tp)
 	case 0x05: /* ENQ */
 		/* transmit answerback message (?) */
 		break;
+	case 0x07: /* bell */
+		bell();
+		break;
 	case 0x08: /* BS */
 		if (G.vt.pos.column > 0)
 			--G.vt.pos.column;
@@ -1177,6 +1180,8 @@ void vtinit()
 	G.vt.compose = 0;
 	G.vt.key_mod_sticky = 0;
 	G.vt.lock = 0;
+	G.vt.scroll_lock = 0;
+	G.vt.bell = 0;
 	qclear(&G.vt.vt[0].t_rawq);
 	qclear(&G.vt.vt[0].t_canq);
 	qclear(&G.vt.vt[0].t_outq);
