@@ -171,12 +171,17 @@ SYS_kmalloc     = 17
 SYS_kfree       = 18
 SYS_getpid      = 20
 SYS_uname       = 23
+SYS_getuid      = 24
 SYS_getppid     = 27
 SYS_sigaction   = 31
 SYS_dup         = 41
+SYS_getgid      = 47
 SYS_ioctl       = 54
 SYS_execve      = 59
+SYS_vfork       = 66
+SYS_getgroups   = 79
 SYS_setitimer   = 83
+SYS_wait        = 87
 SYS_getpriority = 96
 SYS_gettimeofday = 116
 SYS_getrusage   = 117
@@ -307,6 +312,36 @@ kfree:
 	.global ioctl
 ioctl:
 	sys	ioctl
+	bcs	cerror
+	rts
+
+	.global getuid
+getuid:
+	sys	getuid
+	bcs	cerror
+	rts
+
+	.global getgid
+getgid:
+	sys	getgid
+	bcs	cerror
+	rts
+
+	.global getgroups
+getgroups:
+	sys	getgroups
+	bcs	cerror
+	rts
+
+	.global wait
+wait:
+	sys	wait
+	bcs	cerror
+	rts
+
+	.global vfork
+vfork:
+	sys	vfork
 	bcs	cerror
 	rts
 	
