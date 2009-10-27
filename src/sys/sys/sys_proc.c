@@ -198,7 +198,7 @@ void userpause()
 	putchar('\n');
 }
 
-static void testuname()
+static void testuname(int argc, char *argv[], char *envp[])
 {
 	struct utsname utsname;
 	int err;
@@ -220,7 +220,7 @@ static void sigalrm()
 {
 }
 
-static void testtty()
+static void testtty(int argc, char *argv[], char *envp[])
 {
 	printf("Type ctrl-d to end input and go to the next test.\n");
 	/* cat */
@@ -252,17 +252,29 @@ static void testtty()
 }
 
 #define BUFSIZE 512
-static void testshell()
+static void testshell(int argc, char *argv[], char *envp[])
 {
-	printf("stupid shell v -0.1\n");
+	struct utsname utsname;
+	char *username = "root";
+	char *hostname;
 	char buf[BUFSIZE];
 	ssize_t n;
 	char *bp = buf;
 	ssize_t len = 0;
 	int neof = 0;
+	int err;
+	
+	printf("stupid shell v -0.1\n");
+	err = uname(&utsname);
+	if (!err) {
+		hostname = utsname.nodename;
+	} else {
+		hostname = "localhost";
+	}
+	
 	for (;;) {
 		if (len == 0)
-			printf("%s", "christop@tim:~$ ");
+			printf("%s@%s:%s%s ", username, hostname, "~", "$");
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
 			printf("read error\n");
@@ -275,15 +287,74 @@ static void testshell()
 			if (neof > 3) break;
 			continue;
 		}
-		if (buf[len-1] == '\n') {
+		if (len == BUFSIZE || buf[len-1] == '\n') {
+			char *cmd;
+			size_t cmdlen;
+			int i;
 			buf[len-1] = '\0';
-			if (strlen(buf) == 0) {
-			} else if (!strcmp(buf, "clear")) {
+			len = 0;
+			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
+				;
+			cmd = bp;
+			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
+				;
+			cmdlen = bp - cmd;
+			bp = buf;
+			if (strlen(buf) == 0)
+				continue;
+			
+			if (!strncmp(cmd, "clear", cmdlen)) {
 				printf("%s", ESC "[H" ESC "[J");
-			} else if (!strcmp(buf, "exit")) {
+			} else if (!strncmp(cmd, "exit", cmdlen)) {
 				break;
+			} else if (!strncmp(cmd, "uname", cmdlen)) {
+				int err;
+				
+				err = uname(&utsname);
+				if (!err) {
+					printf("%s %s %s %s %s\n",
+					       utsname.sysname,
+					       utsname.nodename,
+					       utsname.release,
+					       utsname.version,
+					       utsname.machine);
+				//} else {
+					//printf("uname returned %d\n", err);
+				}
+			} else if (!strncmp(cmd, "env", cmdlen)) {
+				char **ep = envp;
+				for (; *ep; ++ep)
+					printf("%s\n", *ep);
+			} else if (!strncmp(cmd, "id", cmdlen)) {
+				uid_t uid;
+				gid_t gid;
+				gid_t groups[15];
+				int numgroups, i;
+				
+				uid = getuid();
+				gid = getgid();
+				numgroups = getgroups(15, groups);
+				printf("uid=%d gid=%d groups=%d", uid, gid, gid);
+				for (i = 0; i < numgroups; ++i) {
+					printf(",%d", groups[i]);
+				}
+				putchar('\n');
+			} else if (!strncmp(cmd, "wait", cmdlen)) {
+				int status;
+				pid_t pid = wait(&status);
+			} else if (!strncmp(cmd, "vfork", cmdlen)) {
+				pid_t pid;
+				pid = vfork();
+				if (pid == 0) {
+					printf("I am the child\n");
+					_exit(0);
+				} else if (pid > 0) {
+					printf("I am the parent\n");
+				} else {
+					printf("Sorry, there was an error vforking\n");
+				}
 			} else {
-				printf("stupidsh: %s: command not found\n", buf);
+				printf("stupidsh: %.*s: command not found\n", (int)cmdlen, cmd);
 			}
 			bp = buf;
 			len = 0;
@@ -292,7 +363,7 @@ static void testshell()
 	}
 }
 
-static void testrandom()
+static void testrandom(int argc, char *argv[], char *envp[])
 {
 	int i;
 	int randomfd;
@@ -313,7 +384,7 @@ static void testrandom()
 	userpause();
 }
 
-static void testaudio()
+static void testaudio(int argc, char *argv[], char *envp[])
 {
 	int i;
 	int audiofd;
@@ -641,7 +712,7 @@ static void printhex(char buf[], int length)
 	putchar('\n');
 }
 
-static void testlink()
+static void testlink(int argc, char *argv[], char *envp[])
 {
 	unsigned char buf[128];
 	int linkfd;
@@ -751,26 +822,28 @@ int usermain(int argc, char *argv[], char *envp[])
 	
 	for (testp = &tests[0]; testp->func; ++testp) {
 		banner(testp->name);
-		testp->func();
+		testp->func(argc, argv, envp);
 	}
 	
 	char buf[1];
 	ssize_t n;
 	struct itimerval it = {
-		{ 0, 0 },
+		{ 5, 0 },
 		{ 5, 0 }
 	};
 	struct sigaction sa;
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
+	setitimer(ITIMER_REAL, &it, NULL);
 	
 	long lasttime = 0;
 	printf(ESC "[H" ESC "[J");
 	for (;;) {
 		updatetop();
-		setitimer(ITIMER_REAL, &it, NULL);
 		n = read(0, buf, 1);
+		if (n >= 0)
+			setitimer(ITIMER_REAL, &it, NULL);
 	}
 	
 	return 0;
@@ -1042,7 +1115,7 @@ void sys_fork()
 
 void sys_vfork()
 {
-#if 0
+#if 1
 	struct proc *cp = NULL;
 	pid_t pid;
 	void *sp = NULL;
@@ -1110,6 +1183,7 @@ loop:
 		} else if (pid < (pid_t)-1) {
 			if (p->p_pgrp != -pid) continue;
 		}
+		kprintf("dowait4: found pid=%d (ppid=%d)\n", p->p_pid, p->p_pptr->p_pid);
 		++nfound;
 		if (P.p_flag & P_NOCLDWAIT)
 			continue;
@@ -1438,11 +1512,11 @@ void sys_uname()
 	} *ap = (struct a *)P.p_arg;
 	
 	struct utsname me = {
-		"Punix",
-		"timmy",
-		OS_VERSION,
-		BUILD,
-		"m68k",
+		"Punix",    /* sysname */
+		"timmy",    /* nodename */
+		OS_VERSION, /* release */
+		BUILD,      /* version */
+		"m68k",     /* machine */
 	};
 	P.p_error = copyout(ap->name, &me, sizeof(me));
 }
