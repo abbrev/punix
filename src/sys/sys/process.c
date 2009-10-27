@@ -450,7 +450,7 @@ STARTUP(void procinit())
 	P.p_cputime = 0;
 	P.p_nice = NZERO;
 	P.p_basepri = PUSER;
-	P.p_pptr = current;
+	P.p_pptr = NULL;
 	
 	/* set some resource limits. XXX: put more here! */
 	for (i = 0; i < 7; ++i)
