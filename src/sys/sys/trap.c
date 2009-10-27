@@ -185,7 +185,7 @@ STARTUP(void hardclock(unsigned short ps))
 	if (G.callout[0].c_func == NULL)
 		goto out;
 	
-	--G.callout[0].c_time;
+	--G.callout[0].c_dtime;
 	
 	if (G.calloutlock)
 		goto out;
@@ -193,12 +193,12 @@ STARTUP(void hardclock(unsigned short ps))
 	++G.calloutlock;
 	spl0();
 	
-	if (G.callout[0].c_time <= 0) {
+	if (G.callout[0].c_dtime <= 0) {
 		int t = 0;
 		c2 = &G.callout[0];
-		while (c2->c_func != NULL && c2->c_time + t <= 0) {
+		while (c2->c_func != NULL && c2->c_dtime + t <= 0) {
 			c2->c_func(c2->c_arg);
-			t += c2->c_time;
+			t += c2->c_dtime;
 			++c2;
 		}
 		c1 = &G.callout[0];
