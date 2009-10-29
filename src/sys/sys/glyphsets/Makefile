@@ -1,7 +1,7 @@
 GLYPHS2C = (tail -c 1152 | ./bin2c)
 STATUS2C = (tail -c 8 | ./bin2c)
 
-all: bin2c upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
+all: bin2c upper.inc small-upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
      status-none.inc status-2nd.inc status-alpha.inc status-bell.inc \
      status-capslock.inc status-compose1.inc status-compose2.inc \
      status-diamond.inc status-hand.inc status-shift.inc status-scrolllock.inc
@@ -12,6 +12,8 @@ clean:
 bin2c: bin2c.c
 
 upper.inc: upper.pbm bin2c
+	${GLYPHS2C} <$< >$@
+small-upper.inc: small-upper.pbm bin2c
 	${GLYPHS2C} <$< >$@
 uk.inc: uk.pbm bin2c
 	${GLYPHS2C} <$< >$@
