@@ -148,7 +148,7 @@ static void transition(int ch, int newstate,
 static struct glyphset glyphsets[] = {
 #ifdef SMALLGLYPHS
 {
-#include "glyphsets/upper.inc"
+#include "glyphsets/small-upper.inc"
 },
 {
 #include "glyphsets/uk.inc"
@@ -355,7 +355,7 @@ static void execute(int ch, struct tty *tp)
 	case 0x05: /* ENQ */
 		/* transmit answerback message (?) */
 		break;
-	case 0x07: /* bell */
+	case 0x07: /* BEL */
 		bell();
 		break;
 	case 0x08: /* BS */
@@ -1308,7 +1308,10 @@ void ttyrub(int ch, struct tty *tp)
 
 	if ((lflag & ECHOE)) {
 		/* FIXME: handle different character classes */
-		ttyrubo(tp, 1);
+		if ((lflag & ECHOCTL) && ch < 037)
+			ttyrubo(tp, 2);
+		else
+			ttyrubo(tp, 1);
 #if 0
 	} else if ((lflag & ECHOPRT)) {
 		if (!(tp->t_state & TS_ERASE)) {
@@ -1516,7 +1519,7 @@ static void ttyinput(int ch, struct tty *tp)
 #endif
 		/*i = tp->t_column;*/
 		ttyecho(ch, tp);
-#if 0 /* ^D isn't echoed (yet) */
+#if 1
 		if (ch == cc[VEOF] && (lflag & ECHO)) {
 			/* Place the cursor over the '^' of the ^D. */
 /*
@@ -1591,7 +1594,7 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 		tp->t_iflag = /*BRKINT|*/ ICRNL|IXANY;
 		tp->t_oflag = OPOST|ONLCR;
 		tp->t_cflag = CREAD;
-		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK|ECHOKE;
+		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK|ECHOCTL|ECHOKE;
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);
@@ -1610,12 +1613,15 @@ void vtwrite(dev_t dev)
 {
 	struct tty *tp = &G.vt.vt[MINOR(dev)];
 	int ch;
+	int whereami = G.whereami;
+	G.whereami = WHEREAMI_VTWRITE;
 	
 	if (!(tp->t_state & ISOPEN))
 		return;
 	
 	while ((ch = cpass()) >= 0)
 		ttyoutput(ch, tp);
+	G.whereami = whereami;
 }
 
 void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
