@@ -1,6 +1,14 @@
 #ifndef _PARAM_H_
 #define _PARAM_H_
 
+/* debugging constants */
+#define WHEREAMI_USER         0
+#define WHEREAMI_GETLOADAVG1  1
+#define WHEREAMI_SYSCALL      2
+#define WHEREAMI_WRITE        3
+#define WHEREAMI_GETTIMEOFDAY 4
+#define WHEREAMI_VTWRITE      15
+
 /*
  * tunable variables
  */
@@ -55,12 +63,13 @@
  */
 #define F_SHIFT 13
 #define F_ONE (1 << F_SHIFT)
-#define EXP_1  7537 /* exp(-5/60) */
-#define EXP_5  8057 /* exp(-5/300) */
-#define EXP_15 8147 /* exp(-5/900) */
+#define F_HALF (1 << (F_SHIFT - 1))
+#define EXP_1  ((long)(0.920044415 * F_ONE + 0.5)) /* exp(-5/60) */
+#define EXP_5  ((long)(0.983471454 * F_ONE + 0.5)) /* exp(-5/300) */
+#define EXP_15 ((long)(0.994459848 * F_ONE + 0.5)) /* exp(-5/900) */
 
 #define KEY_REPEAT_DELAY	500 /* milliseconds to delay before repeating */
-#define KEY_REPEAT_RATE		20  /* repeats per second */
+#define KEY_REPEAT_RATE		32  /* repeats per second */
 
 /*
  * priorities
