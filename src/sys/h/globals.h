@@ -55,8 +55,8 @@ struct globals {
 	struct inode *rootdir;
 	
 	char canonb[CANBSIZ];
-	struct inode inode[NINODE];
 	struct inode *inodelist;
+	struct list_head inode_list;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
