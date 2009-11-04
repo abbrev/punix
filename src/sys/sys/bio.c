@@ -1,11 +1,24 @@
-/* from v6 */
+/* clean version of bio.c - block i/o */
 
 /*
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <sys/types.h>
-*/
+ * functions to include in here:
+ * V6/V7 name					new Punix name
+ *
+ * struct buf *bufalloc()			(should be static)
+ * int buffree(struct buf *bp)			(should be static)
+ * void brelse(struct buf *bp)			blk_release
+ * struct buf *incore(dev_t dev, long blkno)	(should be static)
+ * static void notavail(struct buf *bp)		(static)
+ * void iowait(struct buf *bp)			(should be static)
+ * struct buf *bread(dev_t dev, long blkno)	blk_read
+ * void bwrite(struct buf *bp)			blk_write
+ * void bdwrite(struct buf *bp)			blk_write_delayed
+ * void clrbuf(struct buf *bp)			blk_clear
+ * struct buf *getblk(dev_t dev, long blkno)	blk_get
+ * void bflush(dev_t dev)			blk_flush
+ * void bufinit()				bufinit
+ */
+
 #include <string.h>
 #include <assert.h>
 
@@ -20,247 +33,205 @@
 #include "dev.h"
 #include "globals.h"
 
-#define DEBUG()
-
-STARTUP(struct buf *bufalloc())
+static struct buf *bufalloc(void)
 {
 	size_t sb = sizeof(struct buf);
 	size_t sd = BLOCKSIZE;
-	struct buf *bp;
+	struct buf *bufp;
 	char *cp;
-	
-	bp = memalloc(&sb, 0);
-	if (!bp) goto end;
+
+	bufp = memalloc(&sb, 0);
+	if (!bufp) goto end;
 	cp = memalloc(&sd, 0);
-	if (!cp) goto freebp;
-	
+	if (!cp) goto freebuf;
+
 	++G.numbufs;
-	bp->b_flags = 0;
-	bp->b_dev = 0;
-	bp->b_bcount = 0;
-	bp->b_addr = cp;
-	bp->b_blkno = 0;
-	bp->b_error = 0;
-	bp->b_resid = 0;
-	bp->b_next = bp->b_prev = bp;
-	
+	bufp->b_flags = 0;
+	bufp->b_dev = 0;
+	bufp->b_bcount = 0;
+	bufp->b_addr = cp;
+	bufp->b_blkno = 0;
+	bufp->b_error = 0;
+	bufp->b_resid = 0;
+	bufp->b_next = bufp->b_prev = bufp;
+
 	/* insert this buf at the beginning of the available buf list */
-	bp->b_avnext = G.avbuflist.b_avnext;
-	bp->b_avprev = &G.avbuflist;
-	G.avbuflist.b_avnext->b_avprev = bp;
-	G.avbuflist.b_avnext = bp;
+	bufp->b_avnext = G.avbuflist.b_avnext;
+	bufp->b_avprev = &G.avbuflist;
+	G.avbuflist.b_avnext->b_avprev = bufp;
+	G.avbuflist.b_avnext = bufp;
 	goto end;
 
-freebp:
-	memfree(bp, 0);
+freebuf:
+	memfree(bufp, 0);
 end:
-	return bp;
+	return bufp;
 }
 
-/* free a buffer if possible, and return 1 if it was freed */
-STARTUP(int buffree(struct buf *bp))
+/* attempt to free a buffer. return 1 if one is freed.
+ * the buffer system and heap management should ideally be merged to allow for
+ * better memory management */
+int buffree(struct buf *bufp)
 {
 	if (G.numbufs <= MINBUF) return 0;
+	if (bufp->b_flags & B_DELWRI) blk_write(bufp);
 	
 	/* remove this buf from each list */
-	bp->b_next->b_prev = bp->b_prev;
-	bp->b_prev->b_next = bp->b_next;
-	bp->b_avnext->b_avprev = bp->b_avprev;
-	bp->b_avprev->b_avnext = bp->b_avnext;
-	memfree(bp->b_addr, 0);
-	memfree(bp, 0);
+	bufp->b_next->b_prev = bufp->b_prev;
+	bufp->b_prev->b_next = bufp->b_next;
+	bufp->b_avnext->b_avprev = bufp->b_avprev;
+	bufp->b_avprev->b_avnext = bufp->b_avnext;
+	memfree(bufp->b_addr, 0);
+	memfree(bufp, 0);
 	--G.numbufs;
 	return 1;
 }
 
-/* FIXME: finish this */
-STARTUP(void brelse(struct buf *bp))
+/* if there is a buf on the avbuflist, return it
+ * otherwise allocate a new buffer from the heap and return that */
+static struct buf *getavbuf(void)
 {
-	int sps;
+	struct buf *bufp;
 	
-	if (bp->b_flags & B_WANTED)
-		wakeup(bp);
-	if (G.avbuflist.b_flags & B_WANTED)
-		wakeup(&G.avbuflist);
-	/* ... */
-	if (bp->b_flags & B_ERROR)
-		MINOR(bp->b_dev) = -1;
-	/* ... */
-	if (bp->b_flags & B_BUSY) {
-		/* insert this buf at the end of the avbuflist */
-		bp->b_avnext = &G.avbuflist;
-		bp->b_avprev = G.avbuflist.b_avprev;
-		G.avbuflist.b_avprev->b_avnext = bp;
-		G.avbuflist.b_avprev = bp;
+	bufp = G.avbuflist.b_avnext;
+	if (bufp == &G.avbuflist) {
+		/* FIXME: try to allocate a new buffer and put it on the avbuflist */
+		bufp = NULL;
 	}
-	bp->b_flags &= ~(B_WANTED|B_BUSY|B_ASYNC);
-	/* ... */
-	bp->b_next->b_prev = bp->b_prev;
-	bp->b_prev->b_next = bp->b_next;
+	
+	return bufp;
 }
 
-STARTUP(struct buf *incore(dev_t dev, long blkno))
+static void notavail(struct buf *bufp)
 {
-	struct buf *bp;
-	const struct devtab *dp;
-	
-	dp = bdevsw[MAJOR(dev)].d_tab;
-	
-	for (bp = dp->b_next; bp != (struct buf *)dp; bp = bp->b_next)
-		if (bp->b_blkno == blkno && bp->b_dev == dev)
-			return bp;
-	
-	return NULL;
+	bufp->b_flags |= B_BUSY;
+	bufp->b_avprev->b_avnext = bufp->b_avnext;
+	bufp->b_avnext->b_avprev = bufp->b_avprev;
 }
 
-/* take this buf off of the available buf list and set its B_BUSY flag */
-STARTUP(static void notavail(struct buf *bp))
-{
-	bp->b_avprev->b_avnext = bp->b_avnext;
-	bp->b_avnext->b_avprev = bp->b_avprev;
-	bp->b_flags |= B_BUSY;
-}
+#define EACHDEVBUF(devp, devbufp) (devbufp = devp->b_next; devbufp != (struct buf *)devp; devbufp = devbufp->b_next)
 
-/*
- * Wait for I/O completion on the buffer; return errors
- * to the user.
+/* get a buf associated with a block. always returns a buf. */
+/* if there is a buf associated with this block:
+ * 	if it's unlocked, lock it and return it
+ * 	else wait on it and try again
+ * else:
+ * 	if there is an available buffer:
+ * 		if it's delayed write, write it and try again
+ * 		else return it
+ *	else sleep on the available list and try again
  */
-STARTUP(void iowait(struct buf *bp))
+struct buf *blk_get(dev_t dev, long blkno)
 {
-	/*
-	int x = spl6();
-	while ((bp->b_flags&B_DONE) == 0)
-		slp(bp, 0);
-	splx(x);
-	geterror(bp);
-	*/
-}
-
-STARTUP(struct buf *bread(dev_t dev, long blkno))
-{
-	struct buf *bp;
+	/* TODO: write this */
+	struct buf *bufp = NULL;
+	struct buf *devbufp;
+	struct devtab *devp = bdevsw[MAJOR(dev)].d_tab;
 	
-	bp = getblk(dev, blkno);
-	if (bp->b_flags & B_DONE)
-		return bp;
+tryagain:
+	for EACHDEVBUF(devp, devbufp) {
+		if (devbufp->b_dev == dev && devbufp->b_blkno == blkno) {
+			bufp = devbufp;
+			break;
+		}
+	}
+	if (bufp) {
+		if (bufp->b_flags & B_BUSY) {
+			bufp->b_flags |= B_WANTED;
+			slp(bufp, 0);
+			goto tryagain;
+		} else {
+			notavail(bufp);
+			goto found;
+		}
+	}
+	bufp = getavbuf();
+	if (!bufp) {
+		slp(&G.avbuflist, 0);
+		goto tryagain;
+	}
+	notavail(bufp);
+	if (bufp->b_flags & B_DELWRI) {
+		blk_write(bufp);
+		goto tryagain;
+	}
 	
-	bp->b_flags |= B_READ;
-	bp->b_bcount = -BLOCKSIZE;
-	bdevsw[MAJOR(dev)].d_strategy(bp);
-	iowait(bp);
-	return bp;
+	bufp->b_flags = B_BUSY;
+	bufp->b_prev->b_next = bufp->b_next;
+	bufp->b_next->b_prev = bufp->b_prev;
+	bufp->b_next = devp->b_next;
+	bufp->b_prev = (struct buf *)devp;
+
+	devp->b_next->b_prev = bufp;
+	devp->b_next = bufp;
+
+	bufp->b_dev = dev;
+	bufp->b_blkno = blkno;
+
+found:
+	return bufp;
 }
 
-STARTUP(void bwrite(struct buf *bp))
+/* put the buffer on the avbuflist */
+void blk_release(struct buf *bufp)
 {
-	int flag;
-	
-	flag = bp->b_flags;
-	bp->b_flags &= ~(B_READ | B_DONE | B_ERROR | B_DELWRI);
-	bp->b_bcount = BLOCKSIZE;
-	bdevsw[MAJOR(bp->b_dev)].d_strategy(bp);
-	iowait(bp);
-	brelse(bp);
-	/* */
+	/* put this buf at the tail of the avbuflist */
+	bufp->b_avnext = &G.avbuflist;
+	bufp->b_avprev = G.avbuflist.b_avprev;
+	bufp->b_avnext->b_avprev = bufp;
+	bufp->b_avprev->b_avnext = bufp;
 }
 
-/*
- * Release the buffer, marking it so that if it is grabbed
- * for another purpose it will be written out before being
- * given up (e.g. when writing a partial block where it is
- * assumed that another write for the same block will soon follow).
- */
-STARTUP(void bdwrite(struct buf *bp))
+struct buf *blk_read(dev_t dev, long blkno)
 {
-	bp->b_flags |= B_DELWRI | B_DONE;
-	brelse(bp);
+	struct buf *bufp;
+	bufp = blk_get(dev, blkno);
+	assert(bufp);
+	if (bufp->b_flags & B_DONE)
+		return bufp;
+	bufp->b_flags |= B_READ;
+	bufp->b_bcount = BLOCKSIZE;
+	bdevsw[MAJOR(dev)].d_strategy(bufp);
+	/* iowait(bufp); */
+	return bufp;
 }
 
-STARTUP(void clrbuf(struct buf *bp))
+void blk_write(struct buf *bufp)
 {
-	int i;
+        bufp->b_flags &= ~(B_READ | B_DONE | B_ERROR | B_DELWRI);
+        bufp->b_bcount = BLOCKSIZE;
+        bdevsw[MAJOR(bufp->b_dev)].d_strategy(bufp);
+        /* iowait(bufp); */
+        blk_release(bufp);
+}
+
+void blk_write_delay(struct buf *bufp)
+{
+	bufp->b_flags |= B_DELWRI | B_DONE;
+	blk_release(bufp);
+}
+
+void blk_clear(struct buf *bufp)
+{
 	int n = 0;
-	
-	if (bp->b_flags & B_CLEAR)
+        
+	if (bufp->b_flags & B_CLEAR)
 		n = -1;
 	
-	memset(bp->b_addr, n, BLOCKSIZE);
-	
-	bp->b_resid = 0;
+	memset(bufp->b_addr, n, BLOCKSIZE);
+	bufp->b_resid = 0;
 }
 
-STARTUP(struct buf *getblk(dev_t dev, long blkno))
+void blk_flush(dev_t dev)
 {
-	struct buf *bp;
-	struct devtab *dp;
-	
-	if (MAJOR(dev) >= nblkdev)
-		return NULL;
-	
-	if ((bp = incore(dev, blkno)) != NULL)
-		return bp;
-	
-	/* search the list for the device first, then the av list */
-loop:
-	dp = bdevsw[MAJOR(dev)].d_tab;
-	if (dp == NULL)
-		panic("devtab");
-	
-	for (bp = dp->b_next; bp != (struct buf *)dp; bp = bp->b_next) {
-		if (bp->b_blkno != blkno || bp->b_dev != dev)
-			continue;
-		
-		/* this buf is associated with the device/block,
-		 * but it's busy */
-		if (bp->b_flags & B_BUSY) {
-			bp->b_flags |= B_WANTED;
-			slp(bp , 0);
-			goto loop;
-		}
-		
-		notavail(bp);
-		return bp;
-	}
-	
-	/* we couldn't find an associated buffer, so look in the available
-	 * buffer list */
-	
-	/* the list is empty, so sleep on it */
-	if (G.avbuflist.b_avnext == &G.avbuflist && !bufalloc()) {
-		G.avbuflist.b_flags |= B_WANTED;
-		slp(&G.avbuflist, 0);
-		goto loop;
-	}
-	notavail(bp = G.avbuflist.b_avnext);
-	
-	if (bp->b_flags & B_DELWRI) {
-		bwrite(bp);
-		goto loop;
-	}
-	bp->b_flags = B_BUSY;
-	
-	bp->b_prev->b_next = bp->b_next;
-	bp->b_next->b_prev = bp->b_prev;
-	bp->b_next = dp->b_next;
-	bp->b_prev = (struct buf *)dp;
-	
-	dp->b_next->b_prev = bp;
-	dp->b_next = bp;
-	
-	bp->b_dev = dev;
-	bp->b_blkno = blkno;
-	
-	return bp;
+	/* TODO: write this */
 }
 
-STARTUP(void bflush(dev_t dev))
-{
-}
-
-STARTUP(void bufinit())
+void bufinit(void)
 {
 	G.avbuflist.b_avnext = G.avbuflist.b_avprev = &G.avbuflist;
 	G.numbufs = 0;
 	while (G.numbufs < MINBUF)
 		assert(bufalloc());
 }
+

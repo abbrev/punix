@@ -33,8 +33,8 @@ OBJ	+= lcd.o dev_tty.o keyscan.o batt.o
 # helper routines
 OBJ	+= kputs.o scroll.o
 OBJ	+= copy.o fio.o
-OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
-OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
+OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
+OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o
 
@@ -96,10 +96,10 @@ abort.o: abort.c ${SYSINC}/punix.h
 assert.o: assert.c
 kprintf.o: kprintf.c
 fio.o: fio.c
-rdwri.o: rdwri.c
-bio.o: bio.c
+#rdwri.o: rdwri.c
+#bio.o: bio.c
 dev.o: dev.c
-bmap.o: bmap.c
+#bmap.o: bmap.c
 trap.o: trap.c
 #queue.o: queue.c
 queue.o: queue.s

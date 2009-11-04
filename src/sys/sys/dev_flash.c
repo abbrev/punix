@@ -182,7 +182,7 @@ STARTUP(static void flread(struct buf *bp))
 	if (fbp) {
 		memcpy(bp->b_addr, fbp->data, BLOCKSIZE);
 	} else {
-		clrbuf(bp);
+		blk_clear(bp);
 	}
 }
 

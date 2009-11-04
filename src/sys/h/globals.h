@@ -62,6 +62,7 @@ struct globals {
 	char canonb[CANBSIZ];
 	struct inode inode[NINODE];
 	struct inode *inodelist;
+	struct list_head inode_list;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
@@ -121,6 +122,8 @@ struct globals {
 		short key_previous;
 		char gr; /* graphics rendition */
 		int lock;
+		int scroll_lock;
+		int bell;
 	} vt;
 	
 	int batt_level;

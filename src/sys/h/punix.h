@@ -4,6 +4,7 @@
 /* $Id$ */
 
 #include <sys/types.h>
+#include "list.h"
 #include "proc.h"
 
 #define OS_NAME	"Punix"
@@ -36,6 +37,9 @@ struct syscallframe {
 #endif
 
 #define NODEV (dev_t)(-1)
+
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))
 
 #define BLOCKSHIFT 7
 #define BLOCKSIZE (1<<BLOCKSHIFT)

@@ -81,9 +81,7 @@ void sys_sigaction();
 #define sys_sync	sys_NONE
 #define sys_kill	sys_NONE
 #define sys_stat	sys_NONE
-#define sys_getlogin	sys_NONE
 #define sys_lstat	sys_NONE
-#define sys_setlogin	sys_NONE
 #define sys_reboot	sys_NONE
 #define sys_symlink	sys_NONE
 #define sys_readlink	sys_NONE
@@ -143,11 +141,11 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_sync},
 	{2, sys_kill},
 	{4, sys_stat},
-	{0, sys_getlogin},
+	{0, sys_NONE},
 	{4, sys_lstat},		/* 40 */
 	{1, sys_dup},
 	{0, sys_pipe},
-	{0, sys_setlogin},	/* ??? */
+	{0, sys_NONE},		/* ??? */
 	{0, sys_NONE},
 	{1, sys_setuid},
 	{1, sys_seteuid},
@@ -191,7 +189,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE}, /* sys_wait3 */
 	{0, sys_NONE},
 	{3, sys_getitimer},
-	{0, sys_NONE},
+	{0, sys_wait},
 	{0, sys_NONE},
 	{0, sys_getdtablesize},
 	{2, sys_dup2},		/* 90 */

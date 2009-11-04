@@ -10,164 +10,176 @@
 #include "globals.h"
 #include "tty.h"
 
-STARTUP(void ttyopen(dev_t dev, struct tty *tp))
+void ttyopen(dev_t dev, struct tty *tp);
+void ttychars(struct tty *tp);
+void flushtty(struct tty *tp);
+void wflushtty(struct tty *tp);
+void ttyclose(struct tty *tp);
+void ttyioctl(dev_t dev, int cmd, void *cmarg);
+// static int canon(struct tty *tp);
+void ttyread(struct tty *tp);
+void ttyinput(int ch, struct tty *tp);
+void ttyoutput(int ch, struct tty *tp);
+
+
+void ttyopen(dev_t dev, struct tty *tp)
 {
 	tp->t_dev = dev;
-	if (P.p_pgrp == 0) {
-		P.p_ttyp = tp;
-		P.p_ttydev = dev;
-		
-		if (tp->t_pgrp == 0)
-			tp->t_pgrp = P.p_pid;
-		P.p_pgrp = tp->t_pgrp;
-	}
-	tp->t_state |= ISOPEN;
+        tp->t_state |= ISOPEN;
+	tp->t_numc = 0; /* number of characters after a break character */
+	/* if we're not already part of a process group, make this tty our
+	 * controlling tty and add us to the tty's process group */
+        if (P.p_pgrp == 0) {
+                P.p_ttyp = tp;
+                P.p_ttydev = dev;
+                
+                if (tp->t_pgrp == 0)
+                        tp->t_pgrp = P.p_pid;
+                P.p_pgrp = tp->t_pgrp;
+        }
 }
 
-STARTUP(void ttychars(struct tty *tp))
+void ttychars(struct tty *tp)
 {
-	tp->t_termios.c_cc[VINTR] = CINTR;
-	tp->t_termios.c_cc[VQUIT] = CQUIT;
-	tp->t_termios.c_cc[VSTART] = CSTART;
-	tp->t_termios.c_cc[VSTOP] = CSTOP;
-	tp->t_termios.c_cc[VEOF] = CEOT;
-	tp->t_termios.c_cc[VEOL] = CEOL;
-	/*tp->t_termios.c_cc[VBRK] = CBRK;*/
-	tp->t_termios.c_cc[VERASE] = CERASE;
-	tp->t_termios.c_cc[VKILL] = CKILL;
+        tp->t_cc[VINTR] = CINTR;
+        tp->t_cc[VQUIT] = CQUIT;
+        tp->t_cc[VSTART] = CSTART;
+        tp->t_cc[VSTOP] = CSTOP;
+        tp->t_cc[VEOF] = CEOT;
+        tp->t_cc[VEOL] = CEOL;
+        /*tp->t_cc[VBRK] = CBRK;*/
+        tp->t_cc[VERASE] = CERASE;
+	tp->t_cc[VWERASE] = CWERASE;
+        tp->t_cc[VKILL] = CKILL;
 }
 
-STARTUP(void flushtty(struct tty *tp))
+void flushtty(struct tty *tp)
 {
-	int x;
-	
-	qclear(&tp->t_canq);
-	wakeup(&tp->t_rawq);
-	wakeup(&tp->t_outq);
-	
-	x = spl1();
-	tp->t_state &= ~TTSTOP;
-	qclear(&tp->t_outq);
-	qclear(&tp->t_rawq);
-	tp->t_delct = 0;
-	splx(x);
+	/* FIXME */
 }
 
-STARTUP(void wflushtty(struct tty *tp))
+void wflushtty(struct tty *tp)
 {
-	int x = spl1();
-	while (!qisempty(&tp->t_outq) && tp->t_state & ISOPEN) {
-		slp(&tp->t_outq, 0);
-	}
-	flushtty(tp);
-	splx(x);
+	/* FIXME */
 }
 
-STARTUP(void ttyclose(struct tty *tp))
+void ttyclose(struct tty *tp)
 {
-	tp->t_pgrp = 0;
-	wflushtty(tp);
-	tp->t_state = 0;
+        wflushtty(tp);
+        tp->t_pgrp = 0;
+        tp->t_state = 0;
 }
 
-STARTUP(void ttyioctl(dev_t dev, int cmd, void *cmarg))
+void ttyioctl(dev_t dev, int cmd, void *cmarg)
 {
+	/* FIXME */
 }
 
-/* XXX: rewrite this! */
-STARTUP(int canon(struct tty *tp))
+void ttyread(struct tty *tp)
 {
-	char *bp, *bp1;
 	int ch;
-	int mc;
-	int iflag = tp->t_termios.c_iflag;
-	int lflag = tp->t_termios.c_lflag;
+	int lflag = tp->t_lflag;
 	cc_t *cc = tp->t_termios.c_cc;
+	struct queue *qp;
+	int havec = 0;
 	
-	int x = spl1();
-	while (qisempty(&tp->t_rawq) || (lflag & ICANON && tp->t_delct == 0)) {
-		if (!(tp->t_state & ISOPEN))
-			return 0;
-		slp(&tp->t_rawq, 1);
-	}
-	splx(x);
+	qp = (lflag & ICANON) ? &tp->t_canq : &tp->t_rawq;
 	
 loop:
-	bp = &G.canonb[2];
-	while ((ch = getc(&tp->t_rawq)) >= 0) {
-		if (ch == 0xff) {
-			--tp->t_delct;
-			break;
-		}
-		
-		if (lflag & ICANON) {
-/*
-			if (ch == cc[VEOL] || ch == cc[VEOF])
-				--tp->t_delct;
-*/
-			if (ch == cc[VERASE]) {
-				if (bp > &G.canonb[2])
-					--bp;
-				continue;
+	/* TODO: also check for the tty closing */
+	while (qisempty(qp)) {
+		slp(&tp->t_rawq, 1);
+	}
+	
+	while ((ch = getc(qp)) >= 0) {
+		if ((lflag & ICANON)) {
+			int numc = tp->t_numc;
+			tp->t_numc = !TTBREAKC(ch);
+			if (ch == cc[VEOF]) {
+				//kprintf("numc=%d havec=%d\n", numc, havec);
+				if (numc && !havec) {
+					//kprintf("goto loop\n");
+					goto loop;
+				} else {
+					//kprintf("break\n");
+					break; 
+				}
 			}
-			if (ch == cc[VKILL])
-				goto loop;
-			if (ch == cc[VEOF])
-				continue;
 		}
-		
-		*bp++ = ch;
-		if (bp >= &G.canonb[CANBSIZ])
+		havec = 1;
+		if (passc(ch) < 0)
+			break;
+		if ((lflag & ICANON) && TTBREAKC(ch))
 			break;
 	}
-	bp1 = bp;
-	bp = &G.canonb[2];
-	while (bp < bp1)
-		putc(*bp++, &tp->t_canq);
+}
+
+void ttyinput(int ch, struct tty *tp)
+{
+	/* FIXME */
+}
+
+void ttyoutput(int ch, struct tty *tp)
+{
+	/* FIXME */
+}
+
+/* ttywakeup is from 4.4BSD-Lite */
+/*
+ * Wake up any readers on a tty.
+ */
+void ttywakeup(struct tty *tp)
+{
+
+/*
+	selwakeup(&tp->t_rsel);
+	if (ISSET(tp->t_state, TS_ASYNC))
+		pgsignal(tp->t_pgrp, SIGIO, 1);
+*/
+	wakeup((void *)&tp->t_rawq);
+}
+
+
+/* Following functions should be moved into some other file */
+
+/* copy buffer to queue. return number of bytes not copied */
+/* TODO: optimize this by copying blocks of bytes from the buffer to the queue
+ * rather than copying one byte at a time */
+int b_to_q(char *bp, int count, struct queue *qp)
+{
+	int n = count;
 	
-	return 1;
-}
-
-STARTUP(void ttyread(struct tty *tp))
-{
-	if (((tp->t_state & ISOPEN) && !qisempty(&tp->t_canq)) || canon(tp))
-		while (!qisempty(&tp->t_canq) && passc(getc(&tp->t_canq)) >= 0)
-			;
-}
-
-#if 0
-STARTUP(void ttyinput(int ch, struct tty *tp))
-{
-	int iflag = tp->t_termios.t_iflag;
-	int lflag = tp->t_termios.t_lflag;
+	while (n && putc(*bp++, qp) >= 0)
+		--n;
 	
-	if ((ch &= 0x7f) == '\r' && iflag & ICRNL)
-		ch = '\n';
-	if ((lflag & ICANON) && (ch == tp->t_termios.c_cc[VQUIT] ||
-	  ch == tp->t_termios.c_cc[VINTR])) {
-		signal(tp, ch == tp->t_termios.c_cc[VQUIT] ? SIGINT : SIGQUIT);
-		flushtty(tp);
-		return;
-	}
-	if (qisfull(&tp->t_rawq)) {
-		flushtty(tp);
-		return;
-	}
-	putc(ch, &tp->t_rawq);
-	if ((lflag & ICANON) == 0 || c == '\n' || c == 004) {
-		wakeup(&tp->t_rawq);
-		if (putc(0xff, &tp->t_rawq) >= 0)
-			++tp->t_delct;
-	}
-	if (lflag & ECHO) {
-		ttyoutput(ch, tp);
-		ttstart(tp);
-	}
+	return n;
 }
 
-STARTUP(void ttyoutput(int ch, struct tty *tp))
+/* copy queue to buffer. return number of bytes copied */
+/* TODO: optimize this by copying blocks of bytes from the queue to the buffer
+ * rather than copying one byte at a time */
+int q_to_b(struct queue *qp, char *bp, int count)
 {
-	/* FIXME: write this! */
+	int n = 0;
+	int ch;
+	
+	while (n < count && (ch = getc(qp)) >= 0) {
+		*bp++ = ch;
+		++n;
+	}
+	
+	return n;
 }
 
-#endif
+/* concatenate from queue 'from' to queue 'to' */
+/* TODO: this can also be optimized much as b_to_q and q_to_b can */
+void catq(struct queue *from, struct queue *to)
+{
+	int ch;
+	while ((ch = getc(from)) >= 0) {
+		if (putc(ch, to) < 0) {
+			ungetc(ch, from);
+			break;
+		}
+	}
+}

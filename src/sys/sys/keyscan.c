@@ -297,9 +297,98 @@ static short compose(short key)
 	return key;
 }
 
-void addkey(short key)
+/* The status bitmaps and drawmod()/showmods() are kind of a hack. It would be
+ * nice if they were rewritten (but not essential since it works as it is) */
+static const unsigned short status[][4] = {
+#include "glyphsets/status-none.inc"
+#include "glyphsets/status-2nd.inc"
+#include "glyphsets/status-diamond.inc"
+#include "glyphsets/status-shift.inc"
+#ifdef TI92P
+#include "glyphsets/status-hand.inc"
+#else
+#include "glyphsets/status-alpha.inc"
+#endif
+#include "glyphsets/status-capslock.inc"
+#include "glyphsets/status-compose1.inc"
+#include "glyphsets/status-compose2.inc"
+#include "glyphsets/status-bell.inc"
+#include "glyphsets/status-scrolllock.inc"
+};
+
+#define STATUS_NONE       0
+#define STATUS_2ND        1
+#define STATUS_DIAMOND    2
+#define STATUS_SHIFT      3
+#ifdef TI92P
+#define STATUS_HAND       4
+#else
+#define STATUS_ALPHA      4
+#endif
+#define STATUS_CAPSLOCK   5
+#define STATUS_COMPOSE1   6
+#define STATUS_COMPOSE2   7
+#define STATUS_BELL       8
+#define STATUS_SCROLLLOCK 9
+#define STATUS_LAST       9
+
+static void drawmod(int pos, int m)
 {
-	short mod;
+	/* draw mod 'm' at position 'pos' */
+	char *d;
+	char *s;
+	int i;
+	if (m < 0 || STATUS_LAST < m) return;
+	if (pos < 0 || 30 <= pos) return;
+	//kprintf("drawmod(%d, %d)\n", pos, m);
+	s = (char *)(0x4c00L + 0xf00 - 7*30 - 1 - pos);
+	d = (char *)&status[m][0];
+	for (i = 0; i < 8; ++i) {
+		*s = *d;
+		s+=30;
+		++d;
+	}
+}
+
+static void showmods(void)
+{
+	/* TI-92+: */
+	/* compose hand capslock shift diamond 2nd bell */
+	/* 6       5    4        3     2       1   0    */
+	
+	int x = spl7();
+	int mod = G.vt.key_mod | G.vt.key_mod_sticky;
+	
+	drawmod(0, G.vt.bell ? STATUS_BELL : STATUS_NONE);
+	drawmod(1, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
+	drawmod(2, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
+	drawmod(3, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
+	drawmod(4, G.vt.key_caps ? STATUS_CAPSLOCK : STATUS_NONE);
+	drawmod(5, mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
+	drawmod(6, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
+	drawmod(7, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
+	splx(x);
+}
+
+void unbell(void *arg)
+{
+	struct tty *ttyp = (struct tty *)arg;
+	G.vt.bell = 0;
+	showmods();
+}
+
+void bell(struct tty *ttyp)
+{
+	untimeout(unbell, ttyp); /* FIXME: appears to be a bug in untimeout */
+	G.vt.bell = 1;
+	showmods();
+	timeout(unbell, ttyp, 1 * HZ); /* XXX: constant */
+}
+
+static void addkey(unsigned short key)
+{
+	unsigned short mod;
+	
 	if (key >= 0x1000) {
 		G.vt.key_mod_sticky ^= key;
 		return;
@@ -357,7 +446,10 @@ void addkey(short key)
 	}
 	
 	if (key == KEY_COMPOSE) {
-		G.vt.compose = 1;
+		if (G.vt.compose)
+			G.vt.compose = G.vt.key_compose = 0;
+		else
+			G.vt.compose = 1;
 		goto end;
 	}
 	
@@ -431,6 +523,7 @@ void scankb()
 					G.vt.key_mod &= ~key;
 				}
 			}
+			showmods();
 		} while (kdiff);
 		goto end;
 	}
