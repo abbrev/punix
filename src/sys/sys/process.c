@@ -29,161 +29,19 @@ STARTUP(void cpuidle(void))
 /* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
 {
-	void *w;
-	
-	if (p->p_status == P_RUNNING) return;
-	if (p->p_status == P_FREE || p->p_status == P_ZOMBIE)
-		panic("Running a dead proc");
-	
-	if (p->p_status == P_SLEEPING && (w = p->p_waitfor)) {
-		p->p_waitfor = 0;
-		setpri(p);
-	}
-	p->p_status = P_RUNNING;
-	++G.numrunning;
-	if (p->p_pri < P.p_pri)
-		++runrun;
-}
-
-void setsleep(struct proc *p)
-{
-	if (p->p_status == P_RUNNING) --G.numrunning;
-	p->p_status = P_SLEEPING;
-}
-
-/*
- * Set user priority.
- * The rescheduling flag (runrun) is set if the priority is better than the
- * currently running process.
- *
- * This should be called only when the proc's priority is known to have changed.
- */
-STARTUP(int setpri(struct proc *p))
-{
-	int pri;
-	pri = p->p_basepri + 64 * (p->p_nice * NICEPRIWEIGHT +
-	                           p->p_cputime * CPUPRIWEIGHT) / CPUMAX;
-	if (pri > 255)
-		pri = 255;
-	if (pri < P.p_pri)
-		++runrun;
-	p->p_pri = pri;
-	return pri;
-}
-
-/* exponentially decay the cpu time of each process */
-STARTUP(void decaycputimes())
-{
-	struct proc *p;
-	
-	for EACHPROC(p) {
-		p->p_cputime = p->p_cputime * CPUDECAY / CPUSCALE;
-		setpri(p);
-	}
-}
-
-/*
- * This is the scheduler proper. Returns NULL if no process is running.
- * 
- * This scheduler runs in O(n) time (you're welcome to re-write it to make
- * it O(1)).
- */
-STARTUP(static struct proc *nextready())
-{
-	struct proc *p;
-	struct proc *bestp = NULL;
-	int bestpri = 255;
-	
-	for EACHPROC(p) {
-		if (p->p_status != P_RUNNING)
-			continue;
-		
-		if (p->p_pri < bestpri) {
-			bestpri = p->p_pri;
-			bestp = p;
-		}
-	}
-	
-	return bestp;
-}
-
-STARTUP(void swtch())
-{
-	struct proc *p;
-	int t;
-	
-	spl1(); /* higher than 256Hz timer */
-	
-	/* XXX: this shows the number of times this function has been called.
-	 * It draws in the bottom-right corner of the screen.
-	 */
-	++*(long *)(0x4c00+0xf00-4);
-	
-	/*
-	 * When a process switches between clock ticks, we keep track of this
-	 * by adding one-half of a clock tick to its cpu time. This is based
-	 * on the theory that a process will use, on average, half of a clock
-	 * tick when it switches between ticks. To balance the accounting, we
-	 * subtract one-half clock tick from the cpu time of the next process
-	 * coming in if it doesn't get a full first clock tick. Doing this will
-	 * (hopefully) more correctly account for the cpu usage of processes
-	 * which always switch (sleep) before the first clock tick of their
-	 * time slice. The correct solution, of course, requires using a
-	 * high-precision clock that tells us exactly how much cpu time the
-	 * process uses, but we don't have a high-resolution clock. :(
-	 */
-	
-	t = 0;
-	
-	if (!istick) {
-		/* we switched between ticks, so add one-half clock tick to our
-		 * cpu time and subtract one from the next proc's cpu time */
-		++cputime;
-		--t;
-	}
-	
-	P.p_cputime += cputime * CPUSCALE / 2;
-	P.p_basepri = PUSER;
-	setpri(current);
-	while (P.p_cputime >= CPUMAX)
-		decaycputimes();
-	
-	while (!(p = nextready())) {
-		struct proc *pp = current;
-		current = NULL; /* don't bill any process if they're all asleep */
-		cpuidle();
-		current = pp;
-		t = 0; /* the next proc will start on a clock tick */
-	}
-	
-	cputime = t;
-	runrun = 0;
-	istick = 0;
-	
-	if (p == &P)
+	p->p_waitchan = NULL;
+#if 0
+	if (p->p_status == P_RUNNING) {
+		kprintf("setrun(): warning: process is already running\n");
 		return;
-	
-	if (!P.p_fpsaved) {
-		/* savefp(&P.p_fps); */
-		P.p_fpsaved = 1;
 	}
-	
-	if (setjmp(P.p_ssav))
-		return; /* we get here via longjmp */
-	
-	current = p;
-	
-	longjmp(P.p_ssav, 1);
+#endif
+	sched_run(p);
 }
 
 STARTUP(void unsleep(struct proc *p))
 {
-	int x = spl7();
-	
-	if (p->p_waitfor)
-		p->p_waitfor = 0;
-	
-	splx(x);
+	p->p_waitchan = 0;
 }
 
 #if 1
@@ -191,7 +49,7 @@ STARTUP(void unsleep(struct proc *p))
 
 /*
  * Implement timeout for tsleep below.  If process hasn't been awakened
- * (p_waitfor != 0) then set timeout flag and undo the sleep.  If proc
+ * (p_waitchan != 0) then set timeout flag and undo the sleep.  If proc
  * is stopped just unsleep so it will remain stopped.
 */
 
@@ -201,16 +59,18 @@ STARTUP(static void endtsleep(void *vp))
 	int s;
 	
 	s = spl7();
-	if (p->p_waitfor) {
-		if (p->p_status == P_SLEEPING)
+	if (p->p_waitchan) {
+		if (p->p_status == P_SLEEPING) {
+			//kprintf("%s (%d)\n", __FILE__, __LINE__);
 			setrun(p);
-		else
+		} else
 			unsleep(p);
 		p->p_flag |= P_TIMEOUT;
 	}
 	splx(s);
 }
 
+/* note: following comment block is outdated */
 /*
  * General sleep call "borrowed" from 4.4BSD - the 'wmesg' parameter was
  * removed due to data space concerns.  Sleeps at most timo/hz seconds
@@ -225,11 +85,12 @@ STARTUP(static void endtsleep(void *vp))
  * interrupted and EINTR returned to the user process.
 */
 
-STARTUP(int tsleep(void *event, int basepri, long timo))
+/* intr is 0 if process wants an uninterrutible sleep */
+STARTUP(int tsleep(void *chan, int intr, long timo))
 {
 	struct proc *p = &P;
 	int s;
-	int sig, catch = basepri & PCATCH;
+	int sig;
 
 	s = spl7();
 #if 0
@@ -248,14 +109,10 @@ STARTUP(int tsleep(void *event, int basepri, long timo))
 	}
 #endif
 #ifdef	DIAGNOSTIC
-	if (event == NULL || p->p_status != P_RUNNING)
+	if (chan == NULL || p->p_status != P_RUNNING)
 		panic("tsleep");
 #endif
-	p->p_waitfor = event;
-#if 0
-	p->p_slptime = 0;
-#endif
-	p->p_basepri = basepri & PRIMASK;
+	p->p_waitchan = chan;
 	if (timo)
 		timeout(endtsleep, p, timo);
 /*
@@ -263,25 +120,28 @@ STARTUP(int tsleep(void *event, int basepri, long timo))
  * CURSIG as we could stop there and a wakeup or a SIGCONT (or both) could
  * occur while we were stopped.  A SIGCONT would cause us to be marked SSLEEP
  * without resuming us thus we must be ready for sleep when CURSIG is called.
- * If the wakeup happens while we're stopped p->p_waitfor will be 0 upon 
+ * If the wakeup happens while we're stopped p->p_waitchan will be 0 upon 
  * return from CURSIG.
 */
-	if (catch) {
+	if (intr) {
 		p->p_flag |= P_SINTR;
 		if ((sig = CURSIG(p))) {
-			if (p->p_waitfor)
+			if (p->p_waitchan)
 				unsleep(p);
-			p->p_status = P_RUNNING; /* FIXME: use setrun(p); */
+			//kprintf("%s (%d)\n", __FILE__, __LINE__);
+			sched_run();
 			goto resume;
 		}
-		if (p->p_waitfor == 0) {
-			catch = 0;
+		if (p->p_waitchan == 0) {
+			intr = 0;
 			goto resume;
 		}
-	} else
+	} else {
+		p->p_flag &= ~P_SINTR;
 		sig = 0;
+	}
 	/* p->p_status = P_SLEEPING; */
-	setsleep(p);
+	sched_sleep(p);
 	++P.p_rusage.ru_nvcsw;
 	swtch();
 resume:
@@ -293,7 +153,7 @@ resume:
 			return EWOULDBLOCK;
 	} else if (timo)
 		untimeout(endtsleep, (void *)p);
-	if (catch && (sig != 0 || (sig = CURSIG(p)))) {
+	if (intr && (sig != 0 || (sig = CURSIG(p)))) {
 		if (P.p_sigintr & sigmask(sig))
 			return EINTR;
 		return ERESTART;
@@ -303,15 +163,12 @@ resume:
 
 #endif
 
-/* sleep until event */
-STARTUP(void slp(void *event, int basepri))
+/* sleep on chan */
+STARTUP(void slp(void *chan, int intr))
 {
-	int priority = basepri;
-	if (basepri > PZERO)
-		priority |= PCATCH;
-	P.p_error = tsleep(event, priority, (long)0);
+	P.p_error = tsleep(chan, intr, (long)0);
 	
-	if (!(priority & PCATCH) || P.p_error == 0)
+	if (!intr || P.p_error == 0)
 		return;
 	
 	longjmp(P.p_qsav, 1);
@@ -319,15 +176,15 @@ STARTUP(void slp(void *event, int basepri))
 
 
 
-STARTUP(void wakeup(void *event))
+STARTUP(void wakeup(void *chan))
 {
 	struct proc *p;
 	
-	for EACHPROC(p) {
-		if (p->p_status == P_SLEEPING && p->p_waitfor == event) {
+	list_for_each_entry(p, &G.proc_list, p_list)
+		if (p->p_waitchan == chan) {
+			//kprintf("%s (%d)\n", __FILE__, __LINE__);
 			setrun(p);
 		}
-	}
 }
 
 /* allocate a process structure */
@@ -337,8 +194,7 @@ STARTUP(struct proc *palloc())
 	struct proc *p = memalloc(&psize, 0);
 	
 	if (p) {
-		p->p_next = G.proclist;
-		G.proclist = p;
+		list_add(&p->p_list, &G.proc_list);
 	}
 	return p;
 }
@@ -348,17 +204,7 @@ STARTUP(void pfree(struct proc *p))
 {
 	if (p) {
 		/* remove this proc from the list */
-		if (G.proclist == p) {
-			G.proclist = p->p_next;
-		} else {
-			struct proc *p2;
-			for EACHPROC(p2) {
-				if (p2->p_next == p) {
-					p2->p_next = p->p_next;
-					break;
-				}
-			}
-		}
+		list_del(&p->p_list);
 		memfree(p, 0);
 	}
 }
@@ -389,7 +235,7 @@ retry:
 	if (G.mpid >= G.pidchecked) {
 		G.pidchecked = MAXPID;
 		
-		for EACHPROC(p) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_pid == G.mpid || p->p_pgrp == G.mpid) {
 				++G.mpid;
 				if (G.mpid >= G.pidchecked)
@@ -421,9 +267,10 @@ STARTUP(int inferior(struct proc *p))
 STARTUP(struct proc *pfind(pid_t pid))
 {
 	struct proc *p;
-	for EACHPROC(p)
-		if (p->p_status != P_FREE && p->p_pid == pid)
+	list_for_each_entry(p, &G.proc_list, p_list) {
+		if (p->p_pid == pid)
 			return p;
+	}
 	
 	return NULL;
 }
@@ -432,9 +279,10 @@ STARTUP(void procinit())
 {
 	int i;
 	
+	INIT_LIST_HEAD(&G.proc_list);
+	
 	current = palloc();
 	assert(current);
-	current->p_next = NULL;
 	G.initproc = current;
 	
 	for (i = 0; i < NOFILE; ++i)
@@ -444,18 +292,18 @@ STARTUP(void procinit())
 	P.p_pid = 1;
 	P.p_ruid = P.p_euid = P.p_svuid = 0;
 	P.p_rgid = P.p_egid = P.p_svgid = 0;
-	P.p_status = P_RUNNING;
+	P.p_status = P_NEW;
 	P.p_cputime = 0;
 	P.p_nice = NZERO;
-	P.p_basepri = PUSER;
 	P.p_pptr = current;
 	
 	/* set some resource limits. XXX: put more here! */
 	for (i = 0; i < 7; ++i)
 		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
 	
-	setpri(current);
 	cputime = 0;
-	G.numrunning = 1;
+	G.numrunning = 0;
 	G.cumulrunning = 0;
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
+	sched_run(current);
 }

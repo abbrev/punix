@@ -36,7 +36,7 @@ OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o rdwri.o bio.o trap.o queue.o flash.o
 OBJ	+= long.o subr.o tty.o inode.o alloc.o process.o bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
-OBJ	+= ffs.o loadav.o drawglyph.o heap.o
+OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o
 
 #OBJ = testvectors.o
 

@@ -67,7 +67,7 @@ loop:
 		if (dev == ip->i_dev && ino == ip->i_number) {
 			if (ip->i_flag & ILOCKED) {
 				ip->i_flag |= IWANT;
-				slp(ip, PINOD);
+				slp(ip, 0);
 				goto loop;
 			}
 #if 0
@@ -283,7 +283,7 @@ STARTUP(void ilock(struct inode *ip))
 {
 	while (ip->i_flag & ILOCKED) {
 		ip->i_flag |= IWANT;
-		slp(ip, PINOD);
+		slp(ip, 0);
 	}
 	ip->i_flag |= ILOCKED;
 }

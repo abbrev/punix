@@ -743,7 +743,7 @@ static void endvfork()
 	P.p_flag &= ~P_VFORK;
 	wakeup(pp);
 	while (!(P.p_flag&P_VFDONE))
-		slp(pp, PZERO-1);
+		slp(pp, 0);
 #if 0
 	P.p_dsize = pp->p_dsize = 0; /* are these necessary? */
 	P.p_ssize = pp->p_ssize = 0; /* " */
@@ -949,7 +949,7 @@ void doexit(int status)
 	
 	P.p_waitstat = status;
 	/* ruadd(&P.p_rusage, &P.p_crusage); */
-	for EACHPROC(q) {
+	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
 			wakeup(G.proclist);
@@ -1021,7 +1021,7 @@ void sys_vfork()
 	
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
-		slp(cp, PSWP+1);
+		slp(cp, 0);
 	
 	/* reclaim our stuff */
 	cp->p_flag |= P_VFDONE;
@@ -1043,7 +1043,7 @@ static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 	int error;
 	
 loop:
-	for EACHPROC(p)
+	list_for_each_entry(p, &G.proc_list, p_list)
 	if (p->p_pptr == current) {
 		if (pid > 0) {
 			if (p->p_pid != pid) continue;
@@ -1220,7 +1220,7 @@ void sys_getpriority()
 		if (pgrp == 0) /* current process group */
 			pgrp = P.p_pgrp;
 		
-		for EACHPROC(p) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_pgrp == pgrp && p->p_nice < nice)
 				nice = p->p_nice;
 		}
@@ -1230,7 +1230,7 @@ void sys_getpriority()
 		if (uid == 0) /* current user */
 			uid = P.p_euid;
 		
-		for EACHPROC(p) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_euid == uid && p->p_nice < nice)
 				nice = p->p_nice;
 		}
@@ -1274,7 +1274,7 @@ void sys_setpriority()
 		if (pgrp == 0) /* current process group */
 			pgrp = P.p_pgrp;
 		
-		for EACHPROC(p) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_pgrp == pgrp) {
 				++found;
 				donice(p, ap->value);
@@ -1286,7 +1286,7 @@ void sys_setpriority()
 		if (uid == 0) /* current user */
 			uid = P.p_euid;
 		
-		for EACHPROC(p) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_euid == uid) {
 				++found;
 				donice(p, ap->value);

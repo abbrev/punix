@@ -16,7 +16,6 @@ struct globals {
 	struct timespec _realtime;
 	long _timedelta;
 	char exec_ram[60];
-	int _runrun;
 	int _istick;
 	int _ioport;
 	int _cputime;
@@ -26,12 +25,18 @@ struct globals {
 	/* struct proc *freeproc; */
 	struct proc *initproc;
 	struct proc *proclist;
+	struct list_head proc_list;
 	int numrunning;
 	long cumulrunning;
 	struct file file[NFILE];
 	unsigned long loadavg[3];
 	struct timespec _uptime;
 	long _loadavtime;
+	
+	struct list_head runqueue;
+	long prio_ratios[40];
+	int need_resched;
+	volatile unsigned long ticks;
 	
 	unsigned char audiosamp; /* current samples */
 	int audiosamples; /* number of samples within that byte */
@@ -139,7 +144,7 @@ struct globals {
 
 # if 0
 extern struct globals G;
-extern int runrun, ioport;
+extern int ioport;
 extern long walltime;
 
 /* cputime is the length of time the current process has been running
@@ -152,7 +157,6 @@ extern int updlock;
 #define walltime G._walltime
 #define realtime G._realtime
 #define timedelta  G._timedelta
-#define runrun   G._runrun
 #define istick   G._istick
 #define ioport   G._ioport
 #define cputime  G._cputime

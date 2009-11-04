@@ -57,7 +57,7 @@ STARTUP(void wflushtty(struct tty *tp))
 {
 	int x = spl1();
 	while (!qisempty(&tp->t_outq) && tp->t_state & ISOPEN) {
-		slp(&tp->t_outq, TTOPRI);
+		slp(&tp->t_outq, 0);
 	}
 	flushtty(tp);
 	splx(x);
@@ -88,7 +88,7 @@ STARTUP(int canon(struct tty *tp))
 	while (qisempty(&tp->t_rawq) || (lflag & ICANON && tp->t_delct == 0)) {
 		if (!(tp->t_state & ISOPEN))
 			return 0;
-		slp(&tp->t_rawq, TTIPRI | PCATCH);
+		slp(&tp->t_rawq, 1);
 	}
 	splx(x);
 	

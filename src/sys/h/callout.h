@@ -2,7 +2,7 @@
 #define _CALLOUT_H_
 
 struct callout {
-	long c_time;
+	long c_dtime;
 	void *c_arg;
 	void (*c_func)(void *);
 };
