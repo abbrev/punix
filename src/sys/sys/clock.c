@@ -62,15 +62,15 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	c1 = &G.callout[0];
 	x = spl7();
 	
-	while (c1->c_func != NULL && c1->c_time <= t) {
-		t -= c1->c_time;
+	while (c1->c_func != NULL && c1->c_dtime <= t) {
+		t -= c1->c_dtime;
 		++c1;
 	}
 	
 	if (c1 >= &G.callout[NCALL-1])
 		return -1;
 	
-	c1->c_time -= t;
+	c1->c_dtime -= t;
 	c2 = c1;
 	
 	/* find the last callout entry */
@@ -84,7 +84,7 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 		--c2;
 	}
 	
-	c1->c_time = t;
+	c1->c_dtime = t;
 	c1->c_func = func;
 	c1->c_arg = arg;
 	

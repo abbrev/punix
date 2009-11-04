@@ -102,7 +102,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	}
 	
 	/* another process has a higher priority than us */
-	if (runrun)
+	if (G.need_resched)
 		swtch();
 	
 	/* XXX */

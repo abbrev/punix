@@ -130,7 +130,7 @@ STARTUP(void iowait(struct buf *bp))
 	/*
 	int x = spl6();
 	while ((bp->b_flags&B_DONE) == 0)
-		slp(bp, PRIBIO);
+		slp(bp, 0);
 	splx(x);
 	geterror(bp);
 	*/
@@ -214,7 +214,7 @@ loop:
 		 * but it's busy */
 		if (bp->b_flags & B_BUSY) {
 			bp->b_flags |= B_WANTED;
-			slp(bp , PRIBIO+1);
+			slp(bp , 0);
 			goto loop;
 		}
 		
@@ -228,7 +228,7 @@ loop:
 	/* the list is empty, so sleep on it */
 	if (G.avbuflist.b_avnext == &G.avbuflist && !bufalloc()) {
 		G.avbuflist.b_flags |= B_WANTED;
-		slp(&G.avbuflist, PRIBIO+1);
+		slp(&G.avbuflist, 0);
 		goto loop;
 	}
 	notavail(bp = G.avbuflist.b_avnext);

@@ -46,7 +46,7 @@ static const char sigprop[NSIG + 1] = {
 
 STARTUP(void stop(struct proc *p))
 {
-	p->p_status = P_STOPPED;
+	sched_stop(p);
 	p->p_flag &= ~P_WAITED;
 	wakeup(p->p_pptr);
 }
@@ -170,10 +170,10 @@ STARTUP(void psignal(struct proc *p, int sig))
 		if (prop & SA_CONT) {
 			if (action == SIG_DFL)
 				p->p_sig &= ~mask;
-			if (action == SIG_CATCH || p->p_waitfor == 0)
+			if (action == SIG_CATCH || p->p_waitchan == 0)
 				goto run;
 			/* p->p_status = P_SLEEPING; */
-			setsleep(p);
+			sched_sleep(p);
 			goto out;
 		}
 		
@@ -182,15 +182,16 @@ STARTUP(void psignal(struct proc *p, int sig))
 			goto out;
 		}
 		
-		if (p->p_waitfor && (p->p_flag & P_SINTR))
+		if (p->p_waitchan && (p->p_flag & P_SINTR))
 			unsleep(p);
 		goto out;
 	default:
 		goto out;
 	}
 run:
-	if (p->p_pri > PUSER)
-		p->p_pri = PUSER;
+	//if (p->p_pri > PUSER)
+		//p->p_pri = PUSER;
+	//kprintf("psignal(): gonna run setrun()\n");
 	setrun(p);
 out:
 	splx(s);
@@ -202,7 +203,7 @@ STARTUP(void gsignal(int pgrp, int sig))
 	
 	if (pgrp == 0)
 		return;
-	for EACHPROC(p)
+	list_for_each_entry(p, &G.proc_list, p_list)
 		if (p->p_pgrp == pgrp)
 			psignal(p, sig);
 }

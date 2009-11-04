@@ -72,6 +72,7 @@
 /* #include "signal.h" */
 #include "ktime.h"
 #include "setjmp.h"
+#include "list.h"
 
 #if 0
 #define NPROC	32
@@ -107,7 +108,7 @@ struct stackframe {
 };
 
 struct proc {
-	struct proc *p_next;
+	struct list_head p_list;
 	char p_status;	/* stopped, ready, running, zombie, etc. */
 	int p_flag;
 	
@@ -128,7 +129,11 @@ struct proc {
 	int p_nice;
 	int p_cputime;	/* amount of cpu time we are using (decaying time) */
 	int p_pri;	/* run priority, calculated from cpuusage and nice */
-	int p_basepri;	/* base priority */
+	/* the above might not be needed anymore with the new scheduler */
+	struct list_head p_runlist;
+	int p_static_prio;
+	int p_time_slice;
+	unsigned long p_deadline;
 	
 	/* execution state */
 	jmp_buf p_ssav;	/* for swapping procs */
@@ -240,7 +245,7 @@ struct proc {
 //	unsigned p_pendcount;	/* count of pending and unfinished signals */
 #endif
 	
-	void *p_waitfor;
+	void *p_waitchan;
 	
 	struct nameicache {		/* last successful directory search */
 		off_t nc_prevoffset;	/* offset at which last entry found */
@@ -255,7 +260,7 @@ struct proc {
 
 /* states for p_status */
 /* are these all good? */
-#define P_FREE		0	/* slot is empty */
+#define P_NEW		0	/* new process (only used by system init) */
 #define	P_FORKING	1	/* process is blocked by child */
 #define P_RUNNING	2
 #define P_SLEEPING	3	/* waiting for an event */

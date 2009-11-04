@@ -46,6 +46,7 @@ STARTUP(void kmain())
 	meminit();
 	linkinit();
 	audioinit();
+	sched_init();
 	procinit();
 	bufinit();
 	

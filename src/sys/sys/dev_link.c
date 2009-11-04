@@ -50,7 +50,7 @@ STARTUP(static void flush())
 	while (!qisempty(&G.link.writeq)) {
 		G.link.lowat = 0;
 		txon();
-		slp(&G.link.writeq);
+		slp(&G.link.writeq, 0);
 	}
 	splx(x);
 }
@@ -173,7 +173,7 @@ STARTUP(void linkread(dev_t dev))
 			}
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
-				slp(&G.link.readq, PPIPE);
+				slp(&G.link.readq, 1);
 			} else /* we got some data already, so just return */
 				return;
 		}
@@ -195,7 +195,7 @@ STARTUP(void linkwrite(dev_t dev))
 		while (putc(ch, &G.link.writeq) < 0) {
 			txon();
 			G.link.lowat = QSIZE - 32; /* XXX constant */
-			slp(&G.link.writeq, PPIPE);
+			slp(&G.link.writeq, 1);
 		}
 		splx(x);
 	}

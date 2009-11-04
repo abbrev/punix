@@ -51,7 +51,7 @@ STARTUP(static void dspsync())
 	int x = spl5();
 	while (!qisempty(&G.audioq) || G.audiosamples) {
 		G.audiolowat = 0; /* wait until the audio queue is empty */
-		slp(&G.audioq);
+		slp(&G.audioq, 0);
 	}
 	splx(x);
 }
@@ -136,7 +136,7 @@ STARTUP(void audiowrite(dev_t dev))
 			
 			G.audiolowat = QSIZE - 32; /* XXX constant */
 			
-			slp(&G.audioq, PAUDIO | PCATCH);
+			slp(&G.audioq, 1);
 			splx(x);
 		}
 	}

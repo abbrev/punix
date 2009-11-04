@@ -38,7 +38,7 @@ STARTUP(struct inode *ialloc(dev_t dev))
 	
 	fp = getfs(dev);
 	while (fp->fs_ilock)
-		slp(&fp->fs_ilock, PINOD);
+		slp(&fp->fs_ilock, 0);
 loop:
 	if (fp->fs_ninode > 0) {
 		ino = fp->fs_inode[--fp->fs_ninode];

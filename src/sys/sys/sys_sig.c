@@ -18,7 +18,7 @@ STARTUP(static int killpg1(int sig, pid_t pgrp, int all))
 			return ESRCH;
 	}
 	found = 0;
-	for EACHPROC(p) {
+	list_for_each_entry(p, &G.proc_list, p_list) {
 		if ((p->p_pgrp != pgrp && !all) || p->p_pptr == NULL
 		   || /*(p->p_flag&SSYS) || */(all && p == &P))
 			continue;

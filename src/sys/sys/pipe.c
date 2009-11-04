@@ -17,7 +17,7 @@ STARTUP(void plock(struct inode *ip))
 {
 	while (ip->i_flag & ILOCKED) {
 		ip->i_flag |= IWANT;
-		slp(ip, PINOD);
+		slp(ip, 0);
 	}
 	
 	ip->i_flag |= ILOCKED;
@@ -95,7 +95,7 @@ loop:
 		if (ip->i_count < 2)
 			return;
 		ip->i_mode |= IREAD;
-		slp(ip+2, PPIPE);
+		slp(ip+2, 1);
 		goto loop;
 	}
 	
@@ -143,7 +143,7 @@ loop:
 	if (ip->i_size >= PIPSIZ) {
 		ip->i_mode |= IWRITE;
 		prele(ip);
-		slp(ip+1, PPIPE);
+		slp(ip+1, 1);
 		goto loop;
 	}
 	
