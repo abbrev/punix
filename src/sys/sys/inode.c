@@ -30,20 +30,62 @@ void wdir(struct inode *ip);
 
 struct dinode;
 
+/* create a new inode structure for the given device and inum
+ * return with inode locked */
+struct inode *i_new(dev_t dev, ino_t ino)
+{
+	struct inode *ip;
+	size_t isize = sizeof(struct inode);
+	ip = memalloc(&isize, 0);
+	if (!ip) {
+		P.p_error = ENFILE;
+		return NULL;
+	}
+	ip->i_dev = dev;
+	ip->i_number = ino;
+	ip->i_fs = getfs(dev);
+	ip->i_flag = 0;
+	ip->i_count = 0;
+	i_ref(ip);
+	I_LOCK(ip);
+	list_add(&ip->i_list, &G.inode_list);
+	return ip;
+}
+
+/* delete an inode; assumes that it has no references */
+void i_delete(struct inode *ip)
+{
+	list_del(&ip->i_list);
+}
+
 void i_trunc(struct inode *inop)
 {
 	pfs_inode_trunc(inop->i_dev, inop->i_number);
 }
 
+/* allocate an inode on device and return with a locked inode */
 struct inode *i_alloc(dev_t dev)
 {
 	struct inode *inop;
 	ino_t ino;
-	ino = pfs_inode_alloc(dev); /* XXX: vfs supports only PFS */
+	ino = pfs_inode_alloc(dev);
 	if (!ino) return NULL;
 	
 	/* TODO: write this */
 	return NULL;
+	
+#if 0
+	struct inode *ip;
+	ino_t ino;
+	ino = pfs_inode_alloc(dev); /* XXX: vfs supports only PFS */
+	if (!ino) return NULL;
+	ip = i_new(dev, ino);
+	if (!ip) {
+		i_free(dev, ino);
+		return NULL;
+	}
+	return ip;
+#endif
 }
 
 void i_free(dev_t dev, ino_t ino)
@@ -71,7 +113,6 @@ STARTUP(void i_unlock(struct inode *inop))
 // increase reference count
 void i_ref(struct inode *inop)
 {
-	/* FIXME */
 	++inop->i_count;
 }
 
@@ -86,65 +127,41 @@ void i_unref(struct inode *inop)
 	}
 }
 
-// get an inode from disk, return an inode
+/* read the inode from device */
+int i_read(struct inode *ip)
+{
+	return pfs_readinode(ip);
+}
+
+/* get an inode, possibly reading it from disk, and return it locked */
 struct inode *i_open(dev_t dev, ino_t ino)
 {
-	struct inode *inop;
+	struct inode *ip;
+	size_t isize = sizeof(struct inode);
 	
-	if (ino == NULLINO) {
-		inop = i_alloc(dev);
-		/* FIXME */
+	if (ino == NULLINO)
+		return i_alloc(dev);
+	
+	/* look for the specified inode in memory */
+	list_for_each_entry(ip, &G.inode_list, i_list) {
+		if (ip->i_dev == dev && ip->i_number == ino) {
+			/* we found it */
+			i_ref(ip);
+			I_LOCK(ip);
+			return ip;
+		}
 	}
-	return NULL;
+	
+	/* it's not in memory already.
+	 * make a new one and read it from the device */
+	ip = i_new(dev, ino);
+	if (!ip) return NULL;
+	if (i_read(ip)) {
+		i_delete(ip);
+		return NULL;
+	}
+	return ip;
 }
-
-/* expand a disk inode structure to core inode */
-#if 0 /* REWRITE */
-STARTUP(void iexpand(struct inode *ip, struct dinode *dp))
-{
-	/* FIXME */
-}
-#endif
-
-
-/*
- * Look up an inode by device,inumber.
- * If it is in core (in the inode structure),
- * honor the locking protocol.
- * If it is not in core, read it in from the
- * specified device.
- * If the inode is mounted on, perform
- * the indicated indirection.
- * In all cases, a pointer to a locked
- * inode structure is returned.
- *
- * printf warning: no inodes -- if the inode
- *	structure is full
- * panic: no imt -- if the mounted file
- *	system is not in the mount table.
- *	"cannot happen"
- */
-#if 0 /* REWRITE */
-STARTUP(struct inode *iget(dev_t dev, struct fs *fs, ino_t ino))
-{
-	/* body deleted */
-	return NULL;
-}
-#endif /* REWRITE */
-
-/*
- * Decrement reference count of
- * an inode structure.
- * On the last reference,
- * write the inode out and if necessary,
- * truncate and deallocate the file.
- */
-#if 0 /* REWRITE */
-STARTUP(void iput(struct inode *ip))
-{
-	/* body deleted */
-}
-#endif /* REWRITE */
 
 /*
  * Check accessed and update flags on

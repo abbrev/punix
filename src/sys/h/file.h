@@ -31,9 +31,7 @@
  * One for each kernel object.
  */
 struct file {
-#if 0 /* not yet */
-	struct file *	f_next;
-#endif
+	struct list_head f_list;
 	unsigned char	f_flag;		/* see below */
 	unsigned char	f_type;		/* descriptor type */
 	unsigned short	f_count;	/* reference count */

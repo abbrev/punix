@@ -4,6 +4,7 @@
 /* $Id$ */
 
 #include <sys/types.h>
+#include "list.h"
 #include "proc.h"
 
 #define OS_NAME	"Punix"

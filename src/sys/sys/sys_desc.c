@@ -121,10 +121,7 @@ STARTUP(static void rdwr(int mode))
 		if (!(ip->i_mode & IFCHR))
 			i_lock(ip);
 		
-		if (mode == FREAD)
-			read_inode(ip);
-		else
-			write_inode(ip);
+		rdwr_inode(ip, mode);
 		
 		if (!(ip->i_mode & IFCHR))
 			i_unlock(ip);
@@ -184,7 +181,7 @@ void sys_read(void)
 STARTUP(void sys_write())
 {
 	int whereami = G.whereami;
-	G.whereami = 3;
+	G.whereami = WHEREAMI_WRITE;
 	
 	rdwr(FWRITE);
 	
@@ -278,36 +275,28 @@ STARTUP(void sys_creat())
  * and call special file close routines on last close. */
 STARTUP(static void closef(struct file *fp))
 {
-	/* TODO: write this */
         struct inode *inop;
         dev_t dev;
         int major;
         int rw;
         
-	//kprintf("closef(): %d\n", __LINE__);
 	if (--fp->f_count > 0) return;
 	
 	inop = fp->f_inode;
 	dev = inop->i_rdev;
 	
-	//kprintf("closef(): %d\n", __LINE__);
 	i_lock(inop);
 	if (fp->f_type == DTYPE_PIPE) {
 		inop->i_mode &= ~(IREAD | IWRITE);
 		wakeup(inop); /* XXX */
 	}
-	//i_unref(inop);
-	//kprintf("closef(): %d\n", __LINE__);
-	//kprintf("closef(): inop->i_mode=0%04o\n",inop->i_mode);
+	i_unref(inop);
 	
 	switch (inop->i_mode & IFMT) {
 	case IFCHR:
-	//kprintf("closef(): %d\n", __LINE__);
-	//kprintf("closef(): dev=0x%04x\n", dev);
 		cdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
 		break;
 	case IFBLK:
-	//kprintf("closef(): %d\n", __LINE__);
 		bdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
 	}
 }

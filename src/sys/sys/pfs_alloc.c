@@ -49,10 +49,32 @@ void pfs_blk_free(dev_t dev, long blkno)
 	/* TODO: write this */
 }
 
-#if 0 /* is this even used? */
+/* allocate an inode on the given device */
+struct inode *pfs_allocinode(dev_t dev)
+{
+	/* TODO: write this */
+	return NULL;
+}
+
+/* read the inode from its device */
+int pfs_readinode(struct inode *ip)
+{
+	/* TODO: write this */
+	return -1;
+}
+
+/* write the inode to its device */
+int pfs_writeinode(struct inode *inop)
+{
+	/* TODO: write this */
+	return -1;
+}
+
+#if 1 /* is this even used? */
 struct fs *getfs(dev_t dev)
 {
 	/* TODO: write this */
+	return NULL;
 }
 #endif
 

@@ -69,6 +69,17 @@
 #include "queue.h"
 #include "globals.h"
 
+struct file *fd_to_file(int fd)
+{
+	struct file *fp = NULL;
+	
+	if (0 <= fd && fd < NOFILE)
+		fp = P.p_ofile[fd];
+	if (!fp)
+		P.p_error = EBADF;
+	return fp;
+}
+
 static void iomove(void *cp, int n, int flag)
 {
         int t;
@@ -91,7 +102,7 @@ static void iomove(void *cp, int n, int flag)
         return;
 }
 
-static void rdwr_inode(struct inode *inop, int mode)
+void rdwr_inode(struct inode *inop, int mode)
 {
 	struct buf *bufp;
 	dev_t dev;

@@ -19,8 +19,18 @@ enum { INO_SOUGHT, INO_CREATE, INO_DELETE };
  * An inode is 'named' by its dev/inumber pair. (iget/iget.c)
  */
 
+/*
+ * NDADDR depends on the size of struct dinode
+ * this could potentially have one of the following values:
+ * 4 : sizeof(struct dinode) = 32  (4 inodes/block)
+ * 9 : sizeof(struct dinode) = 42  (3 inodes/block)
+ * 20: sizeof(struct dinode) = 64  (2 inodes/block)
+ */
+#define NDADDR 4
+#define NIADDR 3 /* single, double, and triple indirect */
+
 struct inode {
-	struct inode *i_next, *i_prev;
+	struct list_head i_list;
 	
 	unsigned short	i_flag;
 	unsigned short	i_count;	/* reference count */
@@ -28,6 +38,7 @@ struct inode {
 	ino_t	i_number;	/* i number, 1-to-1 with device address */
 	struct	fs *i_fs;	/* file sys associated with this inode */
 	
+	/* following fields are stored on the device */
 	unsigned short	i_mode;	/* mode and type of file */
 	unsigned short	i_nlink;	/* number of links to file */
 	uid_t	i_uid;		/* owner's user id */
@@ -38,44 +49,28 @@ struct inode {
 	};
 	time_t	i_atime;		/* time last accessed */
 	time_t	i_mtime;		/* time last modified */
-	time_t	i_ctime;		/* time created */
+	time_t	i_ctime;		/* time last changed */
+	
+	/* block indexes: direct and indirect blocks */
+	long i_dblocks[NDADDR];
+	long i_iblocks[NIADDR];
 };
 
-#if 0
-/*
- * Invalidate an inode. Used by the namei cache to detect stale
- * information. In order to save space and also reduce somewhat the
- * overhead - the i_id field is made into a u_short.  If a pdp-11 can 
- * invalidate 100 inodes per second, the cache will have to be invalidated 
- * in about 11 minutes.  Ha!
- * Assumes the cacheinvalall routine will map the namei cache.
- */
-#define cacheinvalall _cinvall
-
-#define cacheinval(ip) \
-	(ip)->i_id = ++nextinodeid; \
-	if (nextinodeid == 0) \
-		cacheinvalall();
-
-unsigned short	nextinodeid;		/* unique id generator */
-#endif
-
-extern struct inode inode[];		/* the inode table itself */
-#if 0
-struct inode *inodeNINODE;	/* the end of the inode table */
-int	ninode;			/* the number of slots in the table */
-#endif
-
-extern struct	inode *rootdir;		/* pointer to inode of root directory */
-
-struct	inode *iget(dev_t dev, struct fs *, ino_t ino);
-void iput(struct inode *);
-
-struct	inode *getinode();
-struct	inode *ialloc(dev_t dev);
-struct	inode *maknode();
-struct	inode *namei();
-
+/* inode as it appears on disk (the goal is 32 bytes: 4 inodes per block) */
+struct dinode {
+	unsigned short di_mode;              /* 0 */
+	unsigned char di_nlink;              /* 2 */
+	union {
+		unsigned char di_size[3];
+		dev_t di_rdev;
+	};                                   /* 3 */
+	uid_t di_uid;                        /* 6 */
+	gid_t di_gid;                        /* 8 */
+	time_t di_mtime;                     /* 10 */
+	time_t di_ctime;                     /* 14 */
+	short di_dblocks[NDADDR];            /* 18 */
+	short di_iblocks[NIADDR];            /* 24 */
+};
 
 #define NULLINO ((ino_t)0)
 
@@ -115,23 +110,23 @@ struct	inode *namei();
 
 #define EACHINODE(ip) (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip)
 
-#if 0 /* these may be usable sometime. */
-#define	ILOCK(ip) { \
+#define I_LOCK(ip) do { \
 	while ((ip)->i_flag & ILOCKED) { \
-		(ip)->i_flag |= IWANT; \
-		slp((caddr_t)(ip), PINOD); \
+		(ip)->i_flag |= IWANTED; \
+		slp((ip), PINOD); \
 	} \
 	(ip)->i_flag |= ILOCKED; \
-}
+} while (0)
 
-#define	IUNLOCK(ip) { \
+#define I_UNLOCK(ip) do { \
 	(ip)->i_flag &= ~ILOCKED; \
-	if ((ip)->i_flag&IWANT) { \
-		(ip)->i_flag &= ~IWANT; \
-		wakeup((caddr_t)(ip)); \
+	if ((ip)->i_flag & IWANTED) { \
+		(ip)->i_flag &= ~IWANTED; \
+		wakeup((ip)); \
 	} \
-}
+} while (0)
 
+#if 0 /* these may be usable sometime. */
 #define	IUPDAT(ip, t1, t2, waitfor) { \
 	if (ip->i_flag&(IUPD|IACC|ICHG|IMOD)) \
 		iupdat(ip, t1, t2, waitfor); \
