@@ -70,4 +70,6 @@ STARTUP(void kmain())
 	realtime = walltime;
 	uptime.tv_sec = uptime.tv_nsec = 0;
 	ioport = 0; /* TODO: put this in another file */
+	spl0();
+	bogomips();
 }
