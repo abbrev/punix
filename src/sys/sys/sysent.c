@@ -15,6 +15,7 @@ void sys_wait3();
 void sys_wait4();
 void sys_getrusage();
 void sys_uname();
+void sys_pause();
 
 void sys_getitimer();
 void sys_setitimer();
@@ -165,7 +166,7 @@ STARTUP(struct sysent sysent[]) = {
 	{1, sys_umask},		/* 60 */
 	{2, sys_chroot},
 	{3, sys_fstat},
-	{0, sys_NONE},
+	{0, sys_pause},
 	{0, sys_NONE},
 	{0, sys_NONE},
 	{0, sys_vfork},
@@ -268,6 +269,7 @@ STARTUP(struct sysent sysent[]) = {
 const int nsysent = sizeof(sysent) / sizeof(struct sysent);
 
 #if 0
+/* this is out of date but used only for debugging in syscall() */
 STARTUP(const char *sysname[]) = {
 	"NONE",		/* 0 */
 	"exit",
