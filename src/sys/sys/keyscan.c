@@ -51,19 +51,19 @@ static const struct translate Translate_2nd[] = {
 	{ 'y',0x1a }, /* solid right triangle */ /* XXX */
 #endif
 	{ 'u',0xfc }, /* u" */
+#if 0
 	{ 'i',0x97 }, /* imaginary */
+#endif
 	{ 'o',0xd4 }, /* O^ */
 	{ 'p','_' },
 	{ 'a',0xe1 }, /* a` */
-#if 0
-	{ 's',0x81 }, /* German s XXX */
-#endif
+	{ 's',0xdf }, /* German double s */
 	{ 'd',0xb0 }, /* degree */
 #if 0
 	{ 'f',0x9f }, /* angle XXX */
 	{ 'g',0x80 }, /* alpha */ /* XXX */
 #endif
- { 'g','`' },
+	{ 'g','`' },
 	{ 'h','&' },
 #if 0
 	{ 'j',0xbe }, /* infinity */
@@ -161,10 +161,8 @@ static void expand(short key)
 	while (ep->oldkey) {
 		if (ep->oldkey == key) {
 			char *cp = ep->expansion;
-			while (*cp != '\0') {
-				G.vt.key = *cp++;
-				vtrint(DEV_VT);
-			}
+			while (*cp != '\0')
+				vtrint(DEV_VT, *cp++);
 			return;
 		}
 		++ep;
@@ -370,6 +368,7 @@ static void showmods(void)
 	splx(x);
 }
 
+/* callback for timeout() to remove bell status */
 void unbell(void *arg)
 {
 	struct tty *ttyp = (struct tty *)arg;
@@ -377,9 +376,11 @@ void unbell(void *arg)
 	showmods();
 }
 
+/* set the bell status and set a timeout to remove the bell status after
+ * some time */
 void bell(struct tty *ttyp)
 {
-	untimeout(unbell, ttyp); /* FIXME: appears to be a bug in untimeout */
+	untimeout(unbell, ttyp);
 	G.vt.bell = 1;
 	showmods();
 	timeout(unbell, ttyp, 1 * HZ); /* XXX: constant */
@@ -446,7 +447,7 @@ static void addkey(unsigned short key)
 	}
 	
 	if (key == KEY_COMPOSE) {
-		if (G.vt.compose)
+		if (G.vt.compose || G.vt.key_compose)
 			G.vt.compose = G.vt.key_compose = 0;
 		else
 			G.vt.compose = 1;
@@ -462,8 +463,7 @@ static void addkey(unsigned short key)
 			key = compose(key);
 			G.vt.key_compose = 0;
 		}
-		G.vt.key = key;
-		vtrint(DEV_VT);
+		vtrint(DEV_VT, key);
 	} else {
 		expand(key);
 	}

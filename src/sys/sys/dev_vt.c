@@ -348,6 +348,16 @@ static void print(int ch, struct tty *tp)
 	++G.vt.pos.column;
 }
 
+static void tab(int n)
+{
+	while (n-- > 0) {
+		while (G.vt.pos.column < MARGINRIGHT) {
+			++G.vt.pos.column;
+			if (istabstop(G.vt.pos.column)) break;
+		}
+	}
+}
+
 static void execute(int ch, struct tty *tp)
 {
 	/* Execute the C0 or C1 control function. */
@@ -369,10 +379,7 @@ static void execute(int ch, struct tty *tp)
 		break;
 	case 0x09: /* HT */
 		/* move the cursor to the next tab stop or the right margin */
-		while (G.vt.pos.column < MARGINRIGHT) {
-			++G.vt.pos.column;
-			if (istabstop(G.vt.pos.column)) break;
-		}
+		tab(1);
 		break;
 	case 0x0a: /* LF */
 	case 0x0b: /* VT */
@@ -656,7 +663,15 @@ static void csi_dispatch(int ch, struct tty *tp)
 		/* FIXME: CPL - Cursor Preceding Line */
 		break;
 	case 'G':
-		/* FIXME: CHA - Cursor Character Absolute */
+		/* CHA - Cursor Character Absolute */
+		defaultparams(1, tp);
+		c = G.vt.params[0];
+		
+		G.vt.pos.column = c - 1;
+		if (G.vt.pos.column < 0)
+			G.vt.pos.column = 0;
+		else if (G.vt.pos.column > MARGINRIGHT)
+			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'H':
 		/* CUP Pr Pc - Cursor Position */
@@ -679,7 +694,11 @@ static void csi_dispatch(int ch, struct tty *tp)
 			G.vt.pos.column = MARGINRIGHT;
 		break;
 	case 'I':
-		/* FIXME: CHT - Cursor Forward Tabulation */
+		/* CHT - Cursor Forward Tabulation */
+		defaultparams(1, tp);
+		c = G.vt.params[0];
+		if (c == -1) c = 1;
+		tab(c);
 		break;
 	case 'M':
 		/* FIXME: DL - Delete Line */
@@ -979,8 +998,12 @@ static void ground_event(int ch, struct tty *tp)
 	
 	if (ch <= 0x1f)
 		execute(ch, tp);
-	else if (c <= 0x7f)
+	else if (c <= 0x7f) {
+		int whereami = G.whereami;
+		G.whereami = WHEREAMI_PRINT;
 		print(ch, tp);
+		G.whereami = whereami;
+	}
 }
 
 static void escape_event(int ch, struct tty *tp)
@@ -1173,7 +1196,7 @@ void vtinit()
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
 	cursor(&G.vt.vt[0]);
-	G.vt.key_repeat_start_delay = (unsigned long)1000 * KEY_REPEAT_DELAY / HZ;
+	G.vt.key_repeat_start_delay = (unsigned char)(KEY_REPEAT_DELAY * 1000L / HZ);
 	G.vt.key_repeat_delay = HZ / KEY_REPEAT_RATE;
 	G.vt.key_repeat = 1;
 	G.vt.key_compose = 0;
@@ -1500,9 +1523,6 @@ static void ttyinput(int ch, struct tty *tp)
                 }
         }
 #endif
-	/* there is a bug in icanon mode: if there are n non-break bytes in
-	 * canq followed by cc[VEOF], and ttyread reads n bytes, it will read
-	 * only the cc[VEOF] byte, indicating end-of-file on read */
 	if (lflag & ICANON) {
 		if (TTBREAKC(ch)) {
 			//tp->t_rocount = 0;
@@ -1546,10 +1566,8 @@ endcase: ;
 
 /* NB: there is no vtxint routine */
 
-void vtrint(dev_t dev)
+void vtrint(dev_t dev, int ch)
 {
-	int ch = G.vt.key;
-	
 #if 1
 	ttyinput(ch, &G.vt.vt[MINOR(dev)]);
 #else

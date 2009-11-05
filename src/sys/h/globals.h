@@ -111,7 +111,6 @@ struct globals {
 		
 		char key_array[KEY_NBR_ROW];
 		short key_mod, key_mod_sticky;
-		short key;
 		short key_compose;
 		unsigned char key_caps;
 		unsigned char compose;
