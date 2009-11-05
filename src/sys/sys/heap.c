@@ -157,7 +157,7 @@ static void insertentry(struct heapentry *hp, int start, int end, pid_t pid)
  */
 void *memalloc(size_t *sizep, pid_t pid)
 {
-	int size;
+	size_t size;
 	struct heapentry *hp;
 	
 	if (!sizep) return NULL;
@@ -179,7 +179,7 @@ void *memalloc(size_t *sizep, pid_t pid)
 		return NULL;
 	
 loop:
-#define SIZETHRESHOLD 2048
+#define SIZETHRESHOLD 2048L
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heaplist[G.heapsize-1].start;
 		for (hp = &G.heaplist[G.heapsize-2]; hp >= &G.heaplist[0]; --hp) {
@@ -219,10 +219,12 @@ loop:
 	 * requested chunk size, then it would not do any good to flush any of
 	 * the buffers */
 	/* FIXME: maybe move this into a function in bio.c */
+#if 0
 	if (pid != 0 && G.avbuflist.b_avnext != &G.avbuflist) {
 		struct buf *bp = G.avbuflist.b_avnext;
 		if (buffree(bp)) goto loop;
 	}
+#endif
 	return NULL;
 }
 
@@ -272,7 +274,7 @@ void memfree(void *ptr, pid_t pid)
 		middle = (lower + upper) / 2;
 		hp = &G.heaplist[middle];
 		if (start < hp->start) {
-			upper = middle;
+			upper = middle - 1;
 			continue;
 		} else if (start >= hp->end) {
 			lower = middle + 1;
@@ -301,8 +303,8 @@ void sys_kmalloc()
 	}
 	
 	p = memalloc(ap->sizep, P.p_pid);
+	P.p_retval = (unsigned long)p;
 	if (p) {
-		P.p_retval = (unsigned long)p;
 		memset(p, 0, *ap->sizep);
 	}
 }
