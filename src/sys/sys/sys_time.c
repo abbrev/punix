@@ -274,7 +274,7 @@ STARTUP(void sys_gettimeofday())
 {
 	struct tod *ap = (struct tod *)P.p_arg;
 	int whereami = G.whereami;
-	G.whereami = 4;
+	G.whereami = WHEREAMI_GETTIMEOFDAY;
 	
 	if (ap->tv) {
 		struct timeval tv;
@@ -362,7 +362,7 @@ STARTUP(void sys_getloadavg1())
 	} *ap = (struct a *)P.p_arg;
 	
 	int whereami = G.whereami;
-	G.whereami = 1;
+	G.whereami = WHEREAMI_GETLOADAVG1;
 	int nelem = ap->nelem;
 	int i;
 	long *la = ap->loadavg;

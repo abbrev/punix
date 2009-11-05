@@ -56,7 +56,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	uint32_t retval = 0;
 	int sig;
 
-	G.whereami = 2;
+	G.whereami = WHEREAMI_SYSCALL;
 	
 	/* for vfork(2) and execve(2) */
 	P.p_sfp = sfp;
@@ -109,7 +109,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	if (sig = issignal(&P))
 		postsig(sig);
 	
-	G.whereami = 0;
+	G.whereami = WHEREAMI_USER;
 	return retval;
 }
 
