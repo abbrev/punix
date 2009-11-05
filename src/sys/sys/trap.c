@@ -244,7 +244,5 @@ STARTUP(void updwalltime())
 #endif
 	realtime.tv_sec = walltime.tv_sec;
 	realtime.tv_nsec = walltime.tv_nsec;
-	
-	wakeup((void *)42); /* BOGUS */
 }
 #endif
