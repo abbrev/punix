@@ -274,7 +274,7 @@ void memfree(void *ptr, pid_t pid)
 		middle = (lower + upper) / 2;
 		hp = &G.heaplist[middle];
 		if (start < hp->start) {
-			upper = middle - 1;
+			upper = middle;
 			continue;
 		} else if (start >= hp->end) {
 			lower = middle + 1;
