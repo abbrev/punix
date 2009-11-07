@@ -1,6 +1,9 @@
 /* new Earliest Effective Virtual Deadline First scheduler,
  * based on BFS by Con Kolivas */
 
+#include <errno.h>
+#include <sched.h>
+
 #include "list.h"
 #include "punix.h"
 #include "globals.h"
@@ -8,11 +11,11 @@
 #include "proc.h"
 #include "ticks.h"
 
-#define PRIO_RANGE 40
-
+#if 0
 #define NICE_TO_PRIO(nice) ((nice) + 20)
 #define PRIO_TO_NICE(prio) ((prio) - 20)
 #define PROC_NICE(procp) PRIO_TO_NICE((procp)->p_nice)
+#endif
 
 #define MS_TO_TICKS(t) (((long)(t) * HZ + 500) / 1000)
 
@@ -21,9 +24,23 @@
 /* TIME_SLICE is the same as RR_INTERVAL but measured in ticks */
 #define TIME_SLICE MS_TO_TICKS(RR_INTERVAL)
 
+#define rt_prio(prio)           ((prio) < MAX_RT_PRIO)
+#define rt_proc(p)              rt_prio((p)->p_prio)
+#define iso_proc(p)             ((p)->p_sched_policy == SCHED_ISO)
+#define idle_proc(p)            ((p)->p_sched_policy == SCHED_IDLE)
+#define is_rt_policy(policy)    ((policy) == SCHED_FIFO || \
+                                 (policy) == SCHED_RR)
+#define has_rt_policy(p)        (is_rt_policy((p)->p_sched_policy))
+#define ISO_PERIOD              ((5 * HZ) + 1)
+
 static int prio_deadline_offset(int prio)
 {
 	return ((G.prio_ratios[prio]*TIME_SLICE + F_HALF) / F_ONE) ? : 1;
+}
+
+static int longest_deadline_offset(void)
+{
+	return prio_deadline_offset(39);
 }
 
 void sched_init(void)
@@ -32,7 +49,8 @@ void sched_init(void)
 	G.prio_ratios[0] = F_ONE;
 	for (i = 1; i < PRIO_RANGE; ++i)
 		G.prio_ratios[i] = (G.prio_ratios[i-1] * 11 + 5) / 10;
-	INIT_LIST_HEAD(&G.runqueue);
+	for (i = 0; i < PRIO_LIMIT; ++i)
+		INIT_LIST_HEAD(&G.runqueues[i]);
 	/* TODO: do whatever else is needed */
 }
 
@@ -41,8 +59,18 @@ static struct proc *earliest_deadline_proc(void)
 {
 	unsigned long dl, earliest_deadline = 0;
 	struct proc *procp, *earliest_procp = NULL;
-	list_for_each_entry(procp, &G.runqueue, p_runlist) {
+	int idx = NORMAL_PRIO;
+	struct list_head *queue;
+	
+tryqueue:
+	queue = &G.runqueues[idx];
+	list_for_each_entry(procp, queue, p_runlist) {
 		//kprintf(".");
+		if (idx < MAX_RT_PRIO) {
+			earliest_procp = procp;
+			goto out;
+		}
+		
 		dl = procp->p_deadline;
 		if (time_before(dl, G.ticks)) {
 			earliest_procp = procp;
@@ -54,6 +82,8 @@ static struct proc *earliest_deadline_proc(void)
 			earliest_deadline = dl;
 		}
 	}
+	if (!earliest_procp && ++idx < PRIO_LIMIT)
+		goto tryqueue;
 	
 out:
 	return earliest_procp;
@@ -74,51 +104,28 @@ STARTUP(void swtch())
 	++*(long *)(0x4c00+0xf00-30);
 #endif
 	
-	if (current->p_time_slice <= 0) {
+	if (current && current->p_time_slice <= 0) {
 		/* process used its whole time slice */
+		current->p_first_time_slice = 0;
 		current->p_time_slice += TIME_SLICE;
-		current->p_deadline = G.ticks + prio_deadline_offset(current->p_static_prio);
+		current->p_deadline = G.ticks + prio_deadline_offset(current->p_nice);
+		if (idle_proc(current))
+			current->p_deadline += longest_deadline_offset();
 	}
-	
-	/*
-	 * When a process switches between clock ticks, we keep track of this
-	 * by adding one-half of a clock tick to its cpu time. This is based
-	 * on the theory that a process will use, on average, half of a clock
-	 * tick when it switches between ticks. To balance the accounting, we
-	 * subtract one-half clock tick from the cpu time of the next process
-	 * coming in if it doesn't get a full first clock tick. Doing this will
-	 * (hopefully) more correctly account for the cpu usage of processes
-	 * which always switch (sleep) before the first clock tick of their
-	 * time slice. The correct solution, of course, requires using a
-	 * high-precision clock that tells us exactly how much cpu time the
-	 * process uses, but we don't have a high-resolution clock. :(
-	 */
-	
-	if (!istick) {
-		/* we switched between ticks, so add one-half clock tick to our
-		 * cpu time */
-		++current->p_cputime;
-	}
-	
-	current->p_cputime += cputime * 2;
 	
 	while (!(p = earliest_deadline_proc())) {
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
-		splx(x);
+		//splx(x);
+		*(short *)(0x4c00+0xf00-26) = 0xffff;
 		cpuidle();
-		x = spl1();
+		*(short *)(0x4c00+0xf00-26) = 0;
+		//x = spl1();
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */
 	}
 	
-	if (!istick) {
-		/* subtract half a tick from the next proc's cpu time */
-		--p->p_cputime;
-	}
-        cputime = 0;
 	G.need_resched = 0;
-	istick = 0;
 	
 	if (p == current)
 		return;
@@ -142,10 +149,8 @@ void sched_tick(void)
 {
 	if (!current) return;
 	if (--current->p_time_slice <= 0) {
-		istick = 1;
 		++G.need_resched;
 	}
-	++cputime;
 }
 
 #if 1
@@ -155,14 +160,19 @@ static void set_state(struct proc *p, int state)
 	if (state == p->p_status) return;
 	if (state == P_RUNNING) {
 		++G.numrunning;
+		/* preempt the current process */
 		if (time_before(p->p_deadline, current->p_deadline)) {
 			++G.need_resched;
 			//istick = 0;
 		}
-		list_add_tail(&p->p_runlist, &G.runqueue);
+		list_add_tail(&p->p_runlist, &G.runqueues[p->p_prio]);
 	} else {
-		--G.numrunning;
-		list_del(&p->p_runlist);
+		if (p->p_status == P_RUNNING) {
+			--G.numrunning;
+			list_del(&p->p_runlist);
+		} else {
+			kprintf("set_state from not P_RUNNING to another not P_RUNNING\n");
+		}
 	}
 	p->p_status = state;
 	/* TODO: anything else? */
@@ -198,6 +208,17 @@ void sched_stop(struct proc *p)
 void sched_fork(struct proc *childp)
 {
 	//kprintf("sched_fork(%08lx)\n", childp);
+	/*
+	 * give the child half of our time_slice
+	 * set first_time_slice in the child
+	 */
+	int x = spl0();
+	int half = current->p_time_slice / 2;
+	childp->p_time_slice = half;
+	current->p_time_slice -= half;
+	splx(x);
+	childp->p_first_time_slice = 1;
+	set_state(childp, P_RUNNING);
 }
 
 void sched_exec(void)
@@ -208,6 +229,10 @@ void sched_exec(void)
 void sched_exit(struct proc *p)
 {
 	//kprintf("sched_exit(%08lx)\n", p);
+	if (p->p_first_time_slice) {
+		p->p_pptr->p_time_slice += p->p_time_slice;
+	}
+	set_state(p, P_ZOMBIE);
 }
 
 #if 0
@@ -220,27 +245,52 @@ int sched_get_scheduler(struct proc *procp)
 }
 #endif
 
-int sched_get_priority(struct proc *procp)
+int sched_get_nice(struct proc *p)
 {
-	return procp->p_static_prio;
+	return p->p_nice;
 }
 
-void sched_set_priority(struct proc *procp, int prio)
+void sched_set_nice(struct proc *p, int newnice)
 {
-}
-
-int sched_get_nice(struct proc *procp)
-{
-	return PROC_NICE(procp);
-}
-
-void sched_set_nice(struct proc *procp, int nice)
-{
-	int oldprio = procp->p_static_prio;
-	int newprio = NICE_TO_PRIO(nice);
-	if (newprio == oldprio) return;
-	procp->p_static_prio = newprio;
+	int oldnice = p->p_nice;
+	if (newnice == oldnice) return;
+	p->p_nice = newnice;
 	/* adjust the deadline for this process */
-	procp->p_deadline += prio_deadline_offset(newprio) -
-	                     prio_deadline_offset(oldprio);
+	p->p_deadline += prio_deadline_offset(newnice) -
+	                 prio_deadline_offset(oldnice);
+}
+
+int sched_setscheduler(pid_t pid, int policy, const struct sched_param *param)
+{
+	int oldscheduler;
+	struct proc *p;
+	p = pfind(pid);
+	if (!p)
+		return -1;
+	
+	/* FIXME: check that current proc has permission to set the given proc's
+	 * priority to the given sched_param */
+	
+	P.p_error = EINVAL;
+	return -1;
+}
+
+int sched_getscheduler(pid_t pid)
+{
+	struct proc *p;
+	p = pfind(pid);
+	if (!p) {
+		return -1;
+	}
+	
+	/* FIXME: check that current proc has permission to get the given proc's
+	 * priority */
+	return p->p_sched_policy;
+}
+
+int sched_yield(void)
+{
+	current->p_time_slice = 0;
+	swtch();
+	return 0;
 }

@@ -9,6 +9,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <sched.h>
 
 #include "punix.h"
 #include "setjmp.h"
@@ -17,14 +18,6 @@
 #include "inode.h"
 #include "globals.h"
 #include "process.h"
-
-/* FIXME: XXX */
-STARTUP(void cpuidle(void))
-{
-	int x = spl0();
-	nop();
-	splx(x);
-}
 
 /* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
@@ -272,6 +265,7 @@ STARTUP(struct proc *pfind(pid_t pid))
 			return p;
 	}
 	
+	P.p_error = ESRCH;
 	return NULL;
 }
 
@@ -293,15 +287,15 @@ STARTUP(void procinit())
 	P.p_ruid = P.p_euid = P.p_svuid = 0;
 	P.p_rgid = P.p_egid = P.p_svgid = 0;
 	P.p_status = P_NEW;
-	P.p_cputime = 0;
 	P.p_nice = NZERO;
 	P.p_pptr = NULL;
+	P.p_sched_policy = SCHED_NORMAL;
+	P.p_prio = NORMAL_PRIO;
 	
 	/* set some resource limits. XXX: put more here! */
 	for (i = 0; i < 7; ++i)
 		P.p_rlimit[i].rlim_cur = P.p_rlimit[i].rlim_max = RLIM_INFINITY;
 	
-	cputime = 0;
 	G.numrunning = 0;
 	G.cumulrunning = 0;
 	//kprintf("%s (%d)\n", __FILE__, __LINE__);
