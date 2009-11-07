@@ -126,13 +126,16 @@ struct proc {
 	int p_error;
 	
 	/* scheduling */
-	int p_nice;
 	int p_cputime;	/* amount of cpu time we are using (decaying time) */
 	int p_pri;	/* run priority, calculated from cpuusage and nice */
 	/* the above might not be needed anymore with the new scheduler */
 	struct list_head p_runlist;
+	int p_sched_policy;
+	int p_prio;       /* this determines which runqueue this proc runs in */
+	int p_nice;       /* nice is always represented as 0..39 internally */
 	int p_static_prio;
 	int p_time_slice;
+	int p_first_time_slice;
 	unsigned long p_deadline;
 	
 	/* execution state */

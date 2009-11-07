@@ -9,6 +9,7 @@
 #include "buf.h"
 #include "kbd.h"
 #include "glyph.h"
+#include "sched.h"
 
 struct globals {
 /* these must be first -- referenced from assembly code */
@@ -16,9 +17,7 @@ struct globals {
 	struct timespec _realtime;
 	long _timedelta;
 	char exec_ram[60];
-	int _istick;
 	int _ioport;
-	int _cputime;
 	int _updlock;
 	struct proc *_current;
 	int lowestpri;
@@ -33,9 +32,10 @@ struct globals {
 	struct timespec _uptime;
 	long _loadavtime;
 	
-	struct list_head runqueue;
+	//struct list_head runqueue;
 	long prio_ratios[40];
 	int need_resched;
+	struct list_head runqueues[PRIO_LIMIT];
 	volatile unsigned long ticks;
 	
 	unsigned char audiosamp; /* current samples */
@@ -69,6 +69,7 @@ struct globals {
 	int calloutlock;
 	
 	struct buf avbuflist; /* list of buf */
+	struct list_head avbuf_list; /* list of available buf */
 	int numbufs;
 	/* struct buf buf[NBUF]; */
 	
@@ -149,9 +150,6 @@ extern struct globals G;
 extern int ioport;
 extern long walltime;
 
-/* cputime is the length of time the current process has been running
- * since it's been switched in, measured in half-ticks (15.1 fixed-point) */
-extern int cputime;
 extern int updlock;
 # else
 
@@ -159,9 +157,7 @@ extern int updlock;
 #define walltime G._walltime
 #define realtime G._realtime
 #define timedelta  G._timedelta
-#define istick   G._istick
 #define ioport   G._ioport
-#define cputime  G._cputime
 #define updlock  G._updlock
 #define current  G._current
 #define loadavtime G._loadavtime
