@@ -1,46 +1,72 @@
 #include "punix.h"
 #include "globals.h"
 
-#define TRIGLEVEL (*(short *)0x600018)
-#define BATTCHECK (*(char *)0x70001d)
 #define BATTSTAT  (*(volatile char *)0x600000)
 #define WAITSTATE (*(char *)0x600003)
+#define TRIGLEVEL (*(volatile short *)0x600018)
+#define BATTCHECK (*(char *)0x70001d)
+
+/*
+ * from j89hw.txt:
+ * $600000 RW ($00)
+ *  :2     1: Battery voltage level is *above* the trig level.
+ *         see $600018).
+ * $600018 RW ($0380)
+ *  :15-10 -
+ *  :9-7   Battery voltage trigger level (see $600000:2)
+ *         (HW2: must also enable batt checker at $70001D:3,0)
+ *          %000: ~4.6V, %001: ~4.5V, %010: ~4.3V, %011: ~4.0V,
+ *          %100: ~3.7V, %101: ~3.4V, %110: ~3.2V, (%111: ~2.9V  calc resetted!)
+ *         Remember to wait a while (~250us) before reading from
+ *         $600000:2 to make sure that the hardware has stabilized.
+ *         Keep the trig level set to the lowest voltage (%111) when
+ *         its not in use.  (The keyboard does not work otherwise.)
+ *         AMS displays "BATT" when the voltage drops below 4.3V and
+ *         4.0V, respectively.
+ */
 
 static void reinit()
 {
 	int i;
 	TRIGLEVEL = 0x380;
-	i = 0x52;
-	do {
-		if (!(BATTSTAT & (1 << 2))) break;
-	} while (i--);
+	for (i = 52; i >= 0; --i) {
+		if (!(BATTSTAT & 0x04)) break;
+	};
 }
 
+/* batt_check() returns one of the following values:
+ * 7: >4.6V  full
+ * 6: >4.5V  ok
+ * 5: >4.3V  medium
+ * 4: >4.0V  low
+ * 3: >3.7V  very low
+ * 2: >3.4V  starving
+ * 1: >3.2V  almost dead
+ * 0: <=3.2V dead (calculator is reset?)
+ */
 int batt_check()
 {
-	int x = spl5();
+	int x = spl1();
 	int i, j;
-	char k;
 	BATTCHECK |= 0x09;
 	
-	/* XXX: why 7 times? */
-	i = 6;
-	do {
+	for (i = 6; i >= 0; --i) {
 		reinit();
 		TRIGLEVEL = i << 7;
-		j = 0x6e;
-		do {
-			k = BATTSTAT & (1 << 2);
-			if (!k) goto quit;
-		} while (j--);
-	} while (i--);
+		for (j = 110; j >= 0; --j) {
+			if (!(BATTSTAT & 0x04))
+				goto quit;
+		};
+	};
 quit:
-	i = (6 - i) >> 1;
+	i = 6 - i;
 	G.batt_level = i;
 	BATTCHECK &= 0xf7;
 	reinit();
 	BATTCHECK &= 0xf6;
 	WAITSTATE = ~0;
+	
+	showstatus();
 	splx(x);
 	return G.batt_level;
 }
