@@ -33,6 +33,7 @@
 #include "dev.h"
 #include "globals.h"
 
+/* allocate a struct buf and initialize it */
 static struct buf *bufalloc(void)
 {
 	size_t sb = sizeof(struct buf);
@@ -53,17 +54,16 @@ static struct buf *bufalloc(void)
 	bufp->b_blkno = 0;
 	bufp->b_error = 0;
 	bufp->b_resid = 0;
-	bufp->b_next = bufp->b_prev = bufp;
+	INIT_LIST_HEAD(&bufp->b_list);
+	INIT_LIST_HEAD(&bufp->b_avlist);
 
 	/* insert this buf at the beginning of the available buf list */
-	bufp->b_avnext = G.avbuflist.b_avnext;
-	bufp->b_avprev = &G.avbuflist;
-	G.avbuflist.b_avnext->b_avprev = bufp;
-	G.avbuflist.b_avnext = bufp;
+	list_add(&bufp->b_avlist, &G.avbuf_list);
 	goto end;
 
 freebuf:
 	memfree(bufp, 0);
+	bufp = NULL;
 end:
 	return bufp;
 }
@@ -77,10 +77,8 @@ int buffree(struct buf *bufp)
 	if (bufp->b_flags & B_DELWRI) blk_write(bufp);
 	
 	/* remove this buf from each list */
-	bufp->b_next->b_prev = bufp->b_prev;
-	bufp->b_prev->b_next = bufp->b_next;
-	bufp->b_avnext->b_avprev = bufp->b_avprev;
-	bufp->b_avprev->b_avnext = bufp->b_avnext;
+	list_del(&bufp->b_list);
+	list_del(&bufp->b_avlist);
 	memfree(bufp->b_addr, 0);
 	memfree(bufp, 0);
 	--G.numbufs;
@@ -93,10 +91,11 @@ static struct buf *getavbuf(void)
 {
 	struct buf *bufp;
 	
-	bufp = G.avbuflist.b_avnext;
-	if (bufp == &G.avbuflist) {
-		/* FIXME: try to allocate a new buffer and put it on the avbuflist */
-		bufp = NULL;
+	if (list_empty(&G.avbuf_list)) {
+		/* try to allocate a new buffer and put it on the avbuflist */
+		bufp = bufalloc();
+	} else {
+		bufp = list_entry(G.avbuf_list.next, struct buf, b_avlist);
 	}
 	
 	return bufp;
@@ -105,11 +104,10 @@ static struct buf *getavbuf(void)
 static void notavail(struct buf *bufp)
 {
 	bufp->b_flags |= B_BUSY;
-	bufp->b_avprev->b_avnext = bufp->b_avnext;
-	bufp->b_avnext->b_avprev = bufp->b_avprev;
+	list_del(&bufp->b_avlist);
 }
 
-#define EACHDEVBUF(devp, devbufp) (devbufp = devp->b_next; devbufp != (struct buf *)devp; devbufp = devbufp->b_next)
+//#define EACHDEVBUF(devp, devbufp) (devbufp = devp->b_next; devbufp != (struct buf *)devp; devbufp = devbufp->b_next)
 
 /* get a buf associated with a block. always returns a buf. */
 /* if there is a buf associated with this block:
@@ -129,7 +127,7 @@ struct buf *blk_get(dev_t dev, long blkno)
 	struct devtab *devp = bdevsw[MAJOR(dev)].d_tab;
 	
 tryagain:
-	for EACHDEVBUF(devp, devbufp) {
+	list_for_each_entry(devbufp, &devp->d_buflist, b_list) {
 		if (devbufp->b_dev == dev && devbufp->b_blkno == blkno) {
 			bufp = devbufp;
 			break;
@@ -157,13 +155,7 @@ tryagain:
 	}
 	
 	bufp->b_flags = B_BUSY;
-	bufp->b_prev->b_next = bufp->b_next;
-	bufp->b_next->b_prev = bufp->b_prev;
-	bufp->b_next = devp->b_next;
-	bufp->b_prev = (struct buf *)devp;
-
-	devp->b_next->b_prev = bufp;
-	devp->b_next = bufp;
+	list_add(&bufp->b_list, &devp->d_buflist);
 
 	bufp->b_dev = dev;
 	bufp->b_blkno = blkno;
@@ -176,10 +168,7 @@ found:
 void blk_release(struct buf *bufp)
 {
 	/* put this buf at the tail of the avbuflist */
-	bufp->b_avnext = &G.avbuflist;
-	bufp->b_avprev = G.avbuflist.b_avprev;
-	bufp->b_avnext->b_avprev = bufp;
-	bufp->b_avprev->b_avnext = bufp;
+	list_add_tail(&bufp->b_avlist, &G.avbuf_list);
 }
 
 struct buf *blk_read(dev_t dev, long blkno)
@@ -229,7 +218,7 @@ void blk_flush(dev_t dev)
 
 void bufinit(void)
 {
-	G.avbuflist.b_avnext = G.avbuflist.b_avprev = &G.avbuflist;
+	INIT_LIST_HEAD(&G.avbuf_list);
 	G.numbufs = 0;
 	while (G.numbufs < MINBUF)
 		assert(bufalloc());
