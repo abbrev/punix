@@ -295,7 +295,7 @@ static short compose(short key)
 	return key;
 }
 
-/* The status bitmaps and drawmod()/showmods() are kind of a hack. It would be
+/* The status bitmaps and drawmod()/showstatus() are kind of a hack. It would be
  * nice if they were rewritten (but not essential since it works as it is) */
 static const unsigned short status[][4] = {
 #include "glyphsets/status-none.inc"
@@ -312,23 +312,33 @@ static const unsigned short status[][4] = {
 #include "glyphsets/status-compose2.inc"
 #include "glyphsets/status-bell.inc"
 #include "glyphsets/status-scrolllock.inc"
+#include "glyphsets/status-batt0.inc"
+#include "glyphsets/status-batt1.inc"
+#include "glyphsets/status-batt2.inc"
+#include "glyphsets/status-batt3.inc"
+#include "glyphsets/status-batt4.inc"
 };
 
-#define STATUS_NONE       0
-#define STATUS_2ND        1
-#define STATUS_DIAMOND    2
-#define STATUS_SHIFT      3
+#define STATUS_NONE        0
+#define STATUS_2ND         1
+#define STATUS_DIAMOND     2
+#define STATUS_SHIFT       3
 #ifdef TI92P
-#define STATUS_HAND       4
+#define STATUS_HAND        4
 #else
-#define STATUS_ALPHA      4
+#define STATUS_ALPHA       4
 #endif
-#define STATUS_CAPSLOCK   5
-#define STATUS_COMPOSE1   6
-#define STATUS_COMPOSE2   7
-#define STATUS_BELL       8
-#define STATUS_SCROLLLOCK 9
-#define STATUS_LAST       9
+#define STATUS_CAPSLOCK    5
+#define STATUS_COMPOSE1    6
+#define STATUS_COMPOSE2    7
+#define STATUS_BELL        8
+#define STATUS_SCROLLLOCK  9
+#define STATUS_BATT0      10
+#define STATUS_BATT1      11
+#define STATUS_BATT2      12
+#define STATUS_BATT3      13
+#define STATUS_BATT4      14
+#define STATUS_LAST       14
 
 static void drawmod(int pos, int m)
 {
@@ -348,16 +358,20 @@ static void drawmod(int pos, int m)
 	}
 }
 
-static void showmods(void)
+void showstatus(void)
 {
 	/* TI-92+: */
 	/* compose hand capslock shift diamond 2nd bell */
 	/* 6       5    4        3     2       1   0    */
 	
+	int batt;
 	int x = spl7();
 	int mod = G.vt.key_mod | G.vt.key_mod_sticky;
 	
-	drawmod(0, G.vt.bell ? STATUS_BELL : STATUS_NONE);
+	batt = G.batt_level - 3;
+	if (batt < 0) batt = 0;
+	
+	drawmod(0, G.vt.bell ? STATUS_BELL : STATUS_BATT0+batt);
 	drawmod(1, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
 	drawmod(2, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
 	drawmod(3, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
@@ -373,7 +387,7 @@ void unbell(void *arg)
 {
 	struct tty *ttyp = (struct tty *)arg;
 	G.vt.bell = 0;
-	showmods();
+	showstatus();
 }
 
 /* set the bell status and set a timeout to remove the bell status after
@@ -382,7 +396,7 @@ void bell(struct tty *ttyp)
 {
 	untimeout(unbell, ttyp);
 	G.vt.bell = 1;
-	showmods();
+	showstatus();
 	timeout(unbell, ttyp, 1 * HZ); /* XXX: constant */
 }
 
@@ -523,7 +537,7 @@ void scankb()
 					G.vt.key_mod &= ~key;
 				}
 			}
-			showmods();
+			showstatus();
 		} while (kdiff);
 		goto end;
 	}
