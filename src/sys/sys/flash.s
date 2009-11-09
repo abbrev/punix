@@ -62,7 +62,7 @@ protect:
 
 | short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
 FlashWrite:
-	movem.l	%d1-%d3/%a0-%a4,-(%sp)	| Save Registers
+	movem.l	%d3-%d4/%a2-%a4,-(%sp)	| Save Registers
 	move.w	%sr,-(%sp)		| Save %sr
 	
 	| Check Batt
@@ -118,7 +118,7 @@ exec_in_ram:
 	bsr	protect
 	
 	move.w	(%sp)+,%sr		| Return to User mode
-	movem.l	(%sp)+,%d1-%d3/%a0-%a4	| Pop registers
+	movem.l	(%sp)+,%d3-%d4/%a2-%a4	| Pop registers
 	moveq	#0,%d0
 	rts
 error:
@@ -134,9 +134,9 @@ FlashWrite_ExecuteInRam:
 	blt.s	9f
 	move.l	%a3,%a4			| A4 = Command register
 	move.w	#0x5050,(%a4)		| Clear Statut Register
-0:		move.w	(%a2)+,%d7	| Read value to write
+0:		move.w	(%a2)+,%d4	| Read value to write
 		move.w	#0x1010,(%a3)	| Write Setup -- CHANGE HERE %a4 to %a3
-		move.w	%d7,(%a3)+	| Write word
+		move.w	%d4,(%a3)+	| Write word
 1:			move.w	(%a4),%d0	| Check it
 			btst	#7,%d0
 			beq.s	1b	| and wait that's done
@@ -151,7 +151,7 @@ FlashWrite_ExecuteInRam_End:
 | Low Level functions for Flash access (It doesn't use Trap #B for safe reason)
 | short FlashErase(const void *dest asm("%a2"))
 FlashErase:
-	movem.l	%d1-%d3/%a0-%a4,-(%sp)	| Save Registers
+	movem.l	%d3-%d4/%a2-%a4,-(%sp)	| Save Registers
 	move.w	%sr,-(%sp)		| Save %sr
 	
 	| Check Batt
