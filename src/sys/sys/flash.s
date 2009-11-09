@@ -27,7 +27,7 @@ exec_ram = 0x5c00 | XXX
 | short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
 FlashWrite:
 	movem.l	%d1-%d7/%a0-%a6,-(%sp)	| Save Registers
-	move.w	%d0,-(%sp)		| Save %sr
+	move.w	%sr,-(%sp)		| Save %sr
 	
 	clr.w	%d5		| Set Error 
 	
@@ -143,7 +143,7 @@ FlashWrite_ExecuteInRam_End:
 | short FlashErase(const void *dest asm("%a2"))
 FlashErase:
 	movem.l	%d1-%d7/%a0-%a6,-(%sp)	| Save Registers
-	move.w	%d0,-(%sp)		| Save %sr
+	move.w	%sr,-(%sp)		| Save %sr
 	
 	clr.w	%d5		| Set Error 
 	
