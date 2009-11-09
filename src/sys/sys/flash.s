@@ -24,19 +24,8 @@ archive_end = 0x400000
 .section _st1,"x"
 exec_ram = 0x5c00 | XXX
 
-| short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
-FlashWrite:
-	movem.l	%d1-%d7/%a0-%a6,-(%sp)	| Save Registers
-	move.w	%sr,-(%sp)		| Save %sr
-	
-	clr.w	%d5		| Set Error 
-	
-	| Check Batt
-	bsr	BatTooLowFlash
-	tst.b	%d0
-	bne	FlashWriteProtect
-	
 	| Unprotect Flash (%sr = 0x2700)
+unprotect:
 	move.w	0x5EA4,%d0	| I read this because on Vti, the address 0x1C5EA4 & 0x5EA4 are the same, so if I write 0, it corrupts the heap. Very annoying, no ?
 	lea	(0x1C5EA4).l,%a0
 	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
@@ -51,52 +40,10 @@ FlashWrite:
 	move	#0x2700,%sr
 	move.w	%d0,(%a0)
 	bset	#1,(0x600015)	|turn on LCD
-	
-	| We don't check the stack, but we don't use it
-	| Check if %a2 is in RAM
-	cmp.l	#0x3FFFF,%a2
-	bhi.s	FlashWriteProtect
-	move.l	%a2,%d0
-	andi.w	#1,%d0
-	bne.s	FlashWriteProtect		| Not aligned
-	| Check if %a3 is in Archive Memory
-	cmp.l	#archive_end-1,%a3
-	bhi.s	FlashWriteProtect
-	cmp.l	#archive-1,%a3
-	bls.s	FlashWriteProtect
-	move.l	%a3,%d0
-	andi.w	#1,%d0
-	bne.s	FlashWriteProtect		| Not aligned
-	| Check if %a3+%d3 is in the same block of memory
-	addq.l	#1,%d3		| Word alignement (Long +1
-	andi.w	#0xFFFE,%d3	| Clear low bit (does word instead of long)
-	lea	-1(%a3,%d3.l),%a4	| -1 because the last byte we'll write is %a3+%d3-1
-	move.l	%a3,%d0
-	move.l	%a4,%d1
-	swap	%d0
-	swap	%d1
-	cmp.w	%d0,%d1
-	bne.s	FlashWriteProtect
-	| Check if %a2+%d3 is in RAM
-	lea	-1(%a2,%d3.l),%a4
-	cmp.l	#0x3FFFF,%a4
-	bhi.s	FlashWriteProtect
-	
-	lsr.l	#1,%d3		| Convert Byte to Word
-	
-	| Copy code to RAM and execute it
-	move.w	#((FlashWrite_ExecuteInRam_End-FlashWrite_ExecuteInRam)/2-1),%d0
-	lea	FlashWrite_ExecuteInRam(%pc),%a0
-	lea	exec_ram,%a1
-0:	move.w	(%a0)+,(%a1)+
-	dbra	%d0,0b
-	
-	jsr	exec_ram	| Execute code in RAM
-FlashWrite_Return:
-	moveq	#1,%d5		| Of it is done
+	rts
 
-FlashWriteProtect:
 	| Protect Flash
+protect:
 	lea	(0x1C5E00),%a0
 	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
 	nop
@@ -111,9 +58,71 @@ FlashWriteProtect:
 	move.w	(%a0),%d0
 	bset	#1,0x600015
 	
-	move.w	%d5,%d0			| Error code
+	rts
+
+| short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
+FlashWrite:
+	movem.l	%d1-%d3/%a0-%a4,-(%sp)	| Save Registers
+	move.w	%sr,-(%sp)		| Save %sr
+	
+	| Check Batt
+	bsr	BatTooLowFlash
+	tst.b	%d0
+	bne	error
+	
+	| We don't check the stack, but we don't use it
+	| Check if %a2 is in RAM
+	cmp.l	#0x3FFFF,%a2
+	bhi.s	error
+	move.l	%a2,%d0
+	andi.w	#1,%d0
+	bne.s	error		| Not aligned
+	| Check if %a3 is in Archive Memory
+	cmp.l	#archive_end-1,%a3
+	bhi.s	error
+	cmp.l	#archive-1,%a3
+	bls.s	error
+	move.l	%a3,%d0
+	andi.w	#1,%d0
+	bne.s	error		| Not aligned
+	| Check if %a3+%d3 is in the same block of memory
+	addq.l	#1,%d3		| Word alignement (Long +1
+	andi.w	#0xFFFE,%d3	| Clear low bit (does word instead of long)
+	lea	-1(%a3,%d3.l),%a4	| -1 because the last byte we'll write is %a3+%d3-1
+	move.l	%a3,%d0
+	move.l	%a4,%d1
+	swap	%d0
+	swap	%d1
+	cmp.w	%d0,%d1
+	bne.s	error
+	| Check if %a2+%d3 is in RAM
+	lea	-1(%a2,%d3.l),%a4
+	cmp.l	#0x3FFFF,%a4
+	bhi.s	error
+	
+	bsr	unprotect
+	
+	lsr.l	#1,%d3		| Convert Byte to Word
+	
+	| Copy code to RAM and execute it
+	move.w	#((FlashWrite_ExecuteInRam_End-FlashWrite_ExecuteInRam)/2-1),%d0
+	lea	FlashWrite_ExecuteInRam(%pc),%a0
+
+exec_in_ram:
+	lea	exec_ram,%a1
+0:	move.w	(%a0)+,(%a1)+
+	dbra	%d0,0b
+	
+	jsr	exec_ram	| Execute code in RAM
+
+	bsr	protect
+	
 	move.w	(%sp)+,%sr		| Return to User mode
-	movem.l	(%sp)+,%d1-%d7/%a0-%a6	| Pop registers
+	movem.l	(%sp)+,%d1-%d3/%a0-%a4	| Pop registers
+	moveq	#0,%d0
+	rts
+error:
+	moveq.l	#1,%d0
 	rts
 
 | In :
@@ -142,38 +151,22 @@ FlashWrite_ExecuteInRam_End:
 | Low Level functions for Flash access (It doesn't use Trap #B for safe reason)
 | short FlashErase(const void *dest asm("%a2"))
 FlashErase:
-	movem.l	%d1-%d7/%a0-%a6,-(%sp)	| Save Registers
+	movem.l	%d1-%d3/%a0-%a4,-(%sp)	| Save Registers
 	move.w	%sr,-(%sp)		| Save %sr
-	
-	clr.w	%d5		| Set Error 
 	
 	| Check Batt
 	bsr	BatTooLowFlash
 	tst.b	%d0
-	bne.s	FlashEraseProtect
-	
-	| Unprotect Flash (%sr = 0x2700)
-	move.w	0x5EA4,%d0	| I read this because on Vti, the address 0x1C5EA4 & 0x5EA4 are the same, so if I write 0, it corrupts the heap. Very annoying, no ?
-	lea	(0x1C5EA4).l,%a0
-	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	%d0,(%a0)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	%d0,(%a0)
-	bset	#1,(0x600015)	|turn on LCD
+	bne.s	error
 	
 	| We don't check the stack, but we don't use it
 	| Check if %a2 is in Archive Memory
 	cmp.l	#archive_end-1,%a2
-	bhi.s	FlashEraseProtect
+	bhi.s	error
 	cmp.l	#archive-1,%a2
-	bls.s	FlashEraseProtect
+	bls.s	error
+	
+	bsr	unprotect
 	
 	| Round to the upper 64K
 	move.l	%a2,%d0
@@ -183,33 +176,7 @@ FlashErase:
 	| Copy code to RAM and execute it
 	move.w	#((FlashErase_ExecuteInRam_End-FlashErase_ExecuteInRam)/2-1),%d0
 	lea	FlashErase_ExecuteInRam(%pc),%a0
-	lea	exec_ram,%a1
-0:	move.w	(%a0)+,(%a1)+
-	dbra	%d0,0b
-	jsr	exec_ram	| Execute code in RAM
-FlashErase_Return:
-	
-	moveq	#1,%d5		| Of it is done
-FlashEraseProtect:
-	| Protect Flash
-	lea	(0x1C5E00),%a0
-	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	(%a0),%d0
-	nop
-	nop
-	nop
-	move.w	#0x2700,%sr
-	move.w	(%a0),%d0
-	bset	#1,0x600015
-	
-	move.w	%d5,%d0			| Error code
-	move.w	(%sp)+,%sr		| Return to User mode
-	movem.l	(%sp)+,%d1-%d7/%a0-%a6	| Pop Registers
-	rts
+	bra.s	exec_in_ram
 
 | In :
 |	%a2 -> Src
