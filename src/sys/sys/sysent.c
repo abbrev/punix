@@ -120,8 +120,8 @@ STARTUP(struct sysent sysent[]) = {
 	{4, sys_mknod},
 	{3, sys_chmod},
 	{4, sys_chown},
-	{0, sys_kmalloc},
-	{0, sys_kfree},
+	{2, sys_kmalloc},
+	{2, sys_kfree},
 	{4, sys_lseek},
 	{0, sys_getpid},	/* 20 */
 	{0, sys_mount},		/* XXX */
@@ -145,7 +145,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},
 	{4, sys_lstat},		/* 40 */
 	{1, sys_dup},
-	{0, sys_pipe},
+	{2, sys_pipe},
 	{0, sys_NONE},		/* ??? */
 	{0, sys_NONE},
 	{1, sys_setuid},
@@ -190,7 +190,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE}, /* sys_wait3 */
 	{0, sys_NONE},
 	{3, sys_getitimer},
-	{0, sys_wait},
+	{2, sys_wait},
 	{0, sys_NONE},
 	{0, sys_getdtablesize},
 	{2, sys_dup2},		/* 90 */
