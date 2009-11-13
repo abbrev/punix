@@ -99,19 +99,111 @@ time_t time(time_t *tp)
 	return t;
 }
 
+
+#define EPOCHYEAR 1970
+#define SECS_DAY 86400
+#define YEAR0 1900
+#define LEAPYEAR(year) ( (((year) % 4) == 0) && (((year) % 100) || ((year) % 400) == 0) )
+#define YEARSIZE(year) (LEAPYEAR(year) ? 366 : 365)
+static const int _ytab[2][12] = {
+	{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 },
+	{ 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 },
+};
+/* following implementation from Minix? */
 struct tm *gmtime_r(const time_t *tp, struct tm *tmp)
 {
-	int sec, min, hour, day;
 	time_t t = *tp;
-	sec = t % 60;  t /= 60;
-	min = t % 60;  t /= 60;
-	hour = t % 24; t /= 24;
-	day = t;
-	tmp->tm_sec = sec;
-	tmp->tm_min = min;
-	tmp->tm_hour = hour;
-	/* FIXME: do the rest! */
+	unsigned long dayclock, dayno;
+	int year = EPOCHYEAR;
+
+	dayclock = (unsigned long)t % SECS_DAY;
+	dayno = (unsigned long)t / SECS_DAY;
+
+	tmp->tm_sec = dayclock % 60;
+	tmp->tm_min = (dayclock % 3600) / 60;
+	tmp->tm_hour = dayclock / 3600;
+	tmp->tm_wday = (dayno + 4) % 7;       /* day 0 was a thursday */
+	while (dayno >= YEARSIZE(year)) {
+		dayno -= YEARSIZE(year);
+		++year;
+	}
+	tmp->tm_year = year - YEAR0;
+	tmp->tm_yday = dayno;
+	tmp->tm_mon = 0;
+	while (dayno >= _ytab[LEAPYEAR(year)][tmp->tm_mon]) {
+		dayno -= _ytab[LEAPYEAR(year)][tmp->tm_mon];
+		tmp->tm_mon++;
+	}
+	tmp->tm_mday = dayno + 1;
+	tmp->tm_isdst = 0;
+
 	return tmp;
+}
+
+struct tm *localtime_r(const time_t *timep, struct tm *result)
+{
+	time_t t = *timep;
+	t -= 7 * 3600; /* XXX: works for me ;) */
+	return gmtime_r(&t, result);
+}
+
+#if 0
+       char *asctime(const struct tm *tm);
+       char *asctime_r(const struct tm *tm, char *buf);
+
+       char *ctime(const time_t *timep);
+       char *ctime_r(const time_t *timep, char *buf);
+
+       struct tm *gmtime(const time_t *timep);
+       struct tm *gmtime_r(const time_t *timep, struct tm *result);
+
+       struct tm *localtime(const time_t *timep);
+       struct tm *localtime_r(const time_t *timep, struct tm *result);
+
+       time_t mktime(struct tm *tm);
+#endif
+
+static const char _wtab[7][4] = {
+	"Sun","Mon","Tue","Wed","Thu","Fri","Sat"
+};
+static const char _mtab[12][4] = {
+	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+char *asctime_r(const struct tm *tm, char *buf)
+{
+	/* XXX: this should be sprintf(), but that isn't implemented yet */
+	printf("%3.3s %3.3s %2d %02d:%02d:%02d %4.4d\n",
+	        _wtab[tm->tm_wday], _mtab[tm->tm_mon], tm->tm_mday,
+	        tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_year + 1900);
+	return NULL;
+	return buf;
+}
+
+unsigned alarm(unsigned seconds)
+{
+	struct itimerval it, oldit;
+	it.it_value.tv_sec = seconds;
+	it.it_value.tv_usec =
+	 it.it_interval.tv_sec =
+	 it.it_interval.tv_usec = 0;
+
+	setitimer(ITIMER_REAL, &it, &oldit);
+#if 0
+	/*
+	 * We can't return 0 if there is any time remaining from a previous
+	 * alarm() request. If there's at least a second remaining, just round
+	 * the time to the nearest second.
+	 */
+	if ((!oldit.it_value.tv_sec && oldit.it_value.tv_usec) ||
+	    oldit.it_value.tv_usec >= 500000L)
+		++oldit.it_value.tv_sec;
+#else
+	/* round the remaining time up to a second */
+	if (oldit.it_value.tv_usec)
+		++oldit.it_value.tv_sec;
+#endif
+	return oldit.it_value.tv_sec;
 }
 
 #define ESC "\x1b"
@@ -252,16 +344,12 @@ static void testtty(int argc, char *argv[], char *envp[])
 	/* cat */
 	char buf[60];
 	ssize_t n;
-	struct itimerval it = {
-		{ 0, 0 },
-		{ 30, 0 }
-	};
 	struct sigaction sa;
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	for (;;) {
-		setitimer(ITIMER_REAL, &it, NULL);
+		alarm(30);
 		n = read(0, buf, 60);
 		if (n < 0) {
 			printf("timeout\n");
@@ -272,9 +360,7 @@ static void testtty(int argc, char *argv[], char *envp[])
 		fwrite(buf, n, (size_t)1, NULL);
 		fflush(NULL);
 	}
-	it.it_value.tv_sec = 0;
-	it.it_value.tv_usec = 0;
-	setitimer(ITIMER_REAL, &it, NULL);
+	alarm(0);
 }
 
 #define BUFSIZE 512
@@ -383,16 +469,56 @@ static void testshell(int argc, char *argv[], char *envp[])
 					printf("Sorry, there was an error vforking\n");
 				}
 			} else if (!strncmp(cmd, "pause", cmdlen)) {
-				struct itimerval it = {
-					{ 0, 0 },
-					{ 3, 0 }
-				};
 				struct sigaction sa;
 				sa.sa_handler = sigalrm;
 				sa.sa_flags = SA_RESTART;
 				printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
-				setitimer(ITIMER_REAL, &it, NULL);
+				alarm(3);
 				printf("pause returned %d\n", pause());
+			} else if (!strncmp(cmd, "batt", cmdlen)) {
+				static const *batt_level_strings[8] = { "dead", "almost dead", "starving", "very low", "low", "medium", "ok", "full" };
+				printf("Battery level: %d (%s)\n", G.batt_level, batt_level_strings[G.batt_level]);
+			} else if (!strncmp(cmd, "date", cmdlen)) {
+				/*
+				 * this prints out the equivalent of
+				 * date --utc '+%F %T %Z'
+				 */
+				struct tm tm;
+				struct timeval tv;
+				char buf[40];
+					
+				gettimeofday(&tv, NULL);
+				//printf("%5ld.%06ld\n", tv.tv_sec, tv.tv_usec);
+				localtime_r(&tv.tv_sec, &tm);
+#if 0
+				printf("%4d-%02d-%02d %02d:%02d:%02d UTC\n",
+				 tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+				 tm.tm_hour, tm.tm_min, tm.tm_sec);
+#else
+				printf("%s", asctime_r(&tm, buf));
+#endif
+			} else if (!strncmp(cmd, "adjtime", cmdlen)) {
+				struct timeval tv = { 10, 0 };
+				struct timeval oldtv;
+				adjtime(NULL, &oldtv);
+				if (oldtv.tv_sec || oldtv.tv_usec) {
+					printf("adjtime(NULL, %ld.%06lu)\n",
+					       oldtv.tv_sec, oldtv.tv_usec);
+				} else {
+					adjtime(&tv, &oldtv);
+#define FIXTV(tv) do { \
+if ((tv)->tv_sec < 0 && (tv)->tv_usec) { \
+	++(tv)->tv_sec; \
+	(tv)->tv_usec = 1000000L - (tv)->tv_usec; \
+} \
+} while (0)
+					FIXTV(&tv);
+					FIXTV(&oldtv);
+					
+					printf("adjtime(%ld.%06lu, %ld.%06lu)\n",
+					       tv.tv_sec, tv.tv_usec,
+					       oldtv.tv_sec, oldtv.tv_usec);
+				}
 			} else {
 				printf("stupidsh: %.*s: command not found\n", (int)cmdlen, cmd);
 			}
@@ -653,17 +779,13 @@ static void getcalc(int fd)
 		RECV_START, RECV_WAITDATA, RECV_RXDATA
 	} state = RECV_START;
 	
-	struct itimerval it = {
-		{ 0, 0 },
-		{ 10, 0 }
-	};
 	struct sigaction sa;
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	
 	for (;;) {
-		setitimer(ITIMER_REAL, &it, NULL);
+		alarm(10);
 		n = recvpkthead(&pkt, fd);
 		if (n < 0) goto timeout;
 		switch (state) {
@@ -815,16 +937,9 @@ static const struct test tests[] = {
 	{ "", NULL }
 };
 
-int usermain(int argc, char *argv[], char *envp[])
+int main_usertest(int argc, char *argv[], char *envp[])
 {
 	const struct test *testp;
-	int fd;
-	
-	fd = open("/dev/vt", O_RDWR); /* 0 */
-	if (fd < 0) _exit(-1);
-	dup(fd); /* 1 */
-	dup(fd); /* 2 */
-	
 #if 0
 	println("This is a user program.");
 	
@@ -875,11 +990,38 @@ int usermain(int argc, char *argv[], char *envp[])
 		testp->func(argc, argv, envp);
 	}
 	
+	argv[0] = "top";
+	execve(argv[0], argv, envp);
+	return 0;
+}
+
+int main_init(int argc, char *argv[], char *envp[])
+{
+	int fd;
+	int x = 42;
+	
+	fd = open("/dev/vt", O_RDWR); /* 0 */
+	if (fd < 0) return -1;
+	dup(fd); /* 1 */
+	dup(fd); /* 2 */
+	
+	printf("This is init. executing usertest now\n");
+	argv[0] = "usertest";
+	x = execve(argv[0], argv, envp);
+	printf("still in init, execve returned %d\n", x);
+	return 1;
+}
+
+int main_top(int argc, char *argv[], char *envp[])
+{
+	printf("This is top.\n");
+	
 	char buf[1];
 	ssize_t n;
+#define TOPDELAY 5
 	struct itimerval it = {
-		{ 5, 0 },
-		{ 5, 0 }
+		{ TOPDELAY, 0 },
+		{ TOPDELAY, 0 }
 	};
 	struct sigaction sa;
 	sa.sa_handler = sigalrm;
@@ -887,8 +1029,10 @@ int usermain(int argc, char *argv[], char *envp[])
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	setitimer(ITIMER_REAL, &it, NULL);
 	
-	long lasttime = 0;
+	//long lasttime = 0;
+	
 	printf(ESC "[H" ESC "[J");
+		
 	for (;;) {
 		updatetop();
 		n = read(0, buf, 1);
@@ -966,7 +1110,7 @@ void sys_execve()
 	 */
 	
 	
-	void *text = userstart; /* XXX */
+	void *text = NULL;
 	char *data = NULL;
 	char *stack = NULL;
 	char *ustack = NULL;
@@ -979,6 +1123,19 @@ void sys_execve()
 	char **ap;
 	char *s, **v;
 	int argc, envc;
+	
+	/* XXX */
+	void start_init(), start_top(), start_usertest();
+	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
+		text = start_init;
+	else if (!strcmp(pathname, "top"))
+		text = start_top;
+	else if (!strcmp(pathname, "usertest"))
+		text = start_usertest;
+	else {
+		P.p_error = ENOENT;
+		goto error_noent;
+	}
 	
 	/* set up the user's stack (argc, argv, and env) */
 	
@@ -999,17 +1156,32 @@ void sys_execve()
 	/* allocate the system stack */
 	stacksize = STACKSIZE;
 	stack = memalloc(&stacksize, 0);
-	/* if (!stack) goto ... */
+	if (!stack) {
+		P.p_error = ENOMEM;
+		goto error_stack;
+	}
+	stack += stacksize;
+	kprintf("execve():  stack=%08lx\n", stack);
+	
 	/* allocate the user stack */
 	ustacksize = USTACKSIZE;
 	ustack = memalloc(&ustacksize, 0);
-	/* if (!ustack) goto ... */
+	if (!ustack) {
+		P.p_error = ENOMEM;
+		goto error_ustack;
+	}
 	ustack += ustacksize;
+	kprintf("execve(): ustack=%08lx\n", ustack);
 	
 	/* allocate the data section */
 	datasize = UDATASIZE;
 	data = memalloc(&datasize, 0);
-	/* if (!data) goto ... */
+	if (!data) {
+		P.p_error = ENOMEM;
+		goto error_data;
+	}
+	kprintf("execve():   data=%08lx\n", data);
+	//printheaplist();
 	
 	size = (size + 1) & ~1; /* size must be even */
 	s = ustack - size; /* start of strings */
@@ -1026,14 +1198,18 @@ void sys_execve()
 		endvfork();
 	else {
 		/* free our resources */
+		/* this is similar to what _exit(2) needs to do--perhaps put
+		 * this in a common routine? */
 #if 1
 		memfree(NULL, P.p_pid);
 		if (P.p_stack)
-			memfree(P.p_stack, 0);
+			memfree(P.p_stack - P.p_stacksize, 0);
 		if (P.p_ustack)
-			memfree(P.p_ustack, 0);
+			memfree(P.p_ustack - P.p_ustacksize, 0);
+		/*
 		if (P.p_text)
 			memfree(P.p_text, 0);
+		*/
 		if (P.p_data)
 			memfree(P.p_data, 0);
 #endif
@@ -1042,6 +1218,10 @@ void sys_execve()
 	P.p_ustack = ustack;
 	P.p_text = text;
 	P.p_data = data;
+	
+	P.p_stacksize = stacksize;
+	P.p_ustacksize = ustacksize;
+	P.p_datasize = datasize;
 	
 	/* finally, set up the context to return to the new process image */
 	if (setjmp(P.p_ssav))
@@ -1076,6 +1256,13 @@ void sys_execve()
 	 * free memory for user stack
 	 * return
 	 */
+error_data:
+	memfree(data, 0);
+error_ustack:
+	memfree(ustack - ustacksize, 0);
+error_stack:
+	memfree(stack - stacksize, 0);
+error_noent:
 }
 
 void doexit(int status)
@@ -1542,22 +1729,29 @@ void sys_getrusage()
 		struct rusage *r_usage;
 	} *ap = (struct a *)P.p_arg;
 	
-/*
-	P.p_error = ENOSYS;
-	return;
-*/
+	int x;
+	struct rusage ru, *rup;
 	
 	switch (ap->who) {
 	case RUSAGE_SELF:
-		if (copyout(ap->r_usage, &P.p_rusage, sizeof(struct rusage)))
-			P.p_error = EFAULT;
+		rup = &current->p_rusage;
 		break;
 	case RUSAGE_CHILDREN:
-		P.p_error = EINVAL; /* FIXME */
+		rup = &current->p_crusage;
 		break;
 	default:
 		P.p_error = EINVAL;
+		goto error;
 	}
+	
+	x = spl1();
+	memmove(&ru, rup, sizeof(ru));
+	splx(x);
+	ru.ru_utime.tv_usec = ru.ru_utime.tv_usec * 1000000L / HZ;
+	ru.ru_stime.tv_usec = ru.ru_stime.tv_usec * 1000000L / HZ;
+	if (copyout(ap->r_usage, &ru, sizeof(ru)))
+		P.p_error = EFAULT;
+error:	;
 }
 
 void sys_uname()

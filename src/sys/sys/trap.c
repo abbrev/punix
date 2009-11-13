@@ -51,25 +51,28 @@ STARTUP(void trace())
 {
 }
 
-#define BUMPUTIME(tv, usec) do { \
-	(tv)->tv_usec += (usec); \
-	if ((tv)->tv_usec >= 1000000L) { \
-		(tv)->tv_usec -= 1000000L; \
+/* NB: user time is in ticks */
+#define BUMPUTIME(tv, ticks) do { \
+	(tv)->tv_usec += (ticks); \
+	if ((tv)->tv_usec >= HZ) { \
+		(tv)->tv_usec -= HZ; \
 		(tv)->tv_sec++; \
 	} \
 } while (0)
 
 #define BUMPNTIME(tv, nsec) do { \
 	(tv)->tv_nsec += (nsec); \
-	if ((tv)->tv_nsec >= 1000000000L) { \
-		(tv)->tv_nsec -= 1000000000L; \
+	if ((tv)->tv_nsec >= SECOND) { \
+		(tv)->tv_nsec -= SECOND; \
 		(tv)->tv_sec++; \
 	} \
 } while (0)
 
-/* SKEW is in microseconds per tick */
-/* 2560 us = 2.56 ms */
-#define SKEW (2560 / HZ)
+/* SLEWRATE is in microseconds per tick */
+/* 512 us = 0.512 ms */
+#define SLEWRATE (512 / HZ)
+#define BIGADJ 1000000L /* 1 s */
+#define BIGSLEWRATE (5000 / HZ)
 
 STARTUP(void hardclock(unsigned short ps))
 {
@@ -99,57 +102,52 @@ STARTUP(void hardclock(unsigned short ps))
 	++*(long *)(0x4c00+0xf00-8);
 #endif
 	
-	realtime.tv_nsec += TICK;
-#if 0
-	if (timedelta) {
+#if 1
+	if (timeadj) {
+		/* slow down or speed up the clock by a small amount */
 		long delta;
-		if (timedelta < -SKEW) {
-			delta = SKEW;
-			*(long *)(0x4c00+0xf00-20) = 0x888888ff;
-		} else if (SKEW < timedelta) {
-			delta = -SKEW;
-			*(long *)(0x4c00+0xf00-20) = 0xff111111;
+		if (timeadj < -BIGADJ || BIGADJ < timeadj) {
+			delta = BIGSLEWRATE;
+		} else if (timeadj < -SLEWRATE || SLEWRATE < timeadj) {
+			delta = SLEWRATE;
 		} else {
-			delta = timedelta;
-			*(long *)(0x4c00+0xf00-20) = 0xffffffff;
+			delta = timeadj < 0 ? -timeadj : timeadj;
 		}
-		realtime.tv_nsec += delta * 1000;
-		walltime.tv_nsec += delta * 1000;
-		timedelta -= delta;
+		if (timeadj < 0) delta = -delta;
+		G.timeoffset.tv_nsec += delta * 1000;
+		timeadj -= delta;
 		
-		if (walltime.tv_nsec >= SECOND) {
-			walltime.tv_nsec -= SECOND;
-			++walltime.tv_sec;
-		} else if (walltime.tv_nsec < 0) {
-			walltime.tv_nsec += SECOND;
-			--walltime.tv_sec;
+		if (G.timeoffset.tv_nsec >= SECOND) {
+			G.timeoffset.tv_nsec -= SECOND;
+			++G.timeoffset.tv_sec;
+		} else if (G.timeoffset.tv_nsec < 0) {
+			G.timeoffset.tv_nsec += SECOND;
+			--G.timeoffset.tv_sec;
 		}
-	} else
-		*(long *)(0x4c00+0xf00-20) = 0xffffffff;
-	*(long *)(0x4c00+0xf00-20-30) = walltime.tv_nsec;
-	*(long *)(0x4c00+0xf00-20-30-30) = timedelta;
-#endif
-	if (realtime.tv_nsec >= SECOND) {
-		realtime.tv_nsec -= SECOND;
-		++realtime.tv_sec;
 	}
-	G.lbolt = 0;
+#endif
 	
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
 	++loadavtime;
 	
 	if (loadavtime >= HZ * 5) {
-		struct proc *p;
-		int n = 0;
-		list_for_each_entry(p, &G.runqueue, p_runlist)
-			++n;
+#if 0
 		/* sanity check */
+		struct proc *p;
+		int i;
+		int n = 0;
+		int x = spl7();
+		for (i = 0; i < PRIO_LIMIT; ++i)
+			list_for_each_entry(p, &G.runqueues[i], p_runlist)
+				++n;
 		if (G.numrunning != n) {
 			kprintf("warning: numrunning=%d n=%d\n",
 				G.numrunning, n);
 			G.numrunning = n;
 		}
+		splx(x);
+#endif
 		loadav((unsigned long)G.cumulrunning * F_ONE / loadavtime);
 		
 		batt_check();
@@ -169,13 +167,13 @@ STARTUP(void hardclock(unsigned short ps))
 	}
 	
 	if (USERMODE(ps)) {
-		BUMPUTIME(&P.p_rusage.ru_utime, TICK / 1000);
+		BUMPUTIME(&P.p_rusage.ru_utime, 1);
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
 			psignal(current, SIGVTALRM);
 	} else {
 		if (current)
-			BUMPUTIME(&P.p_rusage.ru_stime, TICK / 1000);
+			BUMPUTIME(&P.p_rusage.ru_stime, 1);
 	}
 	
 	/* do call-outs */
@@ -194,10 +192,10 @@ STARTUP(void hardclock(unsigned short ps))
 	if (G.callout[0].c_dtime <= 0) {
 		int t = 0;
 		c2 = &G.callout[0];
-		while (c2->c_func != NULL && c2->c_dtime + t <= 0) {
+		while (c2->c_func != NULL && t <= 0) {
 			c2->c_func(c2->c_arg);
-			t += c2->c_dtime;
 			++c2;
+			t += c2->c_dtime;
 		}
 		c1 = &G.callout[0];
 		do
@@ -216,7 +214,6 @@ out:	spl0();
 	
 	/* preempt a running user process */
 	if (G.need_resched) {
-		++istick;
 		swtch();
 	}
 	
@@ -231,18 +228,8 @@ out:	spl0();
  */
 STARTUP(void updwalltime())
 {
-#if 0
-	/* XXX: this shows the number of times this function has been called.
-	 * It draws in the bottom-right corner of the screen.
-	 */
-	++*(long *)(0x4c00+0xf00-16);
-#endif
-	
+	/* the tv_nsec field of walltime maintains the "0" time of G.ticks%HZ */
 	++walltime.tv_sec;
-#if 0
-	*(long *)(0x4c00+0xf00-34) = realtime.tv_nsec;
-#endif
-	realtime.tv_sec = walltime.tv_sec;
-	realtime.tv_nsec = walltime.tv_nsec;
+	walltime.tv_nsec = (G.ticks+1) % HZ;
 }
 #endif

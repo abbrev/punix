@@ -42,8 +42,8 @@
  * are in bio.c.
  */
 struct buf {
-	struct buf *b_next, *b_prev;
-	struct buf *b_avnext, *b_avprev;
+	struct list_head b_list;
+	struct list_head b_avlist;
 	int b_flags;
 	dev_t b_dev;
 	size_t b_bcount;
@@ -66,8 +66,7 @@ struct buf {
  */
 struct devtab
 {
-	struct	buf *b_next;		/* first buffer for this dev */
-	struct	buf *b_prev;		/* last buffer for this dev */
+	struct list_head d_buflist;
 #if 0
 	struct	buf *d_actf;		/* head of I/O queue */
 	struct 	buf *d_actl;		/* tail of I/O queue */

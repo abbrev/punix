@@ -157,6 +157,7 @@ struct proc {
 	size_t p_textsize;
 	size_t p_datasize;
 	
+	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
 	struct rusage p_rusage;
 	struct rusage p_crusage; /* children */
 	struct rlimit p_rlimit[7]; /* CONSTANT */

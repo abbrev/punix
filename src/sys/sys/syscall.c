@@ -60,7 +60,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	
 	/* for vfork(2) and execve(2) */
 	P.p_sfp = sfp;
-	P.p_ustack = usp;
+	//P.p_ustack = usp; /* is this actually necessary ? */
 	
 	/* get the system call entry */
 	if (callno >= nsysent)

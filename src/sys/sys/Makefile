@@ -13,7 +13,7 @@ REALTIME := `date +%s`
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}" -DREALTIME=${REALTIME}
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}" -DREALTIME=${REALTIME}UL
 
 AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
@@ -54,8 +54,8 @@ ${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h ${SYSINC}/param.h
 # source dependencies
 ########################################
 
-heap.i: heap.c
-	${CC} ${CFLAGS} $< -E -o $@
+heap.o: heap.c
+	${CC} ${CFLAGS} $< -c -o $@
 start.o: start.s
 vectors.o: vectors.s
 version.o: version.s

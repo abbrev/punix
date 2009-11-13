@@ -11,6 +11,7 @@
 #include "inode.h"
 #include "globals.h"
 
+#define SAMPLESPERSEC 8192
 #define SAMPLESPERBYTE 4
 #define INT5RATE (*(volatile unsigned char *)0x600015)
 #define INT5VAL  (*(volatile unsigned char *)0x600017)
@@ -21,7 +22,8 @@
 /* one-shot routine on system-startup */
 STARTUP(void audioinit())
 {
-	qclear(&G.audioq);
+	qclear(&G.audio.q);
+	ioport = 0;
 }
 
 STARTUP(static void startaudio())
@@ -31,15 +33,15 @@ STARTUP(static void startaudio())
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
 	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
 	
-	G.audiolowat = -1;
-	G.audiooptr = 0;
-	G.audioplay = 1;
-	G.audiosamples = 0;
+	G.audio.lowat = -1;
+	G.audio.optr = 0;
+	G.audio.play = 1;
+	G.audio.samples = 0;
 }
 
 STARTUP(static void stopaudio())
 {
-	G.audioplay = 0;
+	G.audio.play = 0;
 	
 	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX; /* XXX should we just let dev_link set these flags? */
 	INT5RATE |= 0x30;
@@ -49,9 +51,9 @@ STARTUP(static void stopaudio())
 STARTUP(static void dspsync())
 {
 	int x = spl5();
-	while (!qisempty(&G.audioq) || G.audiosamples) {
-		G.audiolowat = 0; /* wait until the audio queue is empty */
-		slp(&G.audioq, 0);
+	while (!qisempty(&G.audio.q) || G.audio.samples) {
+		G.audio.lowat = 0; /* wait until the audio queue is empty */
+		slp(&G.audio.q, 0);
 	}
 	splx(x);
 }
@@ -59,35 +61,30 @@ STARTUP(static void dspsync())
 /* produce the sound! */
 STARTUP(void audiointr())
 {
-	/* Technically, G.audiosamp and G.audiosamples should be static local
-	 * variables. */
-	
-	++G.lbolt;
-	
 	/* this really ought to go in the assembly glue code for performance */
-	if (!G.audioplay)
+	if (!G.audio.play)
 		return;
 	
 	/* emit the sample */
-	LINK_DIRECT = G.audiosamp & 03;
+	LINK_DIRECT = G.audio.samp & 03;
 	
-	if (!G.audiosamples) {
+	if (!G.audio.samples) {
 		int c;
-		if (G.audioq.q_count <= G.audiolowat) {
-			G.audiolowat = -1;
-			wakeup(&G.audioq);
+		if (G.audio.q.q_count <= G.audio.lowat) {
+			G.audio.lowat = -1;
+			wakeup(&G.audio.q);
 		}
-		if ((c = getc(&G.audioq)) < 0)
+		if ((c = getc(&G.audio.q)) < 0)
 			return;
-		G.audiosamp = c;
-		G.audiosamples = SAMPLESPERBYTE;
+		G.audio.samp = c;
+		G.audio.samples = SAMPLESPERBYTE;
 	}
 	
 	/* put this sample into the lower 2 bits */
-	G.audiosamp = ROLB(G.audiosamp, 2);
-	--G.audiosamples;
+	G.audio.samp = ROLB(G.audio.samp, 2);
+	--G.audio.samples;
 	
-	++G.audiooptr;
+	++G.audio.optr;
 }
 
 STARTUP(void audioopen(dev_t dev, int rw))
@@ -99,7 +96,7 @@ STARTUP(void audioopen(dev_t dev, int rw))
 	
 	++ioport; /* one reference for being open */
 	
-	qclear(&G.audioq);
+	qclear(&G.audio.q);
 	startaudio();
 }
 
@@ -123,8 +120,8 @@ STARTUP(void audiowrite(dev_t dev))
 	
 	for (; P.p_count; ++P.p_base, --P.p_count) {
 		ch = *P.p_base;
-		while (putc(ch, &G.audioq) < 0) {
-			if (!G.audioplay) /* playback is halted */
+		while (putc(ch, &G.audio.q) < 0) {
+			if (!G.audio.play) /* playback is halted */
 				return;
 			
 			x = spl5(); /* prevent the audio int from trying to wake
@@ -134,21 +131,21 @@ STARTUP(void audiowrite(dev_t dev))
 			 * amount of data we're trying to write (within upper
 			 * and lower limits, of course), . */
 			
-			G.audiolowat = QSIZE - 32; /* XXX constant */
+			G.audio.lowat = QSIZE - 32; /* XXX constant */
 			
-			slp(&G.audioq, 1);
+			slp(&G.audio.q, 1);
 			splx(x);
 		}
 	}
 }
 
 /* some OSS ioctl() codes to support:
- * SNDCTL_DSP_SILENCE: G.audioq.q_count = 0;
- * SNDCTL_DSP_SKIP: G.audioq.q_count = 0;
+ * SNDCTL_DSP_SILENCE: G.audio.q.q_count = 0;
+ * SNDCTL_DSP_SKIP: G.audio.q.q_count = 0;
  * SNDCTL_DSP_SPEED: always return 8192;
- * SNDCTL_DSP_SYNC: G.audiolowat = 0; slp(&G.audioq);
- * SNDCTL_DSP_CURRENT_OPTR: return G.audiooptr and
- *   G.audioq.q_count * SAMPLESPERBYTE;
+ * SNDCTL_DSP_SYNC: G.audio.lowat = 0; slp(&G.audio.q);
+ * SNDCTL_DSP_CURRENT_OPTR: return G.audio.optr and
+ *   G.audio.q.q_count * SAMPLESPERBYTE;
  * SNDCTL_DSP_HALT{,_OUTPUT}
  */
 
@@ -162,16 +159,16 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 	switch (cmd) {
 #if 0
 	case SNDCTL_DSP_SILENCE:
-		qclear(&G.audioq);
-		putc(0, &G.audioq); /* make sure the output is 0 */
+		qclear(&G.audio.q);
+		putc(0, &G.audio.q); /* make sure the output is 0 */
 		break;
 	case SNDCTL_DSP_SKIP:
-		qclear(&G.audioq);
+		qclear(&G.audio.q);
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		x = spl5();
-		count.samples = G.audiooptr;
-		count.fifo_samples = G.audioq.q_count * SAMPLESPERBYTE;
+		count.samples = G.audio.optr;
+		count.fifo_samples = G.audio.q.q_count * SAMPLESPERBYTE;
 		splx(x);
 		copyout(cmarg, &count);
 		break;
@@ -181,7 +178,7 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 		break;
 #endif
 	case SNDCTL_DSP_SPEED:
-		speed = 8192; /* XXX constant */
+		speed = SAMPLESPERSEC;
 		copyout(cmarg, &speed, sizeof(speed));
 		break;
 	case SNDCTL_DSP_SYNC:

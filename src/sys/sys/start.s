@@ -187,6 +187,7 @@ SYS_getpriority = 96
 SYS_gettimeofday = 116
 SYS_getrusage   = 117
 SYS_settimeofday = 122
+SYS_adjtime      = 140
 SYS_getloadavg1  = 160
 
 .macro	sys call
@@ -301,9 +302,15 @@ getloadavg1:
 	.global kmalloc
 kmalloc:
 	sys	kmalloc
-	bcs	cerror
+	bcs	caerror
 	move.l	%d0,%a0
 	rts
+
+caerror:
+	| move	%d0,errno
+	move.l	#0,%a0
+	rts
+
 
 	.global kfree
 kfree:
@@ -353,6 +360,12 @@ pause:
 	bcs	cerror
 	rts
 	
+	.global adjtime
+adjtime:
+	sys	adjtime
+	bcs	cerror
+	rts
+	
 /*
  * common routine to handle errors from system calls: set errno appropriately
  * and return -1.
@@ -398,8 +411,9 @@ _env:	.long	_env0
 	.long	0		| NULL
 
 .even
-.global userstart
-userstart:
+.macro mkstart name
+.global start_\name
+start_\name:
 	move	(%sp),%d0		| argc
 	lea	2(%sp),%a0		| argv
 	move	%d0,%d1
@@ -409,11 +423,16 @@ userstart:
 	move.l	%a1,-(%sp)	| char **env
 	move.l	%a0,-(%sp)	| char **argv
 	move	%d0,-(%sp)	| int argc
-	jbsr	usermain	| usermain(argc, argv, env)
+	jbsr	main_\name	| main_\name(argc, argv, env)
 	
 	move	%d0,-(%sp)
 	bsr	_exit
 	bra	.
+.endm
+
+mkstart	init
+mkstart	top
+mkstart	usertest
 
 .even
 InstallVectors:

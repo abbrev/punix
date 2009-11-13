@@ -23,6 +23,7 @@ void sys_gettimeofday();
 void sys_settimeofday();
 void sys_time();
 void sys_getloadavg1();
+void sys_adjtime();
 
 void sys_read();
 void sys_write();
@@ -100,7 +101,6 @@ void sys_sigaction();
 #define sys_shutdown	sys_NONE
 #define sys_mkdir	sys_NONE
 #define sys_rmdir	sys_NONE
-#define sys_adjtime	sys_NONE
 
 STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE},		/* 0 */

@@ -49,6 +49,8 @@ STARTUP(void kmain())
 	sched_init();
 	procinit();
 	bufinit();
+	flashinit();
+	batt_check();
 	
 #if 1
 	kputs(OS_NAME " build " BUILD "\n");
@@ -63,13 +65,12 @@ STARTUP(void kmain())
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
 #endif
-	if (walltime.tv_sec == 0) {
+	if (walltime.tv_sec < 1000000000L) { /* before ~2001 */
 		walltime.tv_sec = REALTIME;
 		walltime.tv_nsec = 0;
 	}
 	realtime = walltime;
 	uptime.tv_sec = uptime.tv_nsec = 0;
-	ioport = 0; /* TODO: put this in another file */
 	spl0();
 	bogomips();
 }

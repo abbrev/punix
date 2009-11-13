@@ -17,8 +17,13 @@
 #define FLASHSIZE  (SECTORSIZE * NUMSECTORS)
 #define FLASHEND   (&FLASH[NUMSECTORS])
 
+#if 0
 extern long __ld_program_size;
 #define ARCHIVE  ((flash_t)&((char *)FLASH)[(__ld_program_size + 0xffff) % 0x10000])
+#else
+#define FIRSTSECTOR 3 /* should be enough */
+#define ARCHIVE (&FLASH[FIRSTSECTOR])
+#endif
 #define ARCEND   FLASHEND
 
 typedef char (*flash_t)[SECTORSIZE];
@@ -137,6 +142,24 @@ short FlashErase(const void *dest asm("%a2"));
 
 const struct devtab fltab;
 
+void flashinit(void)
+{
+	/* TODO: initialize the flash device driver */
+	
+	int i;
+	char test[] = "hello";
+	/* run a few tests on the Flash{Write,Erase} routines */
+	kprintf("flashinit(): Running a few tests on the Flash routines...\n");
+	kprintf("testing FlashWrite() and FlashErase(): ");
+	for (i = 0; i < 100; ++i) {
+		FlashWrite(test, ARCHIVE, sizeof(test));
+		FlashErase(ARCHIVE);
+	}
+	kprintf("done\n");
+}
+
+#define MAXBLKNO 15000L /* XXX: this needs to be calculated based on the actual number of blocks available */
+
 /* Find the block numbered 'blkno' and return a pointer to the flashblock.
  * Return NULL if this block number doesn't exist.
  */
@@ -146,6 +169,8 @@ STARTUP(static struct flashblock *getfblk(long blkno))
 	struct flashblock *fbp;
 	struct flash_cache_entry *cep;
 	
+	if (blkno < 0 || MAXBLKNO <= blkno)
+		return NULL;
 	if ((cep = cachefind(blkno)))
 		    return cep->fbp;
 	

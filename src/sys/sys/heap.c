@@ -10,12 +10,16 @@
  * to represent current allocations.
  */
 
-#if 0
-static void printheaplist()
+#define heapblock_to_offset(h) ((size_t)(h) * HEAPBLOCKSIZE)
+#define offset_to_heapblock(o) (((o) + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE)
+#define heapentry_to_pointer(he) (G.heap[(he)->start])
+
+#if 1
+void printheaplist()
 {
 	int i;
 	for (i = 0; i < G.heapsize; ++i) {
-		kprintf("%5d: %5d %5d %5d (0x%06lx)\n", i, (int)G.heaplist[i].pid, (int)G.heaplist[i].start, (int)G.heaplist[i].end, (void *)&G.heap[G.heaplist[i].start]);
+		kprintf("%5d: %5d %5d %5d (%5d) (0x%06lx)\n", i, (int)G.heaplist[i].pid, (int)G.heaplist[i].start, (int)G.heaplist[i].end, (int)G.heaplist[i].end-G.heaplist[i].start, (void *)&G.heap[G.heaplist[i].start]);
 	}
 }
 #endif
@@ -148,35 +152,12 @@ static void insertentry(struct heapentry *hp, int start, int end, pid_t pid)
 	hp->pid = pid;
 }
 
-/*
- * sizep is a pointer to the desired size. The actual size of the allocated
- * chunk is returned in the destination of sizep.
- * 
- * pid is the process id of the process that owns this memory chunk.
- * If pid < 0, memalloc returns the size of the largest unallocated chunk.
- */
-void *memalloc(size_t *sizep, pid_t pid)
+static struct heapentry *allocentry(int size, pid_t pid)
 {
-	size_t size;
 	struct heapentry *hp;
 	
-	if (!sizep) return NULL;
-	
-	if (pid < 0) {
-		*sizep = largest_unallocated_chunk_size();
-		return NULL;
-	}
-	
+	if (size <= 0) return NULL;
 	if (G.heapsize >= HEAPSIZE) return NULL;
-	
-	/*
-	 * If *sizep is either 0 or is large enough that
-	 * (*sizep + HEAPBLOCKSIZE - 1) wraps around, size will be 0,
-	 * and the following test will catch this.
-	 */
-	size = (*sizep + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE;
-	if (size == 0)
-		return NULL;
 	
 loop:
 #define SIZETHRESHOLD 2048L
@@ -190,8 +171,7 @@ loop:
 				 * with a pointer to the start of the chunk
 				 */
 				insertentry(hp, prevstart - size, prevstart, pid);
-				*sizep = (size_t)HEAPBLOCKSIZE * size;
-				return &G.heap[hp->start];
+				return hp;
 			}
 			prevstart = hp->start;
 		}
@@ -205,8 +185,7 @@ loop:
 			 * with a pointer to the start of the chunk
 			 */
 			insertentry(hp, prevend, prevend + size, pid);
-			*sizep = (size_t)HEAPBLOCKSIZE * size;
-			return &G.heap[hp->start];
+			return hp;
 		}
 		prevend = hp->end;
 	}
@@ -228,10 +207,166 @@ loop:
 	return NULL;
 }
 
+/*
+ * sizep is a pointer to the desired size. The actual size of the allocated
+ * chunk is returned in the destination of sizep.
+ * 
+ * pid is the process id of the process that owns this memory chunk.
+ * If pid < 0, memalloc returns the size of the largest unallocated chunk.
+ */
+void *memalloc(size_t *sizep, pid_t pid)
+{
+	size_t size;
+	struct heapentry *hp;
+	
+	if (!sizep) {
+		P.p_error = EINVAL;
+		return NULL;
+	}
+	
+	if (pid < 0) {
+		*sizep = largest_unallocated_chunk_size();
+		return NULL;
+	}
+	
+	/*
+	 * If *sizep is either 0 or is large enough that
+	 * (*sizep + HEAPBLOCKSIZE - 1) wraps around, size will be 0,
+	 * and the following test will catch this.
+	 */
+	size = (*sizep + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE;
+	if (size == 0)
+		return NULL;
+	//kprintf("memalloc(%5u, %d)\n", (int)size, pid);
+	hp = allocentry(size, pid);
+	if (!hp) return NULL;
+	*sizep = (size_t)HEAPBLOCKSIZE * size;
+	return &G.heap[hp->start];
+}
+
+struct heapentry *findentry(void *ptr)
+{
+	struct heapentry *hp;
+	int start;
+	int lower, middle, upper;
+	start = (ptr - (void *)G.heap) / HEAPBLOCKSIZE;
+	lower = 1;
+	upper = G.heapsize - 1;
+	
+	do {
+		middle = (lower + upper) / 2;
+		hp = &G.heaplist[middle];
+		if (start < hp->start) {
+			upper = middle;
+			continue;
+		} else if (start >= hp->end) {
+			lower = middle + 1;
+			continue;
+		}
+		return hp;
+	} while (lower < upper);
+	return NULL;
+}
+
+/* TODO: make sure this works properly! */
 static void removeentry(struct heapentry *hp)
 {
 	memmove(hp, hp + 1, (void *)&hp[G.heapsize] - (void *)hp);
 	--G.heapsize;
+}
+
+/* reallocate a previously-allocated block of memory */
+/* the direction argument specifies which
+ * end of the reallocated block changes (expand or shrink):
+ * <0 : bottom (data at top stays at the same address)
+ * =0 : block can move around freely (but data at the bottom stays at the base address of the new block). This is basically the same behavior as realloc(3)
+ * >0 : top (data at bottom stays at the same address)
+ * note: this only works at the granularity of the allocation size (eg, 16 bytes)
+ * note2: if the direction can't be honored, memrealloc() returns NULL
+ */
+void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
+{
+	struct heapentry *hp, *newhp;
+	size_t size, oldsize;
+	void *newptr;
+	hp = findentry(ptr);
+	if (!hp || (pid && pid != hp->pid)) {
+		P.p_error = EFAULT;
+		return NULL;
+	}
+	
+	oldsize = hp->end - hp->start;
+	ptr = &G.heap[hp->start];
+	
+	size = (*newsizep + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE;
+	/* memrealloc() called with a size of 0 is the same as memfree() */
+	if (size == 0) {
+		removeentry(hp);
+		return NULL;
+	}
+	
+	/* easiest case: same size */
+	if (size == oldsize) {
+		goto done;
+	}
+	
+	/* second easiest case: block shrinks */
+	if (size < oldsize) {
+		if (direction < 0) {
+			hp->start = hp->end - size;
+		} else {
+			hp->end = hp->start + size;
+		}
+		goto done;
+	}
+	
+	/* third easiest case: block expands */
+	if (direction < 0) {
+		if (size > hp[0].end - hp[-1].end) {
+			return NULL;
+		}
+		hp->start = hp->end - size;
+	} else if (direction > 0) {
+		if (size > hp[1].start - hp[0].start) {
+			return NULL;
+		}
+		hp->end = hp->start + size;
+	} else {
+		if (size <= hp[1].start - hp[0].start) {
+			hp->end = hp->start + size;
+		} else if (size <= hp[0].end - hp[-1].end) {
+			/* move the block down in its existing slot */
+			hp->start = hp->end - size;
+			newptr = &G.heap[hp->start];
+			/* move the old block down */
+			memmove(newptr, ptr, (size_t)(hp->end - hp->start) *
+			                              HEAPBLOCKSIZE);
+		} else {
+			/* find a new location */
+			newhp = allocentry(size, hp->pid);
+			if (!newhp)
+				return NULL;
+			newptr = &G.heap[newhp->start];
+			/* copy the data from ptr to newptr */
+			memmove(newptr, ptr, (size_t)(hp->end - hp->start) *
+			                              HEAPBLOCKSIZE);
+			removeentry(hp);
+		}
+	}
+		
+done:
+	*newsizep = (size_t)HEAPBLOCKSIZE * size;
+	return &G.heap[hp->start];
+}
+
+/* free all memory allocations for the given pid */
+static void freeall(pid_t pid)
+{
+	struct heapentry *hp;
+	
+	for (hp = &G.heaplist[0]; hp < &G.heaplist[G.heapsize]; ++hp)
+		if (pid == hp->pid)
+			removeentry(hp);
 }
 
 #if 0
@@ -262,31 +397,16 @@ void memfree(void *ptr, pid_t pid)
 void memfree(void *ptr, pid_t pid)
 {
 	struct heapentry *hp;
-	int start;
-	int lower, middle, upper;
-	if (ptr == NULL)
-		return;
-	start = (ptr - (void *)G.heap) / HEAPBLOCKSIZE;
-	lower = 1;
-	upper = G.heapsize - 1;
 	
-	do {
-		middle = (lower + upper) / 2;
-		hp = &G.heaplist[middle];
-		if (start < hp->start) {
-			upper = middle;
-			continue;
-		} else if (start >= hp->end) {
-			lower = middle + 1;
-			continue;
-		}
-		/* remove this heap entry */
-		if (!pid || pid == hp->pid)
-			removeentry(hp);
-		else
-			P.p_error = EFAULT;
-		break;
-	} while (lower < upper);
+	if (ptr == NULL) {
+		freeall(pid);
+		return;
+	}
+	hp = findentry(ptr);
+	if (hp && (!pid || pid == hp->pid))
+		removeentry(hp);
+	else
+		P.p_error = EFAULT;
 }
 #endif
 
@@ -297,16 +417,27 @@ void sys_kmalloc()
 	} *ap = (struct a *)P.p_arg;
 	void *p = NULL;
 	
-	if (!ap->sizep) {
-		P.p_error = EINVAL;
-		return;
-	}
-	
-	p = memalloc(ap->sizep, P.p_pid);
-	P.p_retval = (unsigned long)p;
+	P.p_retval = (unsigned long)p =
+	  memalloc(ap->sizep, P.p_pid);
+#if 0
+	/* is it really necessary to zero out the memory? */
 	if (p) {
 		memset(p, 0, *ap->sizep);
 	}
+#endif
+}
+
+void sys_krealloc()
+{
+	struct a {
+		void *ptr;
+		size_t *sizep;
+		int direction;
+	} *ap = (struct a *)P.p_arg;
+	void *p = NULL;
+	
+	P.p_retval = (unsigned long)p =
+	  memrealloc(ap->ptr, ap->sizep, ap->direction, P.p_pid);
 }
 
 void sys_kfree()

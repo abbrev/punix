@@ -88,22 +88,77 @@ STARTUP(void timersub(struct timeval *a, struct timeval *b, struct timeval *res)
 	}
 }
 
+/*
+ * getrealtime() returns the real time as struct timespec. If getrealtime() is
+ * called more than once per clock tick, it increments the time that it returns
+ * by RTINCR to ensure that time increases monotonically. RTINCR is less than
+ * or equal to the length of time, in nanoseconds, that a single call to
+ * getrealtime() takes.
+ */
+/* 12MHz ~= 83 ns per cpu clock */
+#define RTINCR (200 * 83) /* ns */
+void getrealtime(struct timespec *tsp)
+{
+	struct timespec wt;
+	struct timespec offset;
+	int t;
+	
+	int x = splclock();
+#if 0
+	/* this isn't strictly necessary */
+	if (G.timeoffset.tv_sec) {
+		walltime.tv_sec += G.timeoffset.tv_sec;
+		G.timeoffset.tv_sec = 0;
+	}
+#endif
+	offset = G.timeoffset;
+	wt = walltime;
+	t = G.ticks;
+	splx(x);
+	
+	if (t == G.rt.lasttime) {
+		G.rt.incr += RTINCR;
+	} else {
+		G.rt.incr = 0;
+		G.rt.lasttime = t;
+	}
+	wt.tv_nsec = (t - wt.tv_nsec) % HZ;
+	wt.tv_nsec = wt.tv_nsec * TICK + G.rt.incr;
+	timespecadd(&wt, &offset, tsp);
+}
+
+/* setrealtime() sets the real time to the given timespec */
+void setrealtime(struct timespec *ts)
+{
+	struct timespec rt, dt;
+	int x = splclock();
+	getrealtime(&rt);
+	
+	/* timeoffset += ts - rt */
+	timespecsub(ts, &rt, &dt);
+	timespecadd(&G.timeoffset, &dt, &G.timeoffset);
+	
+	splx(x);
+}
+
 /* internal getitimer, used by sys_getitimer and sys_setitimer */
 STARTUP(static void getit(int which, struct itimerval *value))
 {
 	struct itimerval itv;
 	struct itimerspec tv;
+	struct timespec rt;
 	int x;
 	
 	x = splclock();
+	getrealtime(&rt);
 	tv = P.p_itimer[which];
 	if (which == ITIMER_REAL) {
 		/* convert from absolute to relative time */
 		if (timespecisset(&tv.it_value)) {
-			if (timespeccmp(&tv.it_value, &realtime, <))
+			if (timespeccmp(&tv.it_value, &rt, <))
 				timespecclear(&tv.it_value);
 			else
-				timespecsub(&tv.it_value, &realtime, &tv.it_value);
+				timespecsub(&tv.it_value, &rt, &tv.it_value);
 		}
 	}
 	
@@ -147,13 +202,15 @@ STARTUP(static int itimerfix(struct timespec *tv))
 
 long hzto(struct timespec *tv);
 
-STARTUP(int realitexpire(void *vp))
+STARTUP(void realitexpire(void *vp))
 {
 	int x;
 	struct proc *p = (struct proc *)vp;
 	struct itimerspec *tp = &p->p_itimer[ITIMER_REAL];
+	struct timespec rt;
 	
 	x = splclock();
+	getrealtime(&rt);
 	/*
 	 * It's possible for us to be called before the real timer actually
 	 * ought to go off, such as if the timespec is too large to be 
@@ -161,7 +218,7 @@ STARTUP(int realitexpire(void *vp))
 	 * process is not signalled, but another timeout is set for this routine
 	 * to be called again, possibly when the real timer really goes off.
 	 */
-	if (!timespeccmp(&tp->it_value, &realtime, >)) {
+	if (!timespeccmp(&tp->it_value, &rt, >)) {
 		//kprintf("SIGALRM\n");
 		psignal(p, SIGALRM);
 		
@@ -172,7 +229,7 @@ STARTUP(int realitexpire(void *vp))
 	}
 	
 	for (;;) {
-		if (timespeccmp(&tp->it_value, &realtime, >)) {
+		if (timespeccmp(&tp->it_value, &rt, >)) {
 			timeout(realitexpire, p, hzto(&tp->it_value));
 			goto out;
 		}
@@ -180,7 +237,6 @@ STARTUP(int realitexpire(void *vp))
 	}
 out:
 	splx(x);
-	return 0;
 }
 
 /* int setitimer(int which, const struct itimerval *value,
@@ -190,6 +246,7 @@ STARTUP(void sys_setitimer())
 	struct itimera *ap = (struct itimera *)P.p_arg;
 	struct itimerval aitv;
 	struct itimerspec itv;
+	struct timespec rt;
 	int x;
 	
 	if ((unsigned)ap->which > 2) {
@@ -229,17 +286,19 @@ STARTUP(void sys_setitimer())
 #endif
 	
 	x = splclock();
+	getrealtime(&rt);
 	
 	P.p_itimer[ap->which] = itv;
 	
 	if (ap->which == ITIMER_REAL) {
 		untimeout(realitexpire, &P);
 		if (timespecisset(&itv.it_value)) {
+			//kprintf("setitimer: setting realitexpire in %ld.%09ld seconds\n", itv.it_value.tv_sec, itv.it_value.tv_nsec);
+			timespecadd(&itv.it_value, &rt, &itv.it_value);
 #if 0
-			kprintf("setitimer: setting realitexpire in %ld.%09ld seconds\n", itv.it_value.tv_sec, itv.it_value.tv_nsec);
-			kprintf("setitimer: realtime=%ld.%09ld\n", realtime.tv_sec, realtime.tv_nsec);
+			kprintf("setitimer: realtime=%ld.%09ld\n", rt.tv_sec, rt.tv_nsec);
+			kprintf("setitimer: expires= %ld.%09ld\n", itv.it_value.tv_sec, itv.it_value.tv_nsec);
 #endif
-			timespecadd(&itv.it_value, &realtime, &itv.it_value);
 			P.p_itimer[ap->which] = itv;
 			timeout(realitexpire, &P, hzto(&itv.it_value));
 		}
@@ -278,14 +337,8 @@ STARTUP(void sys_gettimeofday())
 	
 	if (ap->tv) {
 		struct timeval tv;
-		int x = splclock();
-		struct timespec ts = realtime;
-		splx(x);
-		ts.tv_nsec += G.lbolt * SECOND / 8192;
-		if (ts.tv_nsec >= SECOND) {
-			ts.tv_nsec -= SECOND;
-			++ts.tv_sec;
-		}
+		struct timespec ts;
+		getrealtime(&ts);
 		tv.tv_sec = ts.tv_sec;
 		tv.tv_usec = ts.tv_nsec / 1000;
 		if (copyout(ap->tv, &tv, sizeof(tv)))
@@ -300,12 +353,17 @@ STARTUP(void sys_gettimeofday())
 	G.whereami = whereami;
 }
 
+/* microseconds must be in the range [0,1000000) */
+static int usec_in_range(suseconds_t usec)
+{
+	return 0 <= usec && usec < 1000000L;
+}
+
 STARTUP(void sys_settimeofday())
 {
 	struct tod *ap = (struct tod *)P.p_arg;
 	struct timeval tv;
-	struct timespec newtime, difftime;
-	int x;
+	struct timespec newtime;
 	
 	if (!suser())
 		return;
@@ -315,8 +373,7 @@ STARTUP(void sys_settimeofday())
 		return;
 	}
 	
-	/* microseconds must be in the range [0,1000000) */
-	if (tv.tv_usec < 0 || 1000000L <= tv.tv_usec) {
+	if (!usec_in_range(tv.tv_usec)) {
 		P.p_error = EINVAL;
 		return;
 	}
@@ -325,17 +382,61 @@ STARTUP(void sys_settimeofday())
 	newtime.tv_sec = tv.tv_sec;
 	newtime.tv_nsec = tv.tv_usec * 1000;
 	
-	x = splclock();
+	timeadj = 0; /* remove any outstanding adjustments by adjtime() */
+	setrealtime(&newtime);
+}
+
+static long timeval_to_usec(struct timeval *tv)
+{
+	return tv->tv_sec * 1000000L + tv->tv_usec;
+}
+
+static struct timeval *usec_to_timeval(long usec, struct timeval *tv)
+{
+	tv->tv_sec = usec / 1000000L;
+	tv->tv_usec = usec % 1000000L;
+	if (tv->tv_usec < 0) {
+		--tv->tv_sec;
+		tv->tv_usec += 1000000L;
+	}
+	return tv;
+}
+
+/* int adjtime(const struct timeval *delta, struct timeval *olddelta); */
+STARTUP(void sys_adjtime())
+{
+	struct a {
+		struct timeval *delta;
+		struct timeval *olddelta;
+	} *ap = (struct a *)P.p_arg;
 	
-	/* find the difference between newtime and realtime
-	 * and add that difference to walltime */
-	timespecsub(&newtime, &realtime, &difftime);
-	timespecadd(&newtime, &walltime, &walltime);
+	struct timeval tv;
+	int error = 0;
 	
-	/* finally, set realtime to the new time */
-	realtime = newtime;
+	if (ap->olddelta) {
+		/* return the current timeadj as a struct timeval */
+		usec_to_timeval(timeadj, &tv);
+		if (copyout(ap->olddelta, &tv, sizeof(tv))) {
+			error = EFAULT;
+		}
+	}
 	
-	splx(x);
+	if (ap->delta && suser()) {
+		/* set timeadj to delta in microseconds */
+		if (copyin(&tv, ap->delta, sizeof(tv))) {
+			error = EFAULT;
+			goto out;
+		}
+		if (tv.tv_sec >= (LONG_MAX / 1000000L) ||
+		    tv.tv_sec <= (LONG_MIN / 1000000L) ||
+		    !usec_in_range(tv.tv_usec)) {
+			error = EINVAL;
+			goto out;
+		}
+		timeadj = timeval_to_usec(&tv);
+	}
+out:
+	P.p_error = error;
 }
 
 STARTUP(void sys_time())
@@ -344,10 +445,10 @@ STARTUP(void sys_time())
 		time_t *tp;
 	} *ap = (struct a *)P.p_arg;
 	time_t sec;
+	struct timespec ts;
 	
-	splclock();
-	sec = realtime.tv_sec;
-	spl0();
+	getrealtime(&ts);
+	sec = ts.tv_sec;
 	
 	if (ap->tp)
 		P.p_error = copyout(ap->tp, &sec, sizeof(sec));

@@ -33,12 +33,16 @@
 
 STARTUP(long hzto(struct timespec *tv))
 {
-	long ticks, sec;
+	long ticks;
 	struct timespec diff;
-	int x = spl7();
+	struct timespec rt;
+	int x = splclock();
 	
-	timespecsub(tv, &realtime, &diff);
+	getrealtime(&rt);
+	timespecsub(tv, &rt, &diff);
 	
+	if (diff.tv_sec < 0)
+		ticks = 0;
 	if ((diff.tv_sec + 1) <= LONG_MAX / HZ)
 		ticks = diff.tv_sec * HZ + diff.tv_nsec / TICK;
 	else
@@ -62,6 +66,7 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	c1 = &G.callout[0];
 	x = spl7();
 	
+	//kprintf("timeout: adding a timeout in %ld ticks\n", time);
 	while (c1->c_func != NULL && c1->c_dtime <= t) {
 		t -= c1->c_dtime;
 		++c1;
@@ -95,7 +100,6 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 /*
  * remove a pending callout
  */
-/* XXX: there appears to be a bug in untimeout */
 STARTUP(void untimeout(void (*func)(void *), void *arg))
 {
 	struct callout *cp;
