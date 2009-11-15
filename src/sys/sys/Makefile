@@ -37,6 +37,7 @@ OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
 OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o bogomips.o
+OBJ	+= userstart.o usermain.o
 
 #OBJ = testvectors.o
 
