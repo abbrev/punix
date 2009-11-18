@@ -368,172 +368,6 @@ static void testtty(int argc, char *argv[], char *envp[])
 	alarm(0);
 }
 
-#define BUFSIZE 512
-static void testshell(int argc, char *argv[], char *envp[])
-{
-	struct utsname utsname;
-	char *username = "root";
-	char *hostname;
-	char buf[BUFSIZE];
-	ssize_t n;
-	char *bp = buf;
-	ssize_t len = 0;
-	int neof = 0;
-	int err;
-	
-	printf("stupid shell v -0.1\n");
-	err = uname(&utsname);
-	if (!err) {
-		hostname = utsname.nodename;
-	} else {
-		hostname = "localhost";
-	}
-	
-	for (;;) {
-		if (len == 0)
-			printf("%s@%s:%s%s ", username, hostname, "~", "$");
-		n = read(0, bp, BUFSIZE - len);
-		if (n < 0) {
-			printf("read error\n");
-		}
-		len += n;
-		bp += n;
-		if (len == 0) {
-			++neof;
-			if (neof > 3) {
-				printf ("exit\n");
-				break;
-			}
-			printf("Use \"exit\" to leave the shell.\n");
-			continue;
-		}
-		if (len == BUFSIZE || buf[len-1] == '\n') {
-			char *cmd;
-			size_t cmdlen;
-			int i;
-			buf[len-1] = '\0';
-			len = 0;
-			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
-				;
-			cmd = bp;
-			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
-				;
-			cmdlen = bp - cmd;
-			bp = buf;
-			if (cmdlen == 0)
-				continue;
-			
-			if (!strncmp(cmd, "clear", cmdlen)) {
-				printf("%s", ESC "[H" ESC "[J");
-			} else if (!strncmp(cmd, "exit", cmdlen)) {
-				break;
-			} else if (!strncmp(cmd, "uname", cmdlen)) {
-				int err;
-				
-				err = uname(&utsname);
-				if (!err) {
-					printf("%s %s %s %s %s\n",
-					       utsname.sysname,
-					       utsname.nodename,
-					       utsname.release,
-					       utsname.version,
-					       utsname.machine);
-				//} else {
-					//printf("uname returned %d\n", err);
-				}
-			} else if (!strncmp(cmd, "env", cmdlen)) {
-				char **ep = envp;
-				for (; *ep; ++ep)
-					printf("%s\n", *ep);
-			} else if (!strncmp(cmd, "id", cmdlen)) {
-				uid_t uid;
-				gid_t gid;
-				gid_t groups[15];
-				int numgroups, i;
-				
-				uid = getuid();
-				gid = getgid();
-				numgroups = getgroups(15, groups);
-				printf("uid=%d gid=%d groups=%d", uid, gid, gid);
-				for (i = 0; i < numgroups; ++i) {
-					printf(",%d", groups[i]);
-				}
-				putchar('\n');
-			} else if (!strncmp(cmd, "wait", cmdlen)) {
-				int status;
-				pid_t pid = wait(&status);
-			} else if (!strncmp(cmd, "vfork", cmdlen)) {
-				pid_t pid;
-				pid = vfork();
-				if (pid == 0) {
-					printf("I am the child\n");
-					_exit(0);
-				} else if (pid > 0) {
-					printf("I am the parent\n");
-				} else {
-					printf("Sorry, there was an error vforking\n");
-				}
-			} else if (!strncmp(cmd, "pause", cmdlen)) {
-				struct sigaction sa;
-				sa.sa_handler = sigalrm;
-				sa.sa_flags = SA_RESTART;
-				printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
-				alarm(3);
-				printf("pause returned %d\n", pause());
-			} else if (!strncmp(cmd, "batt", cmdlen)) {
-				static const char *batt_level_strings[8] = { "dead", "almost dead", "starving", "very low", "low", "medium", "ok", "full" };
-				printf("Battery level: %d (%s)\n", G.batt_level, batt_level_strings[G.batt_level]);
-			} else if (!strncmp(cmd, "date", cmdlen)) {
-				/*
-				 * this prints out the equivalent of
-				 * date --utc '+%F %T %Z'
-				 */
-				struct tm tm;
-				struct timeval tv;
-				char buf[40];
-					
-				gettimeofday(&tv, NULL);
-				//printf("%5ld.%06ld\n", tv.tv_sec, tv.tv_usec);
-				localtime_r(&tv.tv_sec, &tm);
-#if 0
-				printf("%4d-%02d-%02d %02d:%02d:%02d UTC\n",
-				 tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
-				 tm.tm_hour, tm.tm_min, tm.tm_sec);
-#else
-				printf("%s", asctime_r(&tm, buf));
-#endif
-			} else if (!strncmp(cmd, "adjtime", cmdlen)) {
-				struct timeval tv = { 10, 0 };
-				struct timeval oldtv;
-				adjtime(NULL, &oldtv);
-				if (oldtv.tv_sec || oldtv.tv_usec) {
-					printf("adjtime(NULL, %ld.%06lu)\n",
-					       oldtv.tv_sec, oldtv.tv_usec);
-				} else {
-					adjtime(&tv, &oldtv);
-#define FIXTV(tv) do { \
-if ((tv)->tv_sec < 0 && (tv)->tv_usec) { \
-	++(tv)->tv_sec; \
-	(tv)->tv_usec = 1000000L - (tv)->tv_usec; \
-} \
-} while (0)
-					FIXTV(&tv);
-					FIXTV(&oldtv);
-					
-					printf("adjtime(%ld.%06lu, %ld.%06lu)\n",
-					       tv.tv_sec, tv.tv_usec,
-					       oldtv.tv_sec, oldtv.tv_usec);
-				}
-			} else {
-				printf("stupidsh: %.*s: command not found\n", (int)cmdlen, cmd);
-			}
-			bp = buf;
-			len = 0;
-			neof = 0;
-		}
-	}
-}
-
 static void testrandom(int argc, char *argv[], char *envp[])
 {
 	int i;
@@ -877,6 +711,172 @@ static void printhex(char buf[], int length)
 		}
 	}
 	putchar('\n');
+}
+
+#define BUFSIZE 512
+static void testshell(int argc, char *argv[], char *envp[])
+{
+	struct utsname utsname;
+	char *username = "root";
+	char *hostname;
+	char buf[BUFSIZE];
+	ssize_t n;
+	char *bp = buf;
+	ssize_t len = 0;
+	int neof = 0;
+	int err;
+	
+	printf("stupid shell v -0.1\n");
+	err = uname(&utsname);
+	if (!err) {
+		hostname = utsname.nodename;
+	} else {
+		hostname = "localhost";
+	}
+	
+	for (;;) {
+		if (len == 0)
+			printf("%s@%s:%s%s ", username, hostname, "~", "$");
+		n = read(0, bp, BUFSIZE - len);
+		if (n < 0) {
+			printf("read error\n");
+		}
+		len += n;
+		bp += n;
+		if (len == 0) {
+			++neof;
+			if (neof > 3) {
+				printf ("exit\n");
+				break;
+			}
+			printf("Use \"exit\" to leave the shell.\n");
+			continue;
+		}
+		if (len == BUFSIZE || buf[len-1] == '\n') {
+			char *cmd;
+			size_t cmdlen;
+			int i;
+			buf[len-1] = '\0';
+			len = 0;
+			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
+				;
+			cmd = bp;
+			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
+				;
+			cmdlen = bp - cmd;
+			bp = buf;
+			if (cmdlen == 0)
+				continue;
+			
+			if (!strncmp(cmd, "clear", cmdlen)) {
+				printf("%s", ESC "[H" ESC "[J");
+			} else if (!strncmp(cmd, "exit", cmdlen)) {
+				break;
+			} else if (!strncmp(cmd, "uname", cmdlen)) {
+				int err;
+				
+				err = uname(&utsname);
+				if (!err) {
+					printf("%s %s %s %s %s\n",
+					       utsname.sysname,
+					       utsname.nodename,
+					       utsname.release,
+					       utsname.version,
+					       utsname.machine);
+				//} else {
+					//printf("uname returned %d\n", err);
+				}
+			} else if (!strncmp(cmd, "env", cmdlen)) {
+				char **ep = envp;
+				for (; *ep; ++ep)
+					printf("%s\n", *ep);
+			} else if (!strncmp(cmd, "id", cmdlen)) {
+				uid_t uid;
+				gid_t gid;
+				gid_t groups[15];
+				int numgroups, i;
+				
+				uid = getuid();
+				gid = getgid();
+				numgroups = getgroups(15, groups);
+				printf("uid=%d gid=%d groups=%d", uid, gid, gid);
+				for (i = 0; i < numgroups; ++i) {
+					printf(",%d", groups[i]);
+				}
+				putchar('\n');
+			} else if (!strncmp(cmd, "wait", cmdlen)) {
+				int status;
+				pid_t pid = wait(&status);
+			} else if (!strncmp(cmd, "vfork", cmdlen)) {
+				pid_t pid;
+				pid = vfork();
+				if (pid == 0) {
+					printf("I am the child\n");
+					_exit(0);
+				} else if (pid > 0) {
+					printf("I am the parent\n");
+				} else {
+					printf("Sorry, there was an error vforking\n");
+				}
+			} else if (!strncmp(cmd, "pause", cmdlen)) {
+				struct sigaction sa;
+				sa.sa_handler = sigalrm;
+				sa.sa_flags = SA_RESTART;
+				printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
+				alarm(3);
+				printf("pause returned %d\n", pause());
+			} else if (!strncmp(cmd, "batt", cmdlen)) {
+				static const char *batt_level_strings[8] = { "dead", "almost dead", "starving", "very low", "low", "medium", "ok", "full" };
+				printf("Battery level: %d (%s)\n", G.batt_level, batt_level_strings[G.batt_level]);
+			} else if (!strncmp(cmd, "date", cmdlen)) {
+				/*
+				 * this prints out the equivalent of
+				 * date --utc '+%F %T %Z'
+				 */
+				struct tm tm;
+				struct timeval tv;
+				char buf[40];
+					
+				gettimeofday(&tv, NULL);
+				//printf("%5ld.%06ld\n", tv.tv_sec, tv.tv_usec);
+				localtime_r(&tv.tv_sec, &tm);
+#if 0
+				printf("%4d-%02d-%02d %02d:%02d:%02d UTC\n",
+				 tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+				 tm.tm_hour, tm.tm_min, tm.tm_sec);
+#else
+				printf("%s", asctime_r(&tm, buf));
+#endif
+			} else if (!strncmp(cmd, "adjtime", cmdlen)) {
+				struct timeval tv = { 10, 0 };
+				struct timeval oldtv;
+				adjtime(NULL, &oldtv);
+				if (oldtv.tv_sec || oldtv.tv_usec) {
+					printf("adjtime(NULL, %ld.%06lu)\n",
+					       oldtv.tv_sec, oldtv.tv_usec);
+				} else {
+					adjtime(&tv, &oldtv);
+#define FIXTV(tv) do { \
+if ((tv)->tv_sec < 0 && (tv)->tv_usec) { \
+	++(tv)->tv_sec; \
+	(tv)->tv_usec = 1000000L - (tv)->tv_usec; \
+} \
+} while (0)
+					FIXTV(&tv);
+					FIXTV(&oldtv);
+					
+					printf("adjtime(%ld.%06lu, %ld.%06lu)\n",
+					       tv.tv_sec, tv.tv_usec,
+					       oldtv.tv_sec, oldtv.tv_usec);
+				}
+			} else {
+				printf("stupidsh: %.*s: command not found\n", (int)cmdlen, cmd);
+			}
+			bp = buf;
+			len = 0;
+			neof = 0;
+		}
+	}
 }
 
 static void testlink(int argc, char *argv[], char *envp[])
