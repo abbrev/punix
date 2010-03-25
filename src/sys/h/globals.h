@@ -84,8 +84,10 @@ struct globals {
 	int numbufs;
 	/* struct buf buf[NBUF]; */
 	
-	struct flashblock *currentfblock;
-	struct flash_cache_entry flash_cache[FLASH_CACHE_SIZE];
+	struct {
+		struct flashblock *currentfblock;
+		struct flash_cache_entry flash_cache[FLASH_CACHE_SIZE];
+	} flash;
 	
 	int contrast;
 	/* dev_vt static variables */
@@ -149,9 +151,12 @@ struct globals {
 	int nextinode;
 	/* end temp/debugging variables */
 	
-	int heapsize;
-	struct heapentry heaplist[HEAPSIZE];
-	char heap[0][HEAPBLOCKSIZE];
+	/* heap static variables (this must be last!) */
+	struct {
+		int heapsize;
+		struct heapentry heaplist[HEAPSIZE];
+		char heap[0][HEAPBLOCKSIZE];
+	} heap;
 };
 
 # if 0

@@ -12,14 +12,14 @@
 
 #define heapblock_to_offset(h) ((size_t)(h) * HEAPBLOCKSIZE)
 #define offset_to_heapblock(o) (((o) + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE)
-#define heapentry_to_pointer(he) (G.heap[(he)->start])
+#define heapentry_to_pointer(he) (G.heap.heap[(he)->start])
 
 #if 1
 void printheaplist()
 {
 	int i;
-	for (i = 0; i < G.heapsize; ++i) {
-		kprintf("%5d: %5d %5d %5d (%5d) (0x%06lx)\n", i, (int)G.heaplist[i].pid, (int)G.heaplist[i].start, (int)G.heaplist[i].end, (int)G.heaplist[i].end-G.heaplist[i].start, (void *)&G.heap[G.heaplist[i].start]);
+	for (i = 0; i < G.heap.heapsize; ++i) {
+		kprintf("%5d: %5d %5d %5d (%5d) (0x%06lx)\n", i, (int)G.heap.heaplist[i].pid, (int)G.heap.heaplist[i].start, (int)G.heap.heaplist[i].end, (int)G.heap.heaplist[i].end-G.heap.heaplist[i].start, (void *)&G.heap.heap[G.heap.heaplist[i].start]);
 	}
 }
 #endif
@@ -30,7 +30,7 @@ static size_t largest_unallocated_chunk_size()
 	int prevend = 0;
 	int s;
 	struct heapentry *hp;
-	for (hp = &G.heaplist[1]; hp < &G.heaplist[G.heapsize]; ++hp) {
+	for (hp = &G.heap.heaplist[1]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp) {
 		s = hp->start - prevend;
 		if (size < s)
 			size = s;
@@ -41,17 +41,17 @@ static size_t largest_unallocated_chunk_size()
 
 void meminit()
 {
-	struct heapentry *hp = &G.heaplist[0];
+	struct heapentry *hp = &G.heap.heaplist[0];
 	/* insert two sentinal heap entries,
 	 * one at the bottom and one at the top of the heap */
 	hp->start = 0;
 	hp->end = 0;
 	hp->pid = -1;
 	++hp;
-	hp->start = ((void *)0x40000 - (void *)G.heap[0]) / HEAPBLOCKSIZE;
+	hp->start = ((void *)0x40000 - (void *)G.heap.heap[0]) / HEAPBLOCKSIZE;
 	hp->end = 0;
 	hp->pid = -1;
-	G.heapsize = 2;
+	G.heap.heapsize = 2;
 	
 #if 0
 	struct var {
@@ -107,9 +107,9 @@ void meminit()
 	
 	ADDVAR(batt_level);
 	
-	ADDVAR(heapsize);
-	ADDVAR(heaplist);
-	ADDVAR(heap);
+	ADDVAR(heap.heapsize);
+	ADDVAR(heap.heaplist);
+	ADDVAR(heap.heap);
 	/* sort */
 	int i, j;
 	struct var t;
@@ -144,8 +144,8 @@ void meminit()
 /* insert an entry before existing entry hp, moving hp and other entries up */
 static void insertentry(struct heapentry *hp, int start, int end, pid_t pid)
 {
-	memmove(hp + 1, hp, (void *)&hp[G.heapsize] - (void *)hp);
-	++G.heapsize;
+	memmove(hp + 1, hp, (void *)&hp[G.heap.heapsize] - (void *)hp);
+	++G.heap.heapsize;
 	
 	hp->start = start;
 	hp->end = end;
@@ -157,13 +157,13 @@ static struct heapentry *allocentry(int size, pid_t pid)
 	struct heapentry *hp;
 	
 	if (size <= 0) return NULL;
-	if (G.heapsize >= HEAPSIZE) return NULL;
+	if (G.heap.heapsize >= HEAPSIZE) return NULL;
 	
 loop:
 #define SIZETHRESHOLD 2048L
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
-		int prevstart = G.heaplist[G.heapsize-1].start;
-		for (hp = &G.heaplist[G.heapsize-2]; hp >= &G.heaplist[0]; --hp) {
+		int prevstart = G.heap.heaplist[G.heap.heapsize-1].start;
+		for (hp = &G.heap.heaplist[G.heap.heapsize-2]; hp >= &G.heap.heaplist[0]; --hp) {
 			if (size <= (prevstart - hp->end)) {
 				++hp;
 				/*
@@ -178,7 +178,7 @@ loop:
 	}
 	
 	int prevend = 0;
-	for (hp = &G.heaplist[1]; hp < &G.heaplist[G.heapsize]; ++hp) {
+	for (hp = &G.heap.heaplist[1]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp) {
 		if (size <= hp->start - prevend) {
 			/*
 			 * insert this entry here and return
@@ -241,7 +241,7 @@ void *memalloc(size_t *sizep, pid_t pid)
 	hp = allocentry(size, pid);
 	if (!hp) return NULL;
 	*sizep = (size_t)HEAPBLOCKSIZE * size;
-	return &G.heap[hp->start];
+	return &G.heap.heap[hp->start];
 }
 
 struct heapentry *findentry(void *ptr)
@@ -249,13 +249,13 @@ struct heapentry *findentry(void *ptr)
 	struct heapentry *hp;
 	int start;
 	int lower, middle, upper;
-	start = (ptr - (void *)G.heap) / HEAPBLOCKSIZE;
+	start = (ptr - (void *)G.heap.heap) / HEAPBLOCKSIZE;
 	lower = 1;
-	upper = G.heapsize - 1;
+	upper = G.heap.heapsize - 1;
 	
 	do {
 		middle = (lower + upper) / 2;
-		hp = &G.heaplist[middle];
+		hp = &G.heap.heaplist[middle];
 		if (start < hp->start) {
 			upper = middle;
 			continue;
@@ -271,8 +271,8 @@ struct heapentry *findentry(void *ptr)
 /* TODO: make sure this works properly! */
 static void removeentry(struct heapentry *hp)
 {
-	memmove(hp, hp + 1, (void *)&hp[G.heapsize] - (void *)hp);
-	--G.heapsize;
+	memmove(hp, hp + 1, (void *)&hp[G.heap.heapsize] - (void *)hp);
+	--G.heap.heapsize;
 }
 
 /* reallocate a previously-allocated block of memory */
@@ -296,7 +296,7 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 	}
 	
 	oldsize = hp->end - hp->start;
-	ptr = &G.heap[hp->start];
+	ptr = &G.heap.heap[hp->start];
 	
 	size = (*newsizep + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE;
 	/* memrealloc() called with a size of 0 is the same as memfree() */
@@ -337,7 +337,7 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 		} else if (size <= hp[0].end - hp[-1].end) {
 			/* move the block down in its existing slot */
 			hp->start = hp->end - size;
-			newptr = &G.heap[hp->start];
+			newptr = &G.heap.heap[hp->start];
 			/* move the old block down */
 			memmove(newptr, ptr, (size_t)(hp->end - hp->start) *
 			                              HEAPBLOCKSIZE);
@@ -346,7 +346,7 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 			newhp = allocentry(size, hp->pid);
 			if (!newhp)
 				return NULL;
-			newptr = &G.heap[newhp->start];
+			newptr = &G.heap.heap[newhp->start];
 			/* copy the data from ptr to newptr */
 			memmove(newptr, ptr, (size_t)(hp->end - hp->start) *
 			                              HEAPBLOCKSIZE);
@@ -356,7 +356,7 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 		
 done:
 	*newsizep = (size_t)HEAPBLOCKSIZE * size;
-	return &G.heap[hp->start];
+	return &G.heap.heap[hp->start];
 }
 
 /* free all memory allocations for the given pid */
@@ -364,7 +364,7 @@ static void freeall(pid_t pid)
 {
 	struct heapentry *hp;
 	
-	for (hp = &G.heaplist[0]; hp < &G.heaplist[G.heapsize]; ++hp)
+	for (hp = &G.heap.heaplist[0]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp)
 		if (pid == hp->pid)
 			removeentry(hp);
 }
@@ -377,9 +377,9 @@ void memfree(void *ptr, pid_t pid)
 	int start;
 	if (ptr == NULL)
 		return;
-	start = (ptr - (void *)G.heap) / HEAPBLOCKSIZE;
+	start = (ptr - (void *)G.heap.heap) / HEAPBLOCKSIZE;
 	
-	for (hp = &G.heaplist[0]; hp < &G.heaplist[G.heapsize]; ++hp) {
+	for (hp = &G.heap.heaplist[0]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp) {
 		if (start < hp->end) {
 			if (hp->start <= start) {
 				/* remove this heap entry */

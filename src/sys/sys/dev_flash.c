@@ -41,11 +41,11 @@ static void makeru(struct flash_cache_entry *cep)
 {
 	struct flash_cache_entry ce;
 	
-	if (cep == &G.flash_cache[0])
+	if (cep == &G.flash.flash_cache[0])
 		return;
 	ce = *cep;
-	memmove(&G.flash_cache[1], &G.flash_cache[0], (size_t)((void *)cep - (void *)&G.flash_cache[0]));
-	G.flash_cache[0] = ce;
+	memmove(&G.flash.flash_cache[1], &G.flash.flash_cache[0], (size_t)((void *)cep - (void *)&G.flash.flash_cache[0]));
+	G.flash.flash_cache[0] = ce;
 }
 
 static struct flash_cache_entry *cachefind(long blkno)
@@ -53,7 +53,7 @@ static struct flash_cache_entry *cachefind(long blkno)
 	struct flash_cache_entry *cep;
 	
 	/* search for the block */
-	for (cep = &G.flash_cache[0]; cep < &G.flash_cache[FLASH_CACHE_SIZE]; ++cep) {
+	for (cep = &G.flash.flash_cache[0]; cep < &G.flash.flash_cache[FLASH_CACHE_SIZE]; ++cep) {
 		if (cep->blkno == blkno) {
 			makeru(cep);
 			return cep;
@@ -70,7 +70,7 @@ static void cacheadd(long blkno, struct flashblock *fbp)
 		return;
 	
 	/* we couldn't find this cache entry, so add it to the end */
-	cep = &G.flash_cache[FLASH_CACHE_SIZE-1];
+	cep = &G.flash.flash_cache[FLASH_CACHE_SIZE-1];
 	cep->blkno = blkno;
 	cep->fbp = fbp;
 	makeru(cep);
@@ -195,7 +195,7 @@ out:
 /* FIXME: advance the currentfblock pointer to the next free one */
 static void nextblock()
 {
-	++G.currentfblock;
+	++G.flash.currentfblock;
 }
 
 STARTUP(static void flread(struct buf *bp))
@@ -253,7 +253,7 @@ STARTUP(static void flwrite(struct buf *bp))
 	if (newblock) {
 		startdiff = fbp->data;
 		enddiff = &fbp->data[BLOCKSIZE - 1];
-		newfbp = G.currentfblock;
+		newfbp = G.flash.currentfblock;
 	} else {
 		newfbp = oldfbp;
 	}
@@ -285,7 +285,7 @@ STARTUP(static void fldelete(struct buf *bp))
 STARTUP(void flopen(dev_t dev))
 {
 	/* XXX: flush the cache? */
-	/* FIXME: init the cache and G.currentfblock */
+	/* FIXME: init the cache and G.flash.currentfblock */
 }
 
 STARTUP(void flclose(dev_t dev))
