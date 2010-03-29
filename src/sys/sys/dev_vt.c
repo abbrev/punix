@@ -1196,7 +1196,7 @@ void vtinit()
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
 	cursor(&G.vt.vt[0]);
-	G.vt.key_repeat_start_delay = (unsigned char)(KEY_REPEAT_DELAY * 1000L / HZ);
+	G.vt.key_repeat_start_delay = (unsigned char)((long)HZ * KEY_REPEAT_DELAY / 1000);
 	G.vt.key_repeat_delay = HZ / KEY_REPEAT_RATE;
 	G.vt.key_repeat = 1;
 	G.vt.key_compose = 0;
