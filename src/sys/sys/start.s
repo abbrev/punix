@@ -57,18 +57,7 @@ the_beginning:
 		move.b	%d0,(%a5)		| Do not set Pin100 
 0:
 
-	| Unprotect access to special IO ports
-	lea	0x1C5EA4,%a0
-	nop
-	nop
-	nop
-	move.w	#0x2700,%sr
-	move.w	%d0,(%a0)
-	nop
-	nop
-	nop
-	move.w	#0x2700,%sr
-	move.w	%d0,(%a0)
+	jbsr	disableProtection
 	
 	| Can not registers to access IO ports <= we have disabled the hardware protection, so a hack may be used. (using registers seems to work fine -- caw)
 	| Set Protected IO ports
@@ -85,12 +74,7 @@ the_beginning:
 	move.l	%d0,0x700000
 	move.l	%d0,0x700004
 	
-	| Protect access to special IO ports
-	nop
-	nop
-	nop
-	move.w	#0x2700,%sr
-	move.w	(%a0),%d0
+	jbsr	enableProtection
 	
 	| Setup IO ports
 	moveq.l	#0,%d0
@@ -150,6 +134,8 @@ the_beginning:
 	
 |.include "proc.inc"
 
+	bsr	boot_loader
+	
 	bsr	kmain
 	
 	| set up a trap frame and "return" to icode
@@ -232,4 +218,34 @@ InstallVectors:
 	move.l	(%a0)+,(%a1)+
 	dbra	%d0,0b
 	bset.b	#2,0x600001		| protect vector table
+	rts
+
+/*
+ * disable the Protection on I/O ports and Flash
+ * interrupts must be disabled upon entry (%sr = 0x27xx)
+ * XXX: this has not been tested.
+ */
+disableProtection:
+	lea	(0x1c0000),%a0
+	move.w	(%a0),%d0	| preserve the data
+	nop
+	nop
+	nop
+	nop
+	move	#0x2700,%sr
+	move.w	%d0,(%a0)
+	rts
+
+/*
+ * enable the Protection on I/O ports and Flash
+ * interrupts must be disabled upon entry (%sr = 0x27xx)
+ * XXX: this has not been tested.
+ */
+enableProtection:
+	lea	(0x1c0000),%a0
+	nop
+	nop
+	nop
+	move	#0x2700,%sr
+	move.w	(%a0),%d0
 	rts

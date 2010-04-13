@@ -24,42 +24,6 @@ archive_end = 0x400000
 .section _st1,"x"
 exec_ram = 0x5c00 | XXX
 
-	| Unprotect Flash (%sr = 0x2700)
-unprotect:
-	move.w	0x5EA4,%d0	| I read this because on Vti, the address 0x1C5EA4 & 0x5EA4 are the same, so if I write 0, it corrupts the heap. Very annoying, no ?
-	lea	(0x1C5EA4).l,%a0
-	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	%d0,(%a0)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	%d0,(%a0)
-	bset	#1,(0x600015)	|turn on LCD
-	rts
-
-	| Protect Flash
-protect:
-	lea	(0x1C5E00),%a0
-	bclr	#1,(0x600015)	|turn off data to the LCD (RAM is not read)
-	nop
-	nop
-	nop
-	move	#0x2700,%sr
-	move.w	(%a0),%d0
-	nop
-	nop
-	nop
-	move.w	#0x2700,%sr
-	move.w	(%a0),%d0
-	bset	#1,0x600015
-	
-	rts
-
 | short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
 FlashWrite:
 	movem.l	%d3-%d4/%a2-%a4,-(%sp)	| Save Registers
@@ -100,7 +64,7 @@ FlashWrite:
 	cmp.l	#0x3FFFF,%a4
 	bhi.s	error
 	
-	bsr	unprotect
+	bsr	disableProtection
 	
 	lsr.l	#1,%d3		| Convert Byte to Word
 	
@@ -115,13 +79,15 @@ exec_in_ram:
 	
 	jsr	exec_ram	| Execute code in RAM
 
-	bsr	protect
+	bsr	enableProtection
 	
-	move.w	(%sp)+,%sr		| Return to User mode
+	move.w	(%sp)+,%sr
 	movem.l	(%sp)+,%d3-%d4/%a2-%a4	| Pop registers
 	moveq	#0,%d0
 	rts
 error:
+	move.w	(%sp)+,%sr
+	movem.l	(%sp)+,%d3-%d4/%a2-%a4	| Pop registers
 	moveq.l	#1,%d0
 	rts
 
@@ -133,7 +99,7 @@ FlashWrite_ExecuteInRam:
 	subq.w	#1,%d3			| Because of Dbf
 	blt.s	9f
 	move.l	%a3,%a4			| A4 = Command register
-	move.w	#0x5050,(%a4)		| Clear Statut Register
+	move.w	#0x5050,(%a4)		| Clear Status Register
 0:		move.w	(%a2)+,%d4	| Read value to write
 		move.w	#0x1010,(%a3)	| Write Setup -- CHANGE HERE %a4 to %a3
 		move.w	%d4,(%a3)+	| Write word
@@ -166,11 +132,11 @@ FlashErase:
 	cmp.l	#archive-1,%a2
 	bls.s	error
 	
-	bsr	unprotect
+	bsr	disableProtection
 	
 	| Round to the upper 64K
 	move.l	%a2,%d0
-	andi.l	#0xFFFF0000,%d0
+	andi.l	#0xFFFF0000,%d0	| would clr.w %d0 be shorter/quicker?
 	move.l	%d0,%a2
 	
 	| Copy code to RAM and execute it
@@ -182,9 +148,9 @@ FlashErase:
 |	%a2 -> Src
 FlashErase_ExecuteInRam:
 	move.w	#0xFFFF,(%a2)	| Read ?
-	move.w	#0x5050,(%a2)	| Set Statut register
+	move.w	#0x5050,(%a2)	| Set Status register
 	move.w	#0x2020,(%a2)	| Erase Setup
-	move.w	#0xD0D0,(%a2)	| Erase Conform
+	move.w	#0xD0D0,(%a2)	| Erase Confirm
 0:		move.w	(%a2),%d0
 		btst	#7,%d0
 		beq.s	0b
