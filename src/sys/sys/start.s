@@ -134,7 +134,7 @@ the_beginning:
 	
 |.include "proc.inc"
 
-	bsr	boot_loader
+	|bsr	boot_loader
 	
 	bsr	kmain
 	
@@ -220,6 +220,8 @@ InstallVectors:
 	bset.b	#2,0x600001		| protect vector table
 	rts
 
+	.global disableProtection
+	.global enableProtection
 /*
  * disable the Protection on I/O ports and Flash
  * interrupts must be disabled upon entry (%sr = 0x27xx)
