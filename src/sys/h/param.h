@@ -14,6 +14,11 @@
  * tunable variables
  */
 
+#define	NFILE	175		/* number of in core file structures (XXX) */
+#define	NINODE	200		/* number of in core inodes (XXX) */
+#define	NICINOD	100		/* number of superblock inodes (XXX) */
+#define	NICFREE	50		/* number of superblock free blocks (XXX) */
+
 #define	MINBUF	8		/* minimum number of buffers */
 #define MAXBUF  32
 #define	NMOUNT	8		/* number of mountable file systems */
