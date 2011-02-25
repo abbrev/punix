@@ -142,7 +142,7 @@ FlashErase:
 	| Copy code to RAM and execute it
 	move.w	#((FlashErase_ExecuteInRam_End-FlashErase_ExecuteInRam)/2-1),%d0
 	lea	FlashErase_ExecuteInRam(%pc),%a0
-	bra.s	exec_in_ram
+	bra	exec_in_ram
 
 | In :
 |	%a2 -> Src
