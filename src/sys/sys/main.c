@@ -53,9 +53,9 @@ STARTUP(void kmain())
 	batt_check();
 	
 #if 1
-	kputs(OS_NAME " build " BUILD "\n");
+	kprintf("%s build %s\n", uname_sysname, uname_version);
 #else
-	kputs(OS_NAME " v" OS_VERSION "\n");
+	kprintf("%s v%s\n", uname_sysname, uname_release);
 	kputs(
 	 "Copyright 2005-2008 Christopher Williams <abbrev@gmail.com>\n"
 	 "Some portions copyright 2003, 2005 PpHd\n"

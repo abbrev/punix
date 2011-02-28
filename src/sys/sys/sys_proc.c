@@ -764,13 +764,14 @@ void sys_uname()
 		struct utsname *name;
 	} *ap = (struct a *)P.p_arg;
 	
-	struct utsname me = {
-		"Punix",    /* sysname */
-		"timmy",    /* nodename */
-		OS_VERSION, /* release */
-		BUILD,      /* version */
-		"m68k",     /* machine */
-	};
+	struct utsname me;
+#define COPY(name) strncpy(me.name, uname_##name, sizeof(me.name))
+	COPY(sysname);
+	COPY(nodename);
+	COPY(release);
+	COPY(version);
+	COPY(machine);
+#undef COPY
 	P.p_error = copyout(ap->name, &me, sizeof(me));
 }
 

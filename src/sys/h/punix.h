@@ -7,8 +7,17 @@
 #include "list.h"
 #include "proc.h"
 
+#if 0
 #define OS_NAME	"Punix"
 #define OS_VERSION	"0.06"
+#endif
+
+extern const char
+uname_sysname[],
+uname_nodename[],
+uname_release[],
+uname_version[],
+uname_machine[];
 
 #define STARTUP(x) \
 	x __attribute__ ((section ("_st1"))); \

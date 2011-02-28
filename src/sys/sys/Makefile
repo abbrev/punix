@@ -8,15 +8,24 @@ PUNIXBASE	= ../../..
 
 STDINC	= ${PUNIXBASE}/include
 SYSINC	= ${PUNIXBASE}/src/sys/h
-DATE	:= \"`date +'%Y-%m-%d %H:%M:%S%z'`\"
-REALTIME := `date +%s`
+DATE := $(shell date +'%Y-%m-%d %H:%M:%S%z')
+REALTIME := $(shell date -d "$(DATE)" +%s)
+STUPIDDATE := $(shell date -d "$(DATE)" +%m/%d/%Y)
+UNAME_SYSNAME := Punix
+UNAME_NODENAME := timmy
+UNAME_RELEASE := 0.08
+UNAME_VERSION := $(DATE)
+UNAME_MACHINE := m68k
+
+
 
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= -DSMALLGLYPHS= -DBUILD="${DATE}" -DREALTIME=${REALTIME}UL
+	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= \
+	-DSMALLGLYPHS= -DREALTIME=${REALTIME}UL
 
 AS	= ${TIGCC}/bin/tigcc
-ASFLAGS	= -c -Wa,--warn,-I${SYSINC},--defsym,${CALC}= #-l
+ASFLAGS	= -c -Wa,-m68881,--warn,-I${SYSINC},--defsym,${CALC}= #-l
 
 LD	= ${TIGCC}/bin/tigcc
 LDFLAGS	= --outputbin --flash-os #--optimize-branches --optimize-relocs \
@@ -37,9 +46,12 @@ OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
 OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o bogomips.o
+OBJ	+= fpuemu.o
 OBJ	+= userstart.o usermain.o
 
 #OBJ = testvectors.o
+
+TMPUNAME = uname.sysname uname.nodename uname.release uname.version uname.machine stupiddate
 
 all:	punix-9x.tib
 scratch: clean all
@@ -50,6 +62,7 @@ punix-9x.tib:	${OBJ}
 obj:	${OBJ}
 
 ${OBJ}: ${SYSINC}/globals.h ${SYSINC}/punix.h ${SYSINC}/param.h
+${TMPUNAME}: Makefile
 
 ########################################
 # source dependencies
@@ -59,7 +72,19 @@ heap.o: heap.c
 	${CC} ${CFLAGS} $< -c -o $@
 start.o: start.s
 vectors.o: vectors.s
-version.o: version.s
+version.o: version.s ${TMPUNAME}
+uname.sysname:
+	echo -n "$(UNAME_SYSNAME)" >$@
+uname.nodename:
+	echo -n "$(UNAME_NODENAME)" >$@
+uname.release:
+	echo -n "$(UNAME_RELEASE)" >$@
+uname.version:
+	echo -n "$(UNAME_VERSION)" >$@
+uname.machine:
+	echo -n "$(UNAME_MACHINE)" >$@
+stupiddate:
+	echo -n "$(STUPIDDATE)" >$@
 entry.o: entry.s ${SYSINC}/signal.inc
 drawcell.o: drawcell.s ${SYSINC}/lcd.inc
 calc.o: calc.s
@@ -123,6 +148,6 @@ glyphsets/all:
 	${MAKE} -C glyphsets all
 
 clean:
-	rm -f *.bin *.o punix-9x.tib
+	rm -f *.bin *.o punix-9x.tib ${TMPUNAME}
 	${MAKE} -C glyphsets clean
 	#${MAKE} -C ${SYSINC} clean
