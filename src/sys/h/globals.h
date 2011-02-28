@@ -13,6 +13,7 @@
 
 struct globals {
 	char exec_ram[60];
+	char fpram[8*12+3*4];
 /* old: these must be first -- referenced from assembly code */
 	struct timespec _walltime; /* old: must be first! see entry.s (Int_3) */
 	struct timespec _realtime;
