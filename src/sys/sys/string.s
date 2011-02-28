@@ -144,8 +144,7 @@ strlen_reg:
 0:		tst.b	(%a0)+
 		bne.s	0b
 	sub.l	%a0,%d0
-	neg.l	%d0
-	subq.l	#1,%d0
+	not.l	%d0		| (not x) == (-x - 1)
 	rts
 
 .global strcat
