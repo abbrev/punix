@@ -178,12 +178,14 @@ strcmp:
 	move.l	8(%a7),%a1	| s2
 strcmp_reg:
 	clr	%d0
-0:
-	move.b	(%a0)+,%d0
-	beq	9f		| '\0'?
-	sub.b	(%a1)+,%d0
-	beq	0f		| same?
-9:	ext.w	%d0
+	bra	1f
+0:	sub.b	(%a1)+,%d0
+	bne	0f		| same?
+1:	move.b	(%a0)+,%d0
+	bne	0b		| '\0'?
+
+	sub.b	(%a1),%d0
+0:	ext.w	%d0
 	rts
 
 /*
@@ -222,18 +224,19 @@ strncmp:
 	move.l	12(%sp),%d1	| n
 strncmp_reg:
 	clr	%d0
-	
+
 	tst.l	%d1
-	beq	9f
-0:
-	move.b	(%a0)+,%d0
-	beq	8f		| '\0'?
-	sub.b	(%a1)+,%d0
-	bne	8f		| same?
+	bne	1f
+	rts
+0:	sub.b	(%a1)+,%d0
+	bne	0f		| same?
 	subq	#1,%d1
-	bne	0b
-8:	ext.w	%d0
-9:	rts
+	beq	0f		| n != 0?
+1:	move.b	(%a0)+,%d0
+	bne	0b		| '\0'?
+	sub.b	(%a1),%d0
+0:	ext.w	%d0
+	rts
 
 .global strncpy	
 | char *strncpy(char *dest, const char *src, size_t n);
