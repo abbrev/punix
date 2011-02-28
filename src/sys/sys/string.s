@@ -122,12 +122,16 @@ memcmp_end:
 .global strchr
 | char *strchr(const char *s, int c);
 strchr:
-	move.l	4(%a7),%a0	| s
-	bsr.s	strlen_reg
-	move.l	4(%a7),%a0	| s
-	move.w	8(%a7),%d2	| c
-	addq.l	#1,%d0
-	bra.s	memchr_reg
+	move.l	4(%sp),%a0	| s
+	move	8(%sp),%d0	| c
+0:
+	move.b	(%a0),%d1
+	cmp.b	%d1,%d0
+	beq	1f		| *s == c?
+	tst.b	(%a0)+
+	bne	0b		| '\0'?
+	sub.l	%a0,%a0	| return NULL
+1:	rts
 
 .global strlen, strlen_reg
 | size_t strlen(const char *s);
