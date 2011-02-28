@@ -104,20 +104,20 @@ memchr_reg:
 .global memcmp, memcmp_reg
 | int memcmp(const void *s1, const void *s2, size_t count); 
 memcmp:
-	move.l	4(%a7),%a0		| s1
-	move.l	8(%a7),%a1		| s2
-	move.l	12(%a7),%d0		| count
-	beq.s	memcmp_end
+	move.l	4(%sp),%a0		| s1
+	move.l	8(%sp),%a1		| s2
+	move.l	12(%sp),%d0		| count
 memcmp_reg:
-	bra.s	1f
-0:		cmp.b	(%a1)+,(%a0)+
-1:		subq.l	#1,%d0
-		bne.s	0b
-	move.b	-(%a0),%d0
+	tst.l	%d0
+	beq	2f
+0:	cmp.b	(%a1)+,(%a0)+
+	bne	1f
+	subq.l	#1,%d0
+	bne	0b
+1:	move.b	-(%a0),%d0
 	sub.b	-(%a1),%d0
 	ext.w	%d0
-memcmp_end:
-	rts
+2:	rts
 
 .global strchr
 | char *strchr(const char *s, int c);
