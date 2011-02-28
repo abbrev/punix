@@ -287,28 +287,73 @@ strncat_reg:
 1:	rts
 
 /*
-.global strcspn
-| size_t strcspn(const char *s1, const char *s2);
-strcspn:
-	move.l	4(%sp),%a1		| S1
-	move.l	8(%sp),%d2		| S2
-\S1_Loop:
-	move.b	(%a1),%d1
-	beq.s	\S1_End
-		move.l	%d2,%a0
-		move.b	(%a0)+,%d0
-		beq.s	\S2_End
-\S2_Loop:		cmp.b	%d0,%d1
-			beq.s	\S1_End
-			move.b	(%a0)+,%d0
-			bne.s	\S2_Loop
-\S2_End:	addq.l	#1,%a1
-		bra.s	\S1_Loop
-\S1_End:
-	move.l	%a1,%d0
-	sub.l	4(%sp),%d0
+size_t strspn(const char *s1, const char *accept)
+{
+	const char *c;
+	const char *s;
+	for (s = s1; *s; ++s) {
+		c = accept;
+		while (*c)
+			if (*s == *c++) continue;
+		break;
+	}
+	return s - s1;
+}
+
+size_t strcspn(const char *s1, const char *reject)
+{
+	const char *c;
+	const char *s;
+	for (s = s1; *s; ++s) {
+		c = reject;
+		while (*c)
+			if (*s == *c++) goto out;
+	}
+out:	return s - s1;
+}
+*/
+
+.global strspn
+| size_t strspn(const char *s1, const char *accept);
+strspn:
+	move.l	4(%sp),%a0	| s1
+	move.l	8(%sp),%d1	| accept
+	
+	bra	1f
+0:		move.l	%d1,%a1		| c = accept
+3:			move.b	(%a1)+,%d2	| %d2 = *c++
+			beq	5f		| *c == '\0'?
+			cmp.b	%d2,%d0	
+			bne	3b		| *s == *c++?
+4:		addq.l	#1,%a0		| ++s
+1:		move.b	(%a0),%d0
+		bne	0b		| *s == '\0'?
+5:	move.l	%a0,%d0
+	sub.l	4(%sp),%d0	| s - s1
 	rts
 
+.global strcspn
+| size_t strcspn(const char *s1, const char *reject);
+strcspn:
+	move.l	4(%sp),%a0	| s1
+	move.l	8(%sp),%d1	| reject
+	
+	bra	1f
+0:		move.l	%d1,%a1		| c = reject
+		bra	3f
+2:			cmp.b	%d2,%d0
+			beq	5f		| *s != *c++?
+3:			move.b	(%a1)+,%d2
+			bne	2b		| *c == '\0'?
+4:		addq.l	#1,%a0		| ++s
+1:		move.b	(%a0),%d0
+		bne	0b		| *s == '\0'?
+5:	move.l	%a0,%d0
+	sub.l	4(%sp),%d0	| s - s1
+	rts
+
+
+/*
 .global strpbrk
 | char *strpbrk(const char *s1, const char *s2);
 strpbrk:
@@ -343,25 +388,6 @@ strrchr:
 		bne.s	\Loop
 	suba.l	%a0,%a0
 \Found:	rts
-
-.global strspn
-| size_t strspn(const char *s1, const char *s2);
-strspn:
-	move.l	4(%sp),%a1
-	move.l	8(%sp),%d2
-\Loop:
-		move.b	(%a1),%d1
-		beq.s	\Found
-		move.l	%d2,%a0
-\TinyLoop:		move.b	(%a0)+,%d0
-			beq.s	\Found
-			cmp.b	%d0,%d1
-			bne.s	\TinyLoop
-		addq.l	#1,%a1
-		bra.s	\Loop
-\Found	move.l	%a1,%d0
-	sub.l	4(%sp),%d0
-	rts
 
 .global strstr
 | char *strstr(const char *s1, const char *s2);
