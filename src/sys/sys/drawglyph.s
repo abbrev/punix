@@ -133,30 +133,28 @@ drawglyphinv:
 | xorcursor(int row, int col)
 | XXX: this can probably be optimized
 xorcursor:
-	move	%d3,-(%sp)
-	move	2+4(%sp),%d1	| row
-	move	2+6(%sp),%d2	| col
+	move	4(%sp),%d0	| row
+	move	6(%sp),%d1	| col
 	
 	| get address on screen
-	mulu	#6*LCD_INCY,%d1
+	mulu	#6*LCD_INCY,%d0
 	
-	move.b	#0xf0,%d3	| XOR mask XXX
-	asr	#1,%d2		| col / 2
+	move.b	#0xf0,%d2	| XOR mask XXX
+	asr	#1,%d1		| col / 2
 	bcc.s	0f		| is col even?
-	move.b	#0x0f,%d3	| XXX
+	move.b	#0x0f,%d2	| XXX
 0:
-	add	%d2,%d1		| + col
-	move	%d1,%a0
+	add	%d1,%d0		| + col
+	move	%d0,%a0
 	lea	LCD_MEM(%a0),%a0	| address on screen
 	| %a0 holds screen address
-	| %d3 holds cursor mask
+	| %d2 holds cursor mask
 	
 	moveq	#LCD_INCY,%d0
-	moveq	#6-1,%d2	| cursor height - 1
+	moveq	#6-1,%d1	| cursor height - 1
 0:
-	eor.b	%d3,(%a0)	| XOR the cursor to the screen
+	eor.b	%d2,(%a0)	| XOR the cursor to the screen
 	add	%d0,%a0		| next screen row
-	dbra	%d2,0b
+	dbra	%d1,0b
 	
-	move	(%sp)+,%d3
 	rts
