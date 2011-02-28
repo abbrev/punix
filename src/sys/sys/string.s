@@ -266,19 +266,25 @@ strncpy_reg:
 .global strncat
 | char *strncat(char *dest, const char *src, size_t n);
 strncat:
-	move.l	4(%a7),%a0	| dest
-	move.l	8(%a7),%a1	| src
-	move.l	12(%a7),%d1	| n
+	move.l	4(%sp),%a0	| dest
+	move.l	8(%sp),%a1	| src
+	move.l	12(%sp),%d0	| n
+strncat_reg:
+	tst.l	%d0
+	beq	1f
+	move.l	%a0,%d1		| save dest
 0:		tst.b	(%a0)+
-		bne.s	0b
+		bne	0b
 	subq.l	#1,%a0
-	bra.s	1f
+	| copy up to n bytes from src to dest
 0:		move.b	(%a1)+,(%a0)+
-1:		subq.l	#1,%d1
-		bne.s	0b
-	clr.b	(%a0)
-	move.l	4(%a7),%a0
-	rts
+		beq	0f	| '\0'?
+		subq.l	#1,%d0
+		bne	0b	| n == 0?
+
+	clr.b	(%a0)		| nul-terminate the string
+0:	move.l	%d1,%a0		| restore dest
+1:	rts
 
 /*
 .global strcspn
