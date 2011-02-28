@@ -155,11 +155,6 @@ TRACE:
 LINE_1010:
 	rte
 
-	.long 0xbeef100b
-| This should be a floating-point emulator
-LINE_1111:
-	rte
-
 | Scan for the hardware to know what keys are pressed 
 Int_1:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)

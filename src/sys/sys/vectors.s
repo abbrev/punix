@@ -15,7 +15,7 @@ vectors_table:
 	.long	PRIVILEGE		| 20 Privilege Violation
 	.long	TRACE			| 24 Trace
 	.long	LINE_1010		| 28 Line 1010 Emulator
-	.long	LINE_1111		| 2C Line 1111 Emulator
+	.long	fpuemu			| 2C Line 1111 Emulator
 	.word	0,0			| 30 Kernel Version / Name
 	.long	0			| 34
 	.long	0			| 38
