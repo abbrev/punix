@@ -244,14 +244,23 @@ strncmp_reg:
 .global strncpy	
 | char *strncpy(char *dest, const char *src, size_t n);
 strncpy:
-	move.l	4(%a7),%a0	| dest
-	move.l	8(%a7),%a1	| src
-	move.l	12(%a7),%d1	| n
-0:		move.b	(%a1)+,(%a0)+
-		subq.l	#1,%d1
-		bge.s	0b
-	clr.b	(%a1)
-	move.l	4(%a7),%a0	| dest
+	move.l	4(%sp),%a0	| dest
+	move.l	8(%sp),%a1	| src
+	move.l	12(%sp),%d0	| n
+strncpy_reg:
+	move.l	%a0,%d1		| save dest
+	addq.l	#1,%d0
+0:		subq	#1,%d0
+1:		beq	9f	| n == 0?
+		move.b	(%a1)+,(%a0)+
+		bne	0b	| '\0'?
+	| pad dest string with NUL bytes
+	tst.l	%d0
+	bra	1f
+0:		clr.b	(%a0)+
+		subq.l	#1,%d0
+1:		bne	0b	| n == 0?
+9:	move.l	%d1,%a0		| dest
 	rts
 
 .global strncat
