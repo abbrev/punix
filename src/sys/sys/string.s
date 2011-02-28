@@ -178,17 +178,12 @@ strcmp:
 	move.l	8(%a7),%a1	| s2
 strcmp_reg:
 	clr	%d0
-	clr	%d1
-	bra.s	1f
-0:		cmp.b	(%a0)+,%d1
-		beq.s	1f
-			move.b	-(%a0),%d0
-			sub	%d1,%d0
-			rts
-1:		move.b	(%a1)+,%d1
-		bne.s	0b
-	move.b	(%a0),%d0	
-	ext.w	%d0
+0:
+	move.b	(%a0)+,%d0
+	beq	9f		| '\0'?
+	sub.b	(%a1)+,%d0
+	beq	0f		| same?
+9:	ext.w	%d0
 	rts
 
 /*
@@ -222,22 +217,22 @@ cmpstri:
 .global strncmp
 | int strncmp(const char *s1, const char *s2, size_t n);
 strncmp:
+	move.l	4(%sp),%a0	| s1
+	move.l	8(%sp),%a1	| s2
+	move.l	12(%sp),%d1	| n
+strncmp_reg:
 	clr	%d0
-	move.l	4(%a7),%a0	| s1
-	move.l	8(%a7),%a1	| s2
-	move.l	12(%a7),%d1	| n
-	move	%d1,%d0
-	beq.s	9f
-	|subq.l	#1,%d1
-0:		move.b	(%a0)+,%d0
-		beq.s	1f	| is it '\0'?
-		sub.b	(%a1)+,%d0
-		bne.s	1f
-		subq.l	#1,%d1
-		bne.s	0b
-1:
-	sub.b	(%a1),%d0
-	ext.w	%d0
+	
+	tst.l	%d1
+	beq	9f
+0:
+	move.b	(%a0)+,%d0
+	beq	8f		| '\0'?
+	sub.b	(%a1)+,%d0
+	bne	8f		| same?
+	subq	#1,%d1
+	bne	0b
+8:	ext.w	%d0
 9:	rts
 
 .global strncpy	
