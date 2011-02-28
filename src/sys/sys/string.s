@@ -352,28 +352,40 @@ strcspn:
 	sub.l	4(%sp),%d0	| s - s1
 	rts
 
-
 /*
+char *strpbrk(const char *s1, const char *accept)
+{
+	const char *c;
+	const char *s;
+	for (s = s1; *s; ++s) {
+		for (c = accept; *c; ++c) {
+			if (*s == *c) return s;
+	}
+	return NULL;
+}
+*/
+
 .global strpbrk
-| char *strpbrk(const char *s1, const char *s2);
+| char *strpbrk(const char *s1, const char *accept)
 strpbrk:
-	move.l	4(%sp),%a0		| S1*
-\S1Loop:	moveq	#0,%d2		| %d2 = NULL
-		move.b	(%a0),%d1
-		beq.s	\Found		| Fail to find something
-		move.l	8(%a7),%a1	| S2*
-		move.b	(%a1)+,%d0	
-		beq.s	\Found		| If s2 is null, it fails too!
-\Loop2:			move.l	%a0,%d2
-			cmp.b	%d0,%d1
-			beq.s	\Found
-			move.b	(%a1)+,%d0
-			bne.s	\Loop2
-		addq.l	#1,%a0
-		bra.s	\S1Loop
-\Found:	move.l	%d2,%a0
+	move.l	4(%sp),%a0	| s1
+	move.l	8(%sp),%d2	| accept
+	
+	bra	1f
+0:		move.l	%d2,%a1
+		bra	3f
+2:			cmp.b	%d1,%d0
+			beq	4f		| *s == *c?
+3:			move.b	(%a1)+,%d1
+			bne	2b		| *c == '\0'?
+1:		move.b	(%a0)+,%d0
+		bne	0b
+	sub.l	%a0,%a0		| return NULL
+	rts
+4:	subq.l	#1,%a0		| return s
 	rts
 
+/*
 .global strrchr
 | char *strrchr(const char *str, short c);
 strrchr:
