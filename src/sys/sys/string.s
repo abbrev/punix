@@ -201,12 +201,12 @@ strcasecmp:
 		blo	1f
 		cmp.b	#'Z',%d0
 		bhi	1f
-			addq	#'a'-'A',%d0
+			add	#'a'-'A',%d0
 1:		cmp.b	#'A',%d1
 		blo	1f
 		cmp.b	#'Z',%d1
 		bhi	1f
-			addq	#'a'-'A',%d1
+			add	#'a'-'A',%d1
 1:		sub.b	%d1,%d0
 		bne	0f
 2:		move.b	(%a0)+,%d0
