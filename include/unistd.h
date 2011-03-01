@@ -230,6 +230,25 @@ int		usleep(useconds_t __useconds);
 pid_t		vfork(void);
 [Option End]
 */
+/* NB: vfork() *must* be inline assembly because returning from a function call
+ * would invalidate the stack where the return address is located, and that
+ * would have to be preserved for the parent process to return from vfork (if
+ * it were a function call).
+ */
+static inline int vfork()
+{
+	int result;
+	asm volatile("\n"
+		"	move #66,%%d0 \n"
+		"	trap #0 \n"
+		"	bcc 0f \n"
+		"	moveq #-1,%%d0 \n" /* we don't care about errno */
+		"0:	move %%d0,%0 \n"
+		: "=r"(result)
+		:
+		: "d0", "d1", "d2", "a0", "a1"); /* caller-saved registers */
+	return result;
+}
 
 ssize_t		write(int __fd, const void *__buf, size_t __nbyte);
 
