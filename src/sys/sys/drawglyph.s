@@ -151,10 +151,9 @@ xorcursor:
 	| %d2 holds cursor mask
 	
 	moveq	#LCD_INCY,%d0
-	moveq	#6-1,%d1	| cursor height - 1
-0:
+	.rept 6
 	eor.b	%d2,(%a0)	| XOR the cursor to the screen
 	add	%d0,%a0		| next screen row
-	dbra	%d1,0b
+	.endr
 	
 	rts
