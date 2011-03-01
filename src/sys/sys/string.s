@@ -191,33 +191,30 @@ strcmp_reg:
 0:	ext.w	%d0
 	rts
 
-/*
-.global cmpstri	
-| short cmpstri(const unsigned char *s1, const unsigned char *s2);
-cmpstri:
-	move.l	4(%a7),%a0
-	move.l	8(%a7),%a1
-	bra.s	2f
-0:		cmpi.b	#'A'-1,%d0
-		bls.s	1f
-		cmpi.b	#'Z',%d0
-		bhi.s	1f
-			addi.b	#'a'-'A',%d0
-1:		cmpi.b	#'A'-1,%d1
-		bls.s	1f
-		cmpi.b	#'Z',%d1
-		bhi.s	1f
-			addi.b	#'a'-'A',%d1
-1:		cmp.b	%d0,%d1
-		beq.s	2f
-			moveq	#1,%d0
-			rts
+.global strcasecmp
+| int strcasecmp(const char *s1, const char *s2);
+strcasecmp:
+	move.l	4(%sp),%a0
+	move.l	8(%sp),%a1
+	bra	2f
+0:		cmp.b	#'A',%d0
+		blo	1f
+		cmp.b	#'Z',%d0
+		bhi	1f
+			addq	#'a'-'A',%d0
+1:		cmp.b	#'A',%d1
+		blo	1f
+		cmp.b	#'Z',%d1
+		bhi	1f
+			addq	#'a'-'A',%d1
+1:		sub.b	%d1,%d0
+		bne	0f
 2:		move.b	(%a0)+,%d0
 		move.b	(%a1)+,%d1
-		bne.s	0b
-	ext.w	%d0
+		bne	0b
+0:	ext.w	%d0
 	rts
-*/
+
 
 .global strncmp
 | int strncmp(const char *s1, const char *s2, size_t n);
