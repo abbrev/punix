@@ -255,7 +255,7 @@ static void reset(struct tty *tp)
 	int i;
 	
 	G.vt.xon = 1;
-	memset((void *)LCD_MEM, 0, 3600); /* XXX constant */
+	memset((void *)LCD_MEM, 0, 120*240/8); /* XXX constant */
 #if 0
 	memset(G.vt.screen, 0, sizeof(G.vt.screen));
 #endif
@@ -597,6 +597,14 @@ static void esc_dispatch(int ch, struct tty *tp)
 	}
 }
 
+/* clear rows between top and bottom, inclusive */
+static void clearrows(int top, int bottom)
+{
+	int n = bottom - top + 1;
+	if (n <= 0) return;
+	memset(LCD_MEM+180*top, 0, 180*n);
+}
+
 static void csi_dispatch(int ch, struct tty *tp)
 {
 	/* Determine the control function to be executed from private marker,
@@ -770,15 +778,23 @@ static void csi_dispatch(int ch, struct tty *tp)
 			 * screen, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
 				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
+#if 0
 			for (r = G.vt.pos.row + 1; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
 					drawgl(&SPACEGLYPH, r, c);
+#else
+			clearrows(G.vt.pos.row + 1, WINHEIGHT-1);
+#endif
 		} else if (n == 1) {
 			/* Erase from start of the screen to the active
 			 * position, inclusive */
+#if 0
 			for (r = 0; r < G.vt.pos.row; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
 					drawgl(&SPACEGLYPH, r, c);
+#else
+			clearrows(0, G.vt.pos.row - 1);
+#endif
 			for (c = 0; c <= G.vt.pos.column; ++c)
 				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
@@ -787,9 +803,13 @@ static void csi_dispatch(int ch, struct tty *tp)
 			/* Erase all of the display -- all lines are erased,
 			 * changed to single-width, and the cursor does not
 			 * move. */
+#if 0
 			for (r = 0; r < WINHEIGHT; ++r)
 				for (c = 0; c < WINWIDTH; ++c)
 					drawgl(&SPACEGLYPH, r, c);
+#else
+			clearrows(0, WINHEIGHT - 1);
+#endif
 		}
 		break;
 	case 'K':
