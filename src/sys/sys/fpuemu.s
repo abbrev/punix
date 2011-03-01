@@ -892,9 +892,6 @@ instr_gen_fmod:
 | s{l,r}64_reg shift the 64-bit integer in %d0:%d1 (%d0 is upper 32 bits) left
 | or right by the unsigned shift amount in %d2.
 | 
-| If shift amount is below some threshold amount, the value is simply shifted
-| one bit at a time.
-| 
 | If shift amount is 32 or greater, but less than 64, value is first shifted 32
 | bits by moving one register to the other, then the remaining register is
 | shifted by the shift amount minus 32.
@@ -913,8 +910,6 @@ instr_gen_fmod:
 |
 | Shifting left is almost exactly the same.
 
-.equ SHIFT_THRESH, 5 | XXX the exact optimal value needs to be figured out
-
 | unsigned long long sr64(unsigned long long, unsigned);
 sr64:
 	move.l	(4,%sp),%d0
@@ -928,8 +923,6 @@ sr64:
 | output:
 |  %d0:%d1, shifted
 sr64_reg:
-	cmp	#SHIFT_THRESH,%d2
-	blo	8f
 	cmp	#32,%d2
 	bhs	5f
 	ror.l	%d2,%d0
@@ -960,15 +953,6 @@ sr64_reg:
 	moveq	#0,%d0
 	rts
 
-	| shift amount < threshold
-7:
-	| shift right one bit
-	lsr.l	#1,%d0
-	roxr.l	#1,%d1
-8:
-	dbra	%d2,7b
-	rts
-
 | unsigned long long sl64(unsigned long long, unsigned);
 sl64:
 	move.l	(4,%sp),%d0
@@ -982,8 +966,6 @@ sl64:
 | output:
 |  %d0:%d1, shifted
 sl64_reg:
-	cmp	#SHIFT_THRESH,%d2
-	blo	8f
 	cmp	#32,%d2
 	bhs	5f
 	rol.l	%d2,%d1
@@ -991,6 +973,7 @@ sl64_reg:
 	
 	move.l	%d3,-(%sp)
 	
+	.if 0
 	| compute masks
 	moveq	#-1,%d3		| mask
 	lsl.l	%d2,%d3		| 11..00 (upper bits)
@@ -1000,6 +983,19 @@ sl64_reg:
 	and.l	%d1,%d2		| only lower bits from %d1
 	or.l	%d2,%d0		| put lower bits from %d1 into %d0
 	and.l	%d3,%d1		| clear lower bits in %d1
+	.else
+	| awesome optimized code from Samuel Stearley (thanks man!)
+	| TODO: adapt this for sr64
+
+	| compute masks
+	moveq   #-1,%d3
+	bclr.l  %d2,%d3
+	addq.l  #1,%d3     | 11..00 (upper bits)
+
+	eor.l  %d1,%d0     | fill in the lower bits and perturb the upper bits
+	and.l  %d3,%d1     | clear the lower bits
+	eor.l  %d1,%d0     | un-perturb the upper bits.
+	.endif
 	
 	move.l	(%sp)+,%d3
 	rts
@@ -1018,15 +1014,6 @@ sl64_reg:
 6:
 	moveq.l	#0,%d0
 	move.l	%d0,%d1
-	rts
-
-	| shift amount < threshold
-7:
-	| shift left one bit
-	lsl.l	#1,%d1
-	roxl.l	#1,%d0
-8:
-	dbra	%d2,7b
 	rts
 
 	.if 0
