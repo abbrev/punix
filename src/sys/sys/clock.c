@@ -68,7 +68,7 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	do {
 		c2[1] = c2[0];
 		--c2;
-	while (c2 >= c1);
+	} while (c2 >= c1);
 	
 	c1->c_dtime = t;
 	c1->c_func = func;
