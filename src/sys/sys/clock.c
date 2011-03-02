@@ -34,6 +34,7 @@
 /*
  * This arranges for func(arg) to be called in time/HZ seconds.
  * The callout array is sorted in order of times as a delta list.
+ * End of the callout array is marked with a sentinel entry (c_func == NULL).
  */
 STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 {
@@ -51,22 +52,23 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 		++c1;
 	}
 	
-	if (c1 >= &G.callout[NCALL-1])
+	c2 = c1;
+	
+	/* find the sentinel (NULL entry) */
+	while (c2->c_func != NULL)
+		++c2;
+	
+	/* any room to put this new entry? */
+	if (c2 >= &G.callout[NCALL-1])
 		return -1;
 	
 	c1->c_dtime -= t;
-	c2 = c1;
-	
-	/* find the last callout entry */
-	while (c2->c_func != NULL)
-		++c2;
-	c2[1].c_func = NULL;
 	
 	/* move entries upward to make room for this new entry */
-	while (c2 >= c1) {
+	do {
 		c2[1] = c2[0];
 		--c2;
-	}
+	while (c2 >= c1);
 	
 	c1->c_dtime = t;
 	c1->c_func = func;
