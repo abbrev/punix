@@ -76,7 +76,6 @@ STARTUP(void trace())
 
 STARTUP(void hardclock(unsigned short ps))
 {
-	struct callout *c1, *c2;
 	int itimerdecr(struct itimerspec *itp, long nsec);
 	int sig;
 	int whereami;
@@ -191,13 +190,13 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	if (G.callout[0].c_dtime <= 0) {
 		int t = 0;
-		c2 = &G.callout[0];
-		while (c2->c_func != NULL && t <= 0) {
+		struct callout *c1, *c2;
+		c1 = c2 = &G.callout[0];
+		do {
 			c2->c_func(c2->c_arg);
 			++c2;
 			t += c2->c_dtime;
-		}
-		c1 = &G.callout[0];
+		} while (c2->c_func != NULL && t <= 0);
 		do
 			*c1 = *c2++;
 		while (c1++->c_func);
