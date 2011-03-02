@@ -31,27 +31,6 @@
 #include "callout.h"
 #include "globals.h"
 
-STARTUP(long hzto(struct timespec *tv))
-{
-	long ticks;
-	struct timespec diff;
-	struct timespec rt;
-	int x = splclock();
-	
-	getrealtime(&rt);
-	timespecsub(tv, &rt, &diff);
-	
-	if (diff.tv_sec < 0)
-		ticks = 0;
-	if ((diff.tv_sec + 1) <= LONG_MAX / HZ)
-		ticks = diff.tv_sec * HZ + diff.tv_nsec / TICK;
-	else
-		ticks = LONG_MAX;
-	
-	splx(x);
-	return ticks;
-}
-
 /*
  * This arranges for func(arg) to be called in time/HZ seconds.
  * The callout array is sorted in order of times as a delta list.

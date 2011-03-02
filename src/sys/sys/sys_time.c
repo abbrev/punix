@@ -2,8 +2,10 @@
 #include <sys/time.h>
 #include <sys/times.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <utime.h>
+#include <stdlib.h>
 
 #include "punix.h"
 #include "param.h"
@@ -62,7 +64,7 @@ STARTUP(void timespecsub(struct timespec *a, struct timespec *b, struct timespec
 {
 	res->tv_sec = a->tv_sec - b->tv_sec;
 	res->tv_nsec = a->tv_nsec - b->tv_nsec;
-	if (res->tv_nsec < 0) {
+	while (res->tv_nsec < 0) {
 		res->tv_nsec += SECOND;
 		--res->tv_sec;
 	}
@@ -200,7 +202,26 @@ STARTUP(static int itimerfix(struct timespec *tv))
 	return 0;
 }
 
-long hzto(struct timespec *tv);
+STARTUP(long hzto(struct timespec *tv))
+{
+	long ticks;
+	struct timespec diff;
+	struct timespec rt;
+	int x = splclock();
+	
+	getrealtime(&rt);
+	timespecsub(tv, &rt, &diff);
+	
+	if (diff.tv_sec < 0)
+		ticks = 0;
+	else if ((diff.tv_sec + 1) <= LONG_MAX / HZ)
+		ticks = diff.tv_sec * HZ + diff.tv_nsec / TICK;
+	else
+		ticks = LONG_MAX;
+	
+	splx(x);
+	return ticks;
+}
 
 STARTUP(void realitexpire(void *vp))
 {
