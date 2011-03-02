@@ -184,30 +184,6 @@ _env:	.long	_env0
 	.long	0		| NULL
 
 .even
-.macro mkstart name
-.global start_\name
-start_\name:
-	move	(%sp),%d0		| argc
-	lea	2(%sp),%a0		| argv
-	move	%d0,%d1
-	mulu	#4,%d1
-	lea	6(%sp,%d1.w),%a1	| env
-	
-	move.l	%a1,-(%sp)	| char **env
-	move.l	%a0,-(%sp)	| char **argv
-	move	%d0,-(%sp)	| int argc
-	jbsr	main_\name	| main_\name(argc, argv, env)
-	
-	move	%d0,-(%sp)
-	bsr	_exit
-	bra	.
-.endm
-
-mkstart	init
-mkstart	top
-mkstart	usertest
-
-.even
 InstallVectors:
 	bclr.b	#2,0x600001		| unprotect vector table
 	| Copy org Vectors
