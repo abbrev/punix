@@ -52,12 +52,12 @@ STARTUP(void kmain())
 	flashinit();
 	batt_check();
 	
-#if 1
+#if 0
 	kprintf("%s build %s\n", uname_sysname, uname_version);
 #else
 	kprintf("%s v%s\n", uname_sysname, uname_release);
 	kputs(
-	 "Copyright 2005-2008 Christopher Williams <abbrev@gmail.com>\n"
+	 "Copyright 2005-2011 Christopher Williams <abbrev@gmail.com>\n"
 	 "Some portions copyright 2003, 2005 PpHd\n"
 	 "\n"
 	 "This program comes with ABSOLUTELY NO WARRANTY.\n"
