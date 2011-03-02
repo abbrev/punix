@@ -50,24 +50,30 @@ expire:
 	return 0;
 }
 
+static inline void normalize_timespec(struct timespec *a)
+{
+	while (a->tv_nsec < 0) {
+		a->tv_nsec += SECOND;
+		--a->tv_sec;
+	}
+	while (a->tv_nsec >= SECOND) {
+		a->tv_nsec -= SECOND;
+		++a->tv_sec;
+	}
+}
+
 STARTUP(void timespecadd(struct timespec *a, struct timespec *b, struct timespec *res))
 {
 	res->tv_sec = a->tv_sec + b->tv_sec;
 	res->tv_nsec = a->tv_nsec + b->tv_nsec;
-	if (res->tv_nsec >= SECOND) {
-		res->tv_nsec -= SECOND;
-		++res->tv_sec;
-	}
+	normalize_timespec(res);
 }
 
 STARTUP(void timespecsub(struct timespec *a, struct timespec *b, struct timespec *res))
 {
 	res->tv_sec = a->tv_sec - b->tv_sec;
 	res->tv_nsec = a->tv_nsec - b->tv_nsec;
-	while (res->tv_nsec < 0) {
-		res->tv_nsec += SECOND;
-		--res->tv_sec;
-	}
+	normalize_timespec(res);
 }
 
 STARTUP(void timeradd(struct timeval *a, struct timeval *b, struct timeval *res))
@@ -126,6 +132,7 @@ void getrealtime(struct timespec *tsp)
 	}
 	wt.tv_nsec = (t - wt.tv_nsec) % HZ;
 	wt.tv_nsec = wt.tv_nsec * TICK + G.rt.incr;
+	normalize_timespec(&wt);
 	timespecadd(&wt, &offset, tsp);
 }
 
