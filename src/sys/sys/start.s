@@ -52,7 +52,7 @@ the_beginning:
 	dbra	%d1,.
 .ifndef	TI89
 	btst.b	#0x2,(%a5)		| Batts are below the lowest level?
-	beq.s	0f			| FIXME: bne ?
+	beq	0f			| FIXME: bne ?
 .endif
 		move.b	%d0,(%a5)		| Do not set Pin100 
 0:

@@ -23,7 +23,7 @@ putc:
 	
 	move.l	6+2(%sp),%a0	/* qp */
 	cmp	#QSIZE,q_count(%a0)
-	beq.s	8f
+	beq	8f
 	
 	move	6+0(%sp),%d0	/* ch */
 	move	q_head(%a0),%d1
@@ -38,7 +38,7 @@ putc:
 9:	move	(%sp)+,%sr
 	rts
 8:	moveq	#-1,%d0
-	bra.s	9b
+	bra	9b
 
 /* int unputc(struct queue *qp); */
 	.global	unputc
@@ -48,7 +48,7 @@ unputc:
 	
 	move.l	6+0(%sp),%a0
 	tst	q_count(%a0)
-	beq.s	8f
+	beq	8f
 	
 	
 	move	q_head(%a0),%d1
@@ -63,7 +63,7 @@ unputc:
 9:	move	(%sp)+,%sr
 	rts
 8:	moveq	#-1,%d0
-	bra.s	9b
+	bra	9b
 
 /* int getc(struct queue *qp); */
 	.global	getc
@@ -73,7 +73,7 @@ getc:
 	
 	move.l	6+0(%sp),%a0
 	tst	q_count(%a0)
-	beq.s	8f
+	beq	8f
 	
 	
 	move	q_tail(%a0),%d1
@@ -88,7 +88,7 @@ getc:
 9:	move	(%sp)+,%sr
 	rts
 8:	moveq	#-1,%d0
-	bra.s	9b
+	bra	9b
 
 /* int ungetc(int ch, struct queue *qp); */
 	.global	ungetc
@@ -98,7 +98,7 @@ ungetc:
 	
 	move.l	6+2(%sp),%a0	/* qp */
 	cmp	#QSIZE,q_count(%a0)
-	beq.s	8f
+	beq	8f
 	
 	move	6+0(%sp),%d0	/* ch */
 	move	q_tail(%a0),%d1
@@ -113,5 +113,5 @@ ungetc:
 9:	move	(%sp)+,%sr
 	rts
 8:	moveq	#-1,%d0
-	bra.s	9b
+	bra	9b
 

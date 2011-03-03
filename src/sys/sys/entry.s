@@ -78,19 +78,19 @@
 buserr:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	bus_error
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1002
 SPURIOUS:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	spurious
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1003
 ADDRESS_ERROR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	address_error
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1004
 ILLEGAL_INSTR:
@@ -98,7 +98,7 @@ ILLEGAL_INSTR:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	illegal_instr
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1005
 | send signal SIGFPE
@@ -114,7 +114,7 @@ ZERO_DIVIDE:
 	
 	bsr	zero_divide
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1006
 CHK_INSTR:
@@ -122,7 +122,7 @@ CHK_INSTR:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	chk_instr
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1007
 I_TRAPV:
@@ -130,7 +130,7 @@ I_TRAPV:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	i_trapv
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1008
 | send signal SIGILL
@@ -139,7 +139,7 @@ PRIVILEGE:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	privilege
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef1009
 TRACE:
@@ -147,7 +147,7 @@ TRACE:
 	move.l	5*4+2(%sp),-(%sp)
 	bsr	trace
 	addq.l	#4,%sp
-	bra.s	trapret
+	bra	trapret
 
 	.long 0xbeef100a
 | I don't know (send signal SIGILL?)

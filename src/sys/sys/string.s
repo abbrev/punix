@@ -41,11 +41,11 @@ memcpy:
 	move.l	4(%a7),%a0	| dest
 	move.l	8(%a7),%a1	| src
 	move.l	12(%a7),%d0	| count
-	beq.s	memend
+	beq	memend
 memcpy_reg:
 0:		move.b	(%a1)+,(%a0)+
 		subq.l	#1,%d0
-		bne.s	0b
+		bne	0b
 memend:	move.l	4(%a7),%a0
 	rts
 
@@ -56,21 +56,21 @@ memmove:
 	move.l	4(%a7),%a0	| dest
 	move.l	8(%a7),%a1	| src
 	move.l	12(%a7),%d0	| count
-	beq.s	memend
+	beq	memend
 memmove_reg:
 	cmp.l	%a0,%a1		| Src <= dest
-	bls.s	1f
+	bls	1f
 0:		move.b	(%a1)+,(%a0)+
 		subq.l	#1,%d0
-		bne.s	0b
-	bra.s	memend
+		bne	0b
+	bra	memend
 1:
 	add.l	%d0,%a0
 	add.l	%d0,%a1
 0:		move.b	-(%a1),-(%a0)
 		subq.l	#1,%d0
-		bne.s	0b
-	bra.s	memend
+		bne	0b
+	bra	memend
 
 .global memset
 | void *memset(void *s, int c, size_t count);
@@ -78,11 +78,11 @@ memset:
 	move.l	4(%a7),%a0	| s
 	move.b	9(%a7),%d2	| c
 	move.l	10(%a7),%d0	| count
-	beq.s	memend
+	beq	memend
 0:		move.b	%d2,(%a0)+
 		subq.l	#1,%d0
-		bne.s	0b
-	bra.s	memend
+		bne	0b
+	bra	memend
 
 .global memchr, memchr_reg
 | void *memchr(const void *s, int c, size_t n); 
@@ -91,13 +91,13 @@ memchr:
 	move.b	9(%a7),%d2	| c
 	move.l	10(%a7),%d0	| n
 memchr_reg:
-	beq.s	9f
-	bra.s	1f
+	beq	9f
+	bra	1f
 0:		cmp.b	(%a0)+,%d2
 1:		subq.l	#1,%d0
-		bne.s	0b
+		bne	0b
 	subq.l	#1,%a0
-	beq.s	1f
+	beq	1f
 9:	suba.l	%a0,%a0		| is this quicker/smaller than "clr.l %a0"?
 1:	rts
 
@@ -142,7 +142,7 @@ strlen:
 strlen_reg:
 	move.l	%a0,%d0
 0:		tst.b	(%a0)+
-		bne.s	0b
+		bne	0b
 	sub.l	%a0,%d0
 	not.l	%d0		| (not x) == (-x - 1)
 	rts
@@ -154,10 +154,10 @@ strcat:
 	move.l	8(%a7),%a1	| src
 	move.l	%a0,%d0
 0:		tst.b	(%a0)+
-		bne.s	0b
+		bne	0b
 	subq.l	#1,%a0
 0:		move.b	(%a1)+,(%a0)+
-		bne.s	0b
+		bne	0b
 	move.l	%d0,%a0
 	rts
 
@@ -169,7 +169,7 @@ strcpy:
 strcpy_reg:
 	move.l	%a0,%d0
 0:		move.b	(%a1)+,(%a0)+
-		bne.s	0b
+		bne	0b
 	move.l	%d0,%a0
 	rts
 

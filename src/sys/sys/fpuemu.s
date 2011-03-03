@@ -1477,24 +1477,24 @@ ftstp:
 
 ftstb:
 	move.b	(%a3),%d3
-	bra.s	2f
+	bra	2f
 ftstw:
 	move.w	(%a3),%d3
-	bra.s	1f
+	bra	1f
 ftstl:
 	move.l	(%a3),%d3
-	bra.s	0f
+	bra	0f
 2:	ext.w	%d3
 1:	ext.l	%d3
 0:	
 	| test for zero
 	tst.l	%d3
-	beq.s	1f
+	beq	1f
 	| it's not zero
-	bpl.s	9f
+	bpl	9f
 	| it's negative
 	bset	#FPCC_N_BIT,%d2
-	bra.s	9f
+	bra	9f
 1:	| it's zero
 	bset	#FPCC_Z_BIT,%d2
 9:	| write to fpsrcc and return
@@ -1551,11 +1551,11 @@ ftsts:
 	| it's infinity or nan
 	move.l	(%a3),%d3
 	and.l	#0x007fffff,%d3		| fraction field
-	bra.s	6f
+	bra	6f
 1:	| it's in range; test for zero
 	move.l	(%a3),%d3
 	and.l	#0x007fffff,%d3		| fraction field
-	bra.s	5f
+	bra	5f
 ftstd:
 	| test for infinity/nan/zero for double-precision here
 	move	(%a3),%d3
@@ -1566,14 +1566,14 @@ ftstd:
 	move.l	(%a3),%d3
 	and.l	#0x000fffff,%d3		| upper 20 bits of fraction
 	or.l	(4,%a3),%d3		| lower 32 bits of fraction
-	bra.s	6f
+	bra	6f
 1:	| it's in range; test for zero
 	move.l	(%a3),%d3
 	and.l	#0x000fffff,%d3		| upper 20 bits of fraction
 	or.l	(4,%a3),%d3		| lower 32 bits of fraction
 
 	| float is in range (common for all float types)
-5:	bne.s	0f
+5:	bne	0f
 	bset	#FPCC_Z_BIT,%d2
 	| test for negative
 0:	move	(%a3),%d3
@@ -1585,12 +1585,12 @@ ftstd:
 	rts
 
 6:	| float is inf or nan (common for all float types)
-	bne.s	1f
+	bne	1f
 	bset	#FPCC_I_BIT,%d2
 	bra	0b	| test for negative
 1:	bset	#FPCC_NAN_BIT,%d2
 	| set SNAN in fpsrexc byte if this is a signaling NAN 
-	bra.s	0b	| test for negative
+	bra	0b	| test for negative
 
 instr_gen_invalid:
 	rts
@@ -1974,7 +1974,7 @@ instr_scc:
 	sub	#1,(%a1)
 	.if 1
 	cmp	#-1,(%a1)
-	beq.s	1f
+	beq	1f
 	.else
 	bvs	1f	| -1 => overflow (FIXME: is this the correct condition?)
 	.endif
@@ -1993,7 +1993,7 @@ instr_scc:
 instr_bcc:
 	move	%d7,%d0
 	and	#0x0040,%d0	| size field
-	bne.s	0f
+	bne	0f
 	move.w	(%a5)+,%d3	| branch displacement
 	sub	#2,%d3
 	ext.l	%d3

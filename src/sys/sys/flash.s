@@ -37,18 +37,18 @@ FlashWrite:
 	| We don't check the stack, but we don't use it
 	| Check if %a2 is in RAM
 	cmp.l	#0x3FFFF,%a2
-	bhi.s	error
+	bhi	error
 	move.l	%a2,%d0
 	andi.w	#1,%d0
-	bne.s	error		| Not aligned
+	bne	error		| Not aligned
 	| Check if %a3 is in Archive Memory
 	cmp.l	#archive_end-1,%a3
-	bhi.s	error
+	bhi	error
 	cmp.l	#archive-1,%a3
-	bls.s	error
+	bls	error
 	move.l	%a3,%d0
 	andi.w	#1,%d0
-	bne.s	error		| Not aligned
+	bne	error		| Not aligned
 	| Check if %a3+%d3 is in the same block of memory
 	addq.l	#1,%d3		| Word alignement (Long +1
 	andi.w	#0xFFFE,%d3	| Clear low bit (does word instead of long)
@@ -58,11 +58,11 @@ FlashWrite:
 	swap	%d0
 	swap	%d1
 	cmp.w	%d0,%d1
-	bne.s	error
+	bne	error
 	| Check if %a2+%d3 is in RAM
 	lea	-1(%a2,%d3.l),%a4
 	cmp.l	#0x3FFFF,%a4
-	bhi.s	error
+	bhi	error
 	
 	bsr	disableProtection
 	
@@ -97,7 +97,7 @@ error:
 |	%d3 = Len in words 
 FlashWrite_ExecuteInRam:
 	subq.w	#1,%d3			| Because of Dbf
-	blt.s	9f
+	blt	9f
 	move.l	%a3,%a4			| A4 = Command register
 	move.w	#0x5050,(%a4)		| Clear Status Register
 0:		move.w	(%a2)+,%d4	| Read value to write
@@ -105,7 +105,7 @@ FlashWrite_ExecuteInRam:
 		move.w	%d4,(%a3)+	| Write word
 1:			move.w	(%a4),%d0	| Check it
 			btst	#7,%d0
-			beq.s	1b	| and wait that's done
+			beq	1b	| and wait that's done
 		dbra	%d3,0b
 	move.w	#0x5050,(%a4)
 	move.w	#0xFFFF,(%a4)	| Read Memory
@@ -123,14 +123,14 @@ FlashErase:
 	| Check Batt
 	bsr	BatTooLowFlash
 	tst.b	%d0
-	bne.s	error
+	bne	error
 	
 	| We don't check the stack, but we don't use it
 	| Check if %a2 is in Archive Memory
 	cmp.l	#archive_end-1,%a2
-	bhi.s	error
+	bhi	error
 	cmp.l	#archive-1,%a2
-	bls.s	error
+	bls	error
 	
 	bsr	disableProtection
 	
@@ -153,7 +153,7 @@ FlashErase_ExecuteInRam:
 	move.w	#0xD0D0,(%a2)	| Erase Confirm
 0:		move.w	(%a2),%d0
 		btst	#7,%d0
-		beq.s	0b
+		beq	0b
 	move.w	#0x5050,(%a2)
 	move.w	#0xFFFF,(%a2)	| Read Memory
 	rts

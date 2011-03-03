@@ -21,7 +21,7 @@ cpuidle:
 delay:
 	move.l	4(%sp),%d0
 0:	subq.l	#1,%d0
-	bne.s	0b
+	bne	0b
 	rts
 
 | int backtrace(void **buffer, int size);

@@ -36,7 +36,7 @@ drawglyph:
 	move.b	#0xf0,%d3	| AND mask for glyph
 	moveq	#0x0f,%d4	| AND mask for screen
 	asr	#1,%d2		| col / 2
-	bcc.s	0f		| is col even?
+	bcc	0f		| is col even?
 	exg	%d3,%d4
 0:
 	add	%d2,%d1		| + col
@@ -90,7 +90,7 @@ drawglyphinv:
 	
 	move.b	#0xf0,%d3	| AND mask for glyph and the OR mask for screen
 	asr	#1,%d2		| col / 2
-	bcc.s	0f		| is col even?
+	bcc	0f		| is col even?
 	moveq	#0x0f,%d3
 0:
 	add	%d2,%d1		| + col
@@ -141,7 +141,7 @@ xorcursor:
 	
 	move.b	#0xf0,%d2	| XOR mask XXX
 	asr	#1,%d1		| col / 2
-	bcc.s	0f		| is col even?
+	bcc	0f		| is col even?
 	move.b	#0x0f,%d2	| XXX
 0:
 	add	%d1,%d0		| + col

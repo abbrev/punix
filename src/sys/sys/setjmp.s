@@ -23,7 +23,7 @@ longjmp:
 	move.l	4(%sp),%a0		| get env
 	
 	move	8(%sp),%d0
-	bne.s	0f
+	bne	0f
 	move	#1,%d0			| cannot return 0 (reserved for setjmp)
 	
 0:	movem.l	(%a0)+,%d3-%d7/%a1-%a7	| restore %d3-%d7/%a2-%a7 and %usp

@@ -8,7 +8,7 @@
 .global scrolldown
 scrolldown:
 	move	4(%sp),%d1
-	beq.s	9f
+	beq	9f
 	
 	mulu	#LCD_INCY*6,%d1
 	lea.l	LCD_MEM,%a0	| dest
@@ -33,7 +33,7 @@ scrolldown:
 .global scrollup
 scrollup:
 	move	4(%sp),%d1
-	beq.s	9f
+	beq	9f
 	
 	mulu	#LCD_INCY*6,%d1
 	lea.l	LCD_MEM,%a1	| src

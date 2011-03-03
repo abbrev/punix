@@ -54,12 +54,12 @@ __mulsi3:
 |	%d1.l = %d1 % %d0
 _ms16u16:
 	ext.l	%d1
-	bpl.s	ms16u16_sup
+	bpl	ms16u16_sup
 		neg.l	%d1
 		divu	%d0,%d1
 		swap	%d1
 _dm16end2:	neg.w	%d1
-		bra.s	_dm16end
+		bra	_dm16end
 ms16u16_sup:	
 	divu	%d0,%d1
 	swap	%d1
@@ -74,12 +74,12 @@ _dm16end:
 |	%d1.l = %d1/%d0
 _ds16u16:
 	ext.l	%d1
-	bpl.s	0f
+	bpl	0f
 		neg.l	%d1
 		divu	%d0,%d1
-		bra.s	_dm16end2
+		bra	_dm16end2
 0:	divu	%d0,%d1
-	bra.s	_dm16end
+	bra	_dm16end
 
 | In:
 |	%d1.w = unsigned int
@@ -147,8 +147,8 @@ __divsi3:
 ms32s32_negd0:
 	neg.l	%d0
 	tst.l	%d1
-	blt.s	ms32s32_negd1
-	bra.s	_mu32u32
+	blt	ms32s32_negd1
+	bra	_mu32u32
 
 | In:
 |	%d1.l = long
@@ -159,14 +159,14 @@ ms32s32_negd0:
 |	%d0-%d2/%a0-%a1
 _ms32s32:
 	tst.l	%d0
-	beq.s	ds32s32_divby0
-	blt.s	ms32s32_negd0
+	beq	ds32s32_divby0
+	blt	ms32s32_negd0
 	tst.l	%d1
-	bge.s	_mu32u32
+	bge	_mu32u32
 ms32s32_negd1:
 	neg.l	%d1
 ms32s32_oneneg:
-	bsr.s	_du32u32
+	bsr	_du32u32
 	move.l	%d2,%d1
 	neg.l	%d1
 	rts
@@ -175,15 +175,15 @@ ms32s32_oneneg:
 ds32s32_negd0:
 	neg.l	%d0
 	tst.l	%d1
-	bgt.s	ds32s32_oneneg
+	bgt	ds32s32_oneneg
 	neg.l	%d1
-	bra.s	_du32u32
+	bra	_du32u32
 
 | Here %d0 > 0 and %d1 < 0
 ds32s32_negd1:
 	neg.l	%d1
 ds32s32_oneneg:
-	bsr.s	_du32u32
+	bsr	_du32u32
 	neg.l	%d1
 	rts
 
@@ -195,7 +195,7 @@ ds32s32_oneneg:
 | Destroy:
 |	%d0-%d2/%a0-%a1
 _mu32u32:
-	bsr.s	_du32u32
+	bsr	_du32u32
 	move.l	%d2,%d1
 	rts
 
@@ -210,10 +210,10 @@ ds32s32_divby0:	divu.w	#0,%d1
 |	%d0-%d2/%a0-%a1
 _ds32s32:
 	tst.l	%d0
-	beq.s	ds32s32_divby0
-	blt.s	ds32s32_negd0
+	beq	ds32s32_divby0
+	blt	ds32s32_negd0
 	tst.l	%d1
-	blt.s	ds32s32_negd1
+	blt	ds32s32_negd1
 
 | In:
 |	%d1.l = unsigned long
@@ -226,8 +226,8 @@ _ds32s32:
 _du32u32:
 	| First check if %d0 >= %d1
 	cmp.l	%d1,%d0
-	bcs.s	1f
-		beq.s	0f
+	bcs	1f
+		beq	0f
 		move.l	%d1,%d2
 		moveq	#0,%d1
 		rts
@@ -238,11 +238,11 @@ _du32u32:
 	| Check if HIGH 16 bits of denominator if NULL
 	swap	%d0
 	tst.w	%d0
-	bne.s	1f
+	bne	1f
 		| High 16 bits of %d0 are null
 		swap	%d0
 		divu	%d0,%d1
-		bvs.s	0f
+		bvs	0f
 			| No overflow! Fantastic!
 			moveq	#0,%d2
 			move.w	%d1,%d2	| %d2=quotient
@@ -286,7 +286,7 @@ _du32u32:
 	moveq	#8,%d3
 	move.w	%d0,%d5
 	cmp.w	#0xff,%d5
-	bls.s	0f
+	bls	0f
 		lsr.w	#8,%d5
 		moveq	#0,%d3
 0:	add.b	CountLeadingZerosTable(%pc,%d5.w),%d3
@@ -296,12 +296,12 @@ _du32u32:
 		move.l	%d2,%d5
 		swap	%d5
 		cmp.w	#0xff,%d5
-		bls.s	0f
+		bls	0f
 			lsr.w	#8,%d5
 			moveq	#0,%d4
 0:		add.b	CountLeadingZerosTable(%pc,%d5.w),%d4
 		sub.w	%d3,%d4	| %d3 > %d4
-		beq.s	0f
+		beq	0f
 			addq.w	#1,%d4
 			neg.w	%d4	| %d4 = MAX (((32-lead(A))-(32-lead(B))-1), 0)
 0:
@@ -312,7 +312,7 @@ _du32u32:
 		lsl.l	%d4,%d5
 		sub.l	%d5,%d2
 		cmp.l	%d2,%d0
-		bls.s	1b
+		bls	1b
 	movem.l	(%a7)+,%d3-%d5
 	rts
 
