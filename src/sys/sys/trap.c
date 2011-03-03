@@ -22,6 +22,8 @@ STARTUP(void spurious())
 
 STARTUP(void address_error())
 {
+	panic("address error");
+	psignal(&P, SIGBUS);
 }
 
 STARTUP(void illegal_instr())
