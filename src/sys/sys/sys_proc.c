@@ -127,13 +127,21 @@ void sys_execve()
 	int argc, envc;
 	
 	/* XXX */
-	void start_init(), start_top(), start_usertest();
+	void start_init(), start_bittybox();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = start_init;
-	else if (!strcmp(pathname, "top"))
-		text = start_top;
-	else if (!strcmp(pathname, "usertest"))
-		text = start_usertest;
+	else if (!strcmp(pathname, "cat") ||
+	         !strcmp(pathname, "top") ||
+	         !strcmp(pathname, "false") ||
+	         !strcmp(pathname, "true") ||
+	         !strcmp(pathname, "clear") ||
+	         !strcmp(pathname, "uname") ||
+	         !strcmp(pathname, "id") ||
+	         !strcmp(pathname, "batt") ||
+	         !strcmp(pathname, "date") ||
+	         !strcmp(pathname, "adjtime") ||
+	         !strcmp(pathname, "sh"))
+		text = start_bittybox;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;
@@ -163,7 +171,7 @@ void sys_execve()
 		goto error_ustack;
 	}
 	ustack += ustacksize;
-	kprintf("execve(): ustack=%08lx\n", ustack);
+	//kprintf("execve(): ustack=%08lx\n", ustack);
 	
 	/* allocate the data section */
 	datasize = UDATASIZE;
@@ -172,7 +180,7 @@ void sys_execve()
 		P.p_error = ENOMEM;
 		goto error_data;
 	}
-	kprintf("execve():   data=%08lx\n", data);
+	//kprintf("execve():   data=%08lx\n", data);
 	//printheaplist();
 	
 	size = (size + 1) & ~1; /* size must be even */

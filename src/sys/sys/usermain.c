@@ -57,11 +57,12 @@ int printf(const char *format, ...);
 int putchar(int);
 //size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 //int fflush(FILE *stream);
-int vfork(void);
+//int vfork(void);
 int adjtime(const struct timeval *delta, struct timeval *olddelta);
 
 /* simple implementations of some C standard library functions */
 void *kmalloc(size_t *size);
+void kfree(void *ptr);
 
 void *malloc(size_t size)
 {
@@ -84,7 +85,6 @@ void *calloc(size_t nelem, size_t elsize)
 
 void free(void *ptr)
 {
-	void kfree(void *ptr);
 	kfree(ptr);
 }
 
@@ -167,10 +167,10 @@ struct tm *localtime_r(const time_t *timep, struct tm *result)
        time_t mktime(struct tm *tm);
 #endif
 
-static const char _wtab[7][4] = {
+static const char _wtab[7][3] = {
 	"Sun","Mon","Tue","Wed","Thu","Fri","Sat"
 };
-static const char _mtab[12][4] = {
+static const char _mtab[12][3] = {
 	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 };
@@ -217,97 +217,9 @@ static void cleareol()
 	printf(ESC "[K");
 }
 
-static void updatetop()
+static void clear()
 {
-	int getloadavg1(long loadavg[], int nelem);
-	struct timeval tv;
-	struct timeval difftime;
-	long la[3];
-	int day, hour, minute, second;
-	long msec;
-	long umsec, smsec;
-	long t;
-	int i;
-	int ucpu = 42;
-	int scpu = 31;
-	struct rusage rusage;
-	struct timeval ptime;
-	struct timeval diffutime;
-	struct timeval diffstime;
-	
-	getrusage(RUSAGE_SELF, &rusage);
-	gettimeofday(&tv, NULL);
-	
-	if (G.lasttime.tv_sec != 0 || G.lasttime.tv_usec != 0) {
-		timersub(&tv, &G.lasttime, &difftime);
-		timersub(&rusage.ru_utime, &G.lastrusage.ru_utime, &diffutime);
-		timersub(&rusage.ru_stime, &G.lastrusage.ru_stime, &diffstime);
-		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
-		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
-		if (msec == 0) return;
-		umsec = diffutime.tv_sec * 1000L + diffutime.tv_usec / 1000;
-		smsec = diffstime.tv_sec * 1000L + diffstime.tv_usec / 1000;
-		ucpu = (1000L * umsec + 500) / msec;
-		scpu = (1000L * smsec + 500) / msec;
-		getloadavg1(la, 3);
-		
-		/* line 1 */
-		t = tv.tv_sec - 25200; /* -7 hours */
-		second = t % 60; t /= 60;
-		minute = t % 60; t /= 60;
-		hour = t % 24;   t /= 24;
-		day = t;
-		printf(ESC "[H" "%02d:%02d:%02d up ",
-		       hour, minute, second);
-		t = uptime.tv_sec;
-		second = t % 60; t /= 60;
-		minute = t % 60; t /= 60;
-		hour = t % 24;   t /= 24;
-		day = t;
-		if (day) {
-			printf("%d+", day);
-		}
-		printf("%02d:%02d, 1 user, load:", hour, minute);
-		for (i = 0; i < 3; ++i) {
-			if (i > 0) putchar(',');
-			printf(" %ld.%02ld", la[i] >> 16,
-			       (100 * la[i] >> 16) % 100);
-		}
-		cleareol();
-		/* line 2 */
-		printf("\nTasks: 1 total, 1 run, 0 slp, 0 stop, 0 zomb");
-		cleareol();
-		/* line 3 */
-		int totalcpu = ucpu+scpu;
-		int idle;
-		/* totalcpu is occasionally > 100% */
-		if (totalcpu > 1000) totalcpu = 1000;
-		idle = 1000 - totalcpu;
-		printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", ucpu/10, ucpu%10, scpu/10, scpu%10, 0, 0, idle/10, idle%10);
-		cleareol();
-		/* line 4 */
-		printf("\nMem: 0k total, 0k used, 0k free, 0k buffers");
-		cleareol();
-		/* line 5 */
-		putchar('\n');
-		cleareol();
-		/* line 6 */
-		printf("\n" ESC "[7m  PID USER      PR  NI  SHR  RES S  %%CPU   TIME COMMAND" ESC "[m");
-		cleareol();
-		/* line 7- */
-		int pid = getpid();
-		/* BOGUS! we can't really use 'current' in userspace */
-		printf("\n%5d %-8s %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
-		       pid, "root", current->p_pri,
-		       getpriority(PRIO_PROCESS, pid), (long)0, (long)0, 'R',
-		       totalcpu / 10, totalcpu % 10,
-		       (int)(ptime.tv_sec / 60), (int)(ptime.tv_sec % 60),
-		       "top");
-		cleareol();
-		printf(ESC "[J" ESC "[5H");
-	}
-	G.lasttime = tv;
-	G.lastrusage = rusage;
+	printf(ESC "[H" ESC "[J");
 }
 
 void userpause()
@@ -321,51 +233,9 @@ void userpause()
 	putchar('\n');
 }
 
-static void testuname(int argc, char *argv[], char *envp[])
-{
-	struct utsname utsname;
-	int err;
-	
-	err = uname(&utsname);
-	if (!err) {
-		printf("uname: %s %s %s %s %s\n",
-		       utsname.sysname,
-		       utsname.nodename,
-		       utsname.release,
-		       utsname.version,
-		       utsname.machine);
-	} else {
-		printf("uname returned %d\n", err);
-	}
-}
-
 static void sigalrm()
 {
-}
-
-static void testtty(int argc, char *argv[], char *envp[])
-{
-	printf("Type ctrl-d to end input and go to the next test.\n");
-	/* cat */
-	char buf[60];
-	ssize_t n;
-	struct sigaction sa;
-	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
-	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
-	for (;;) {
-		alarm(30);
-		n = read(0, buf, 60);
-		if (n < 0) {
-			printf("timeout\n");
-			continue;
-		}
-		printf("read %ld bytes\n", n);
-		if (n == 0) break;
-		fwrite(buf, n, (size_t)1, NULL);
-		fflush(NULL);
-	}
-	alarm(0);
+	printf("sigalrm\n");
 }
 
 static void testrandom(int argc, char *argv[], char *envp[])
@@ -534,6 +404,14 @@ static int recvpkthead(struct pkthead *pkt, int fd)
 	return 0;
 }
 
+#define GETCALC_READ_TIMEOUT 10
+
+ssize_t getcalcread(int fd, void *buf, size_t count)
+{
+	alarm(GETCALC_READ_TIMEOUT);
+	return read(fd, buf, count);
+}
+
 static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 {
 	ssize_t n;
@@ -555,12 +433,12 @@ static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 	if (length > count) return -1;
 	p = buf;
 	while (length > 0) {
-		n = read(fd, p, length);
+		n = getcalcread(fd, p, length);
 		if (n <= 0) return -1;
 		length -= n;
 		p += n;
 	}
-	n = read(fd, buf2, 2); /* checksum */
+	n = getcalcread(fd, buf2, 2); /* checksum */
 	if (n < 0) return -1;
 	checksum = buf2[0] | (buf2[1] << 8);
 	printf("checksum: %u (%s)\n", checksum, checksum == cksum(buf, pkt->length) ? "correct" : "INCORRECT");
@@ -587,7 +465,7 @@ static long discard(int fd, unsigned len)
 	ssize_t n;
 	int i;
 	while (len) {
-		n = read(fd, buf, len < sizeof(buf) ? len : sizeof(buf));
+		n = getcalcread(fd, buf, len < sizeof(buf) ? len : sizeof(buf));
 		//printf("discard: read %ld bytes\n", n);
 		if (n < 0) return -1;
 		for (i = 0; i < n; ++i)
@@ -600,7 +478,7 @@ static long discard(int fd, unsigned len)
 static unsigned short getchecksum(int fd)
 {
 	unsigned char buf[2];
-	if (read(fd, buf, 2) < 2) return -1;
+	if (getcalcread(fd, buf, 2) < 2) return -1;
 	return buf[0] | (buf[1] << 8);
 }
 
@@ -624,15 +502,18 @@ static void getcalc(int fd)
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	
 	for (;;) {
-		alarm(10);
 		n = recvpkthead(&pkt, fd);
 		if (n < 0) goto timeout;
 		switch (state) {
 		case RECV_START:
 			printf("START\n");
 			if (pkt.commid == PKT_COMM_VAR || pkt.commid == PKT_COMM_RTS) {
-				sum = discard(fd, pkt.length);
-				checksum = getchecksum(fd);
+				n = discard(fd, pkt.length);
+				if (n < 0) goto timeout;
+				sum = n;
+				n = getchecksum(fd);
+				if (n < 0) goto timeout;
+				checksum = n;
 				if (checksum == sum) {
 					sendpkthead(&ackpkt, fd);
 					sendpkthead(&ctspkt, fd);
@@ -664,9 +545,13 @@ static void getcalc(int fd)
 			if (pkt.commid != PKT_COMM_DATA)
 				goto error;
 			//printf("reading and discarding variable data...\n");
-			sum = discard(fd, pkt.length);
+			n = discard(fd, pkt.length);
+			if (n < 0) goto timeout;
+			sum = n;
 			//printf("reading variable data checksum...\n");
-			checksum = getchecksum(fd);
+			n = getchecksum(fd);
+			if (n < 0) goto timeout;
+			checksum = n;
 			if (checksum == sum) {
 				//printf("sending ACK\n");
 				sendpkthead(&ackpkt, fd);
@@ -713,172 +598,6 @@ static void printhex(char buf[], int length)
 	putchar('\n');
 }
 
-#define BUFSIZE 512
-static void testshell(int argc, char *argv[], char *envp[])
-{
-	struct utsname utsname;
-	char *username = "root";
-	char *hostname;
-	char buf[BUFSIZE];
-	ssize_t n;
-	char *bp = buf;
-	ssize_t len = 0;
-	int neof = 0;
-	int err;
-	
-	printf("stupid shell v -0.1\n");
-	err = uname(&utsname);
-	if (!err) {
-		hostname = utsname.nodename;
-	} else {
-		hostname = "localhost";
-	}
-	
-	for (;;) {
-		if (len == 0)
-			printf("%s@%s:%s%s ", username, hostname, "~", "$");
-		n = read(0, bp, BUFSIZE - len);
-		if (n < 0) {
-			printf("read error\n");
-		}
-		len += n;
-		bp += n;
-		if (len == 0) {
-			++neof;
-			if (neof > 3) {
-				printf ("exit\n");
-				break;
-			}
-			printf("Use \"exit\" to leave the shell.\n");
-			continue;
-		}
-		if (len == BUFSIZE || buf[len-1] == '\n') {
-			char *cmd;
-			size_t cmdlen;
-			int i;
-			buf[len-1] = '\0';
-			len = 0;
-			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
-				;
-			cmd = bp;
-			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
-				;
-			cmdlen = bp - cmd;
-			bp = buf;
-			if (cmdlen == 0)
-				continue;
-			
-			if (!strncmp(cmd, "clear", cmdlen)) {
-				printf("%s", ESC "[H" ESC "[J");
-			} else if (!strncmp(cmd, "exit", cmdlen)) {
-				break;
-			} else if (!strncmp(cmd, "uname", cmdlen)) {
-				int err;
-				
-				err = uname(&utsname);
-				if (!err) {
-					printf("%s %s %s %s %s\n",
-					       utsname.sysname,
-					       utsname.nodename,
-					       utsname.release,
-					       utsname.version,
-					       utsname.machine);
-				//} else {
-					//printf("uname returned %d\n", err);
-				}
-			} else if (!strncmp(cmd, "env", cmdlen)) {
-				char **ep = envp;
-				for (; *ep; ++ep)
-					printf("%s\n", *ep);
-			} else if (!strncmp(cmd, "id", cmdlen)) {
-				uid_t uid;
-				gid_t gid;
-				gid_t groups[15];
-				int numgroups, i;
-				
-				uid = getuid();
-				gid = getgid();
-				numgroups = getgroups(15, groups);
-				printf("uid=%d gid=%d groups=%d", uid, gid, gid);
-				for (i = 0; i < numgroups; ++i) {
-					printf(",%d", groups[i]);
-				}
-				putchar('\n');
-			} else if (!strncmp(cmd, "wait", cmdlen)) {
-				int status;
-				pid_t pid = wait(&status);
-			} else if (!strncmp(cmd, "vfork", cmdlen)) {
-				pid_t pid;
-				pid = vfork();
-				if (pid == 0) {
-					printf("I am the child\n");
-					_exit(0);
-				} else if (pid > 0) {
-					printf("I am the parent\n");
-				} else {
-					printf("Sorry, there was an error vforking\n");
-				}
-			} else if (!strncmp(cmd, "pause", cmdlen)) {
-				struct sigaction sa;
-				sa.sa_handler = sigalrm;
-				sa.sa_flags = SA_RESTART;
-				printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
-				alarm(3);
-				printf("pause returned %d\n", pause());
-			} else if (!strncmp(cmd, "batt", cmdlen)) {
-				static const char *batt_level_strings[8] = { "dead", "almost dead", "starving", "very low", "low", "medium", "ok", "full" };
-				printf("Battery level: %d (%s)\n", G.batt_level, batt_level_strings[G.batt_level]);
-			} else if (!strncmp(cmd, "date", cmdlen)) {
-				/*
-				 * this prints out the equivalent of
-				 * date --utc '+%F %T %Z'
-				 */
-				struct tm tm;
-				struct timeval tv;
-				char buf[40];
-					
-				gettimeofday(&tv, NULL);
-				//printf("%5ld.%06ld\n", tv.tv_sec, tv.tv_usec);
-				localtime_r(&tv.tv_sec, &tm);
-#if 0
-				printf("%4d-%02d-%02d %02d:%02d:%02d UTC\n",
-				 tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
-				 tm.tm_hour, tm.tm_min, tm.tm_sec);
-#else
-				printf("%s", asctime_r(&tm, buf));
-#endif
-			} else if (!strncmp(cmd, "adjtime", cmdlen)) {
-				struct timeval tv = { 10, 0 };
-				struct timeval oldtv;
-				adjtime(NULL, &oldtv);
-				if (oldtv.tv_sec || oldtv.tv_usec) {
-					printf("adjtime(NULL, %ld.%06lu)\n",
-					       oldtv.tv_sec, oldtv.tv_usec);
-				} else {
-					adjtime(&tv, &oldtv);
-#define FIXTV(tv) do { \
-if ((tv)->tv_sec < 0 && (tv)->tv_usec) { \
-	++(tv)->tv_sec; \
-	(tv)->tv_usec = 1000000L - (tv)->tv_usec; \
-} \
-} while (0)
-					FIXTV(&tv);
-					FIXTV(&oldtv);
-					
-					printf("adjtime(%ld.%06lu, %ld.%06lu)\n",
-					       tv.tv_sec, tv.tv_usec,
-					       oldtv.tv_sec, oldtv.tv_usec);
-				}
-			} else {
-				printf("stupidsh: %.*s: command not found\n", (int)cmdlen, cmd);
-			}
-			bp = buf;
-			len = 0;
-			neof = 0;
-		}
-	}
-}
-
 static void testlink(int argc, char *argv[], char *envp[])
 {
 	unsigned char *buf = NULL;
@@ -901,14 +620,13 @@ static void testlink(int argc, char *argv[], char *envp[])
 	buflen = 64*1024L;
 	printf("buflen=%lu\n", buflen);
 	buf = malloc(buflen);
-	printf("buf=%08lx\n", buf);
+	printf("buf=%08lx\n", (unsigned long)buf);
 	if (buf) {
 		recvpkt(&packet, buf, buflen, linkfd); /* ACK */
 		free(buf);
 	} else {
 		printf("testlink(): could not allocate buf\n");
 	}
-	userpause();
 	
 	printf("closing link...\n");
 	close(linkfd);
@@ -933,102 +651,296 @@ struct test {
 };
 
 static const struct test tests[] = {
-	{ "uname() syscall", testuname },
-	{ "/dev/tty", testtty },
-	{ "shell", testshell },
 	{ "/dev/random", testrandom },
 	{ "/dev/link", testlink },
 	{ "/dev/audio", testaudio },
 	{ "", NULL }
 };
 
-int main_usertest(int argc, char *argv[], char *envp[])
+typedef unsigned long softfloat;
+softfloat fadd(softfloat, softfloat);
+
+unsigned long long sl64(unsigned long long, unsigned);
+unsigned long long sr64(unsigned long long, unsigned);
+
+#define BUFSIZE 512
+
+static int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
-#if 0
-	println("This is a user program.");
-	
-	println("\narguments:");
-	for (; *argv; ++argv)
-		println(*argv);
-	
-	println("\nenvironment:");
-	for (; *envp; ++envp)
-		println(*envp);
-#endif
-	
-	int i;
-	struct timeval starttv;
-	struct timeval endtv;
-	struct timeval tv;
-#if 0
-	printf("waiting for the clock to settle...");
-	gettimeofday(&starttv, 0);
-	do {
-		gettimeofday(&tv, 0);
-	} while (tv.tv_sec < starttv.tv_sec + 3);
-	printf("starting\n");
-	gettimeofday(&starttv, 0);
-	for (i = 0; i < 8000; ++i) {
-		gettimeofday(&endtv, 0);
-	}
-	tv.tv_sec = endtv.tv_sec - starttv.tv_sec;
-	tv.tv_usec = endtv.tv_usec - starttv.tv_usec;
-	if (tv.tv_usec < 0) {
-		tv.tv_usec += 1000000L;
-		tv.tv_sec--;
-	}
-	long x = tv.tv_usec + 1000000L * tv.tv_sec;
-	x /= 8;
-	printf("%ld.%06ld = %ld ns per call = %ld calls per second\n", tv.tv_sec, tv.tv_usec, x, 1000000000L / x);
-#endif
-	
-#if 0
-	/* test invalid address */
-	printf("testing syscall with an invalid pointer:\n");
-	int error = gettimeofday((void *)0x40000 - 1, 0);
-	printf("error = %d\n", error);
-#endif
-	
 	for (testp = &tests[0]; testp->func; ++testp) {
 		banner(testp->name);
 		testp->func(argc, argv, envp);
 	}
-	
-	argv[0] = "top";
-	execve(argv[0], argv, envp);
+	printf("done!\n");
 	return 0;
 }
 
-int main_init(int argc, char *argv[], char *envp[])
+static int cat_main(int argc, char **argv, char **envp)
 {
-	int fd;
-	int x = 42;
-	
-	fd = open("/dev/vt", O_RDWR); /* 0 */
-	if (fd < 0) return -1;
-	dup(fd); /* 1 */
-	dup(fd); /* 2 */
-	
-	printf("This is init. executing usertest now\n");
-	argv[0] = "usertest";
-	x = execve(argv[0], argv, envp);
-	printf("still in init, execve returned %d\n", x);
+	char buf[BUFSIZE];
+	ssize_t n;
+	for (;;) {
+		n = read(0, buf, BUFSIZE);
+		if (n <= 0) break;
+		write(1, buf, n);
+	}
+	return n < 0 ? 1 : 0;
+}
+
+static int false_main(int argc, char **argv, char **envp)
+{
 	return 1;
 }
 
-int exec_command(int ch)
+static int true_main(int argc, char **argv, char **envp)
 {
-	switch (ch) {
-	case 'q': return 1;
-	case ' ': case '\n': break;
-	default: printf("%s", "\rUnknown command"); break;
+	return 0;
+}
+
+static int clear_main(int argc, char **argv, char **envp)
+{
+	clear();
+	return 0;
+}
+
+static int uname_main(int argc, char **argv, char **envp)
+{
+	struct utsname utsname;
+	int err;
+	
+	err = uname(&utsname);
+	if (!err) {
+		printf("%s %s %s %s %s\n",
+		       utsname.sysname,
+		       utsname.nodename,
+		       utsname.release,
+		       utsname.version,
+		       utsname.machine);
+	} else {
+		printf("uname returned %d\n", err);
 	}
 	return 0;
 }
 
+static int env_main(int argc, char **argv, char **envp)
+{
+	char **ep = envp;
+	for (; *ep; ++ep)
+		printf("%s\n", *ep);
+	return 0;
+}
+
+static int id_main(int argc, char **argv, char **envp)
+{
+	uid_t uid;
+	gid_t gid;
+	gid_t groups[15];
+	int numgroups, i;
+	
+	uid = getuid();
+	gid = getgid();
+	numgroups = getgroups(15, groups);
+	printf("uid=%d gid=%d groups=%d", uid, gid, gid);
+	for (i = 0; i < numgroups; ++i) {
+		printf(",%d", groups[i]);
+	}
+	putchar('\n');
+	return 0;
+}
+
+static int pause_main(int argc, char **argv, char **envp)
+{
+	struct sigaction sa;
+	sa.sa_handler = sigalrm;
+	sa.sa_flags = SA_RESTART;
+	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
+	alarm(3);
+	printf("pause returned %d\n", pause());
+	return 0;
+}
+
+static int batt_main(int argc, char **argv, char **envp)
+{
+	static const char
+	  *batt_level_strings[8] = {
+	    "dead",
+	    "mostly dead",
+	    "starving",
+	    "very low",
+	    "low",
+	    "medium",
+	    "ok",
+	    "full"
+	  };
+	printf("Battery level: %d (%s)\n", G.batt_level,
+	       batt_level_strings[G.batt_level]);
+	return 0;
+}
+
+static int date_main(int argc, char **argv, char **envp)
+{
+	/*
+	 * this prints out the equivalent of
+	 * date --utc '+%F %T %Z'
+	 */
+	struct tm tm;
+	struct timeval tv;
+	char buf[40];
+		
+	gettimeofday(&tv, NULL);
+	//printf("%5ld.%06ld\n", tv.tv_sec, tv.tv_usec);
+	localtime_r(&tv.tv_sec, &tm);
+#if 0
+	printf("%4d-%02d-%02d %02d:%02d:%02d UTC\n",
+	 tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+	 tm.tm_hour, tm.tm_min, tm.tm_sec);
+#else
+	printf("%s", asctime_r(&tm, buf));
+#endif
+	return 0;
+}
+
+static int adjtime_main(int argc, char **argv, char **envp)
+{
+	struct timeval tv = { 10, 0 };
+	struct timeval oldtv;
+	adjtime(&tv, &oldtv);
+
+#define FIXTV(tv) do { \
+if ((tv)->tv_sec < 0 && (tv)->tv_usec) { \
+++(tv)->tv_sec; \
+(tv)->tv_usec = 1000000L - (tv)->tv_usec; \
+} \
+} while (0)
+
+	FIXTV(&tv);
+	FIXTV(&oldtv);
+	printf("previous time adjustment: %ld.%06lu\n",
+	       oldtv.tv_sec, oldtv.tv_usec);
+	printf("new time adjustment: %ld.%06lu\n",
+	       tv.tv_sec, tv.tv_usec);
+	return 0;
+}
+
+static int malloc_main(int argc, char **argv, char **envp)
+{
+	void *x;
+	size_t s = 256*1024UL;
+	while (s && !(x = malloc(s)))
+		s -= 1024;
+	free(x);
+	printf("allocated up to %lu contiguous bytes\n", s);
+	return 0;
+}
+
+static int exec_command(int ch)
+{
+	switch (ch) {
+	case 'q': return 1;
+	case ' ': case '\n': break;
+	default: printf("\rUnknown command '%c'", ch); alarm(2); pause(); break;
+	}
+	return 0;
+}
+
+static void updatetop()
+{
+	int getloadavg1(long loadavg[], int nelem);
+	struct timeval tv;
+	struct timeval difftime;
+	long la[3];
+	int day, hour, minute, second;
+	long msec;
+	long umsec, smsec;
+	long t;
+	int i;
+	int ucpu = 42;
+	int scpu = 31;
+	int totalcpu;
+	int idle;
+	int pid;
+	struct rusage rusage;
+	struct timeval ptime;
+	struct timeval diffutime;
+	struct timeval diffstime;
+	
+	getrusage(RUSAGE_SELF, &rusage);
+	gettimeofday(&tv, NULL);
+	
+	if (G.lasttime.tv_sec != 0 || G.lasttime.tv_usec != 0) {
+		timersub(&tv, &G.lasttime, &difftime);
+		timersub(&rusage.ru_utime, &G.lastrusage.ru_utime, &diffutime);
+		timersub(&rusage.ru_stime, &G.lastrusage.ru_stime, &diffstime);
+		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
+		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
+		if (msec == 0) return;
+		umsec = diffutime.tv_sec * 1000L + diffutime.tv_usec / 1000;
+		smsec = diffstime.tv_sec * 1000L + diffstime.tv_usec / 1000;
+		ucpu = (1000L * umsec + 500) / msec;
+		scpu = (1000L * smsec + 500) / msec;
+		totalcpu = ucpu+scpu;
+		/* totalcpu is occasionally > 100% */
+		if (totalcpu > 1000) totalcpu = 1000;
+		idle = 1000 - totalcpu;
+		getloadavg1(la, 3);
+		
+		/* line 1 */
+		t = tv.tv_sec - 25200; /* -7 hours */
+		second = t % 60; t /= 60;
+		minute = t % 60; t /= 60;
+		hour = t % 24;   t /= 24;
+		day = t;
+		printf(ESC "[H" "%02d:%02d:%02d up ",
+		       hour, minute, second);
+		t = uptime.tv_sec;
+		second = t % 60; t /= 60;
+		minute = t % 60; t /= 60;
+		hour = t % 24;   t /= 24;
+		day = t;
+		if (day) {
+			printf("%d+", day);
+		}
+		printf("%02d:%02d, 1 user, load:", hour, minute);
+		for (i = 0; i < 3; ++i) {
+			if (i > 0) putchar(',');
+			printf(" %ld.%02ld", la[i] >> 16,
+			       (100 * la[i] >> 16) % 100);
+		}
+		cleareol();
+		/* line 2 */
+		printf("\nTasks: 1 total, 1 run, 0 slp, 0 stop, 0 zomb");
+		cleareol();
+		/* line 3 */
+		printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", ucpu/10, ucpu%10, scpu/10, scpu%10, 0, 0, idle/10, idle%10);
+		cleareol();
+		/* line 4 */
+		printf("\nMem: 0k total, 0k used, 0k free, 0k buffers");
+		cleareol();
+		/* line 5 */
+		putchar('\n');
+		cleareol();
+		/* line 6 */
+		printf("\n" ESC "[7m  PID USER      PR  NI  SHR  RES S  %%CPU   TIME COMMAND" ESC "[m");
+		cleareol();
+		/* line 7- */
+		pid = getpid();
+		/* BOGUS! we can't really use 'current' in userspace */
+		printf("\n%5d %-8s %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
+		       pid, "root", current->p_pri,
+		       getpriority(PRIO_PROCESS, pid), (long)0, (long)0, 'R',
+		       totalcpu / 10, totalcpu % 10,
+		       (int)(ptime.tv_sec / 60), (int)(ptime.tv_sec % 60),
+		       "top");
+		cleareol();
+		printf(ESC "[J" ESC "[5H");
+	}
+	G.lasttime = tv;
+	G.lastrusage = rusage;
+}
+
 #define TOPBUFSIZE 200
-int main_top(int argc, char *argv[], char *envp[])
+static int top_main(int argc, char *argv[], char **envp)
 {
 	/* we should eventually put the terminal in raw mode
 	 * so we can read characters as soon as they're typed */
@@ -1036,24 +948,24 @@ int main_top(int argc, char *argv[], char *envp[])
 	char buf[TOPBUFSIZE];
 	ssize_t n;
 	int quit = 0;
+#define INITDELAY 1
 #define TOPDELAY 5
+	struct itimerval initit = {
+		{ TOPDELAY, 0 },
+		{ INITDELAY, 0 }
+	};
 	struct itimerval it = {
 		{ TOPDELAY, 0 },
 		{ TOPDELAY, 0 }
 	};
 	struct sigaction sa;
 	
-	printf("This is top.\n");
-	
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
-	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
-	setitimer(ITIMER_REAL, &it, NULL);
+	sigaction(SIGALRM, &sa, NULL);
+	setitimer(ITIMER_REAL, &initit, NULL);
 	
-	//long lasttime = 0;
-	
-	printf(ESC "[H" ESC "[J");
-		
+	G.lasttime.tv_sec = G.lasttime.tv_usec = 0;
 	while (!quit) {
 		updatetop();
 		n = read(0, buf, TOPBUFSIZE);
@@ -1067,5 +979,209 @@ int main_top(int argc, char *argv[], char *envp[])
 		}
 	}
 	
+	clear();
+	
 	return 0;
+}
+
+static int run(const char *, char **, char **);
+struct applet {
+	const char *name;
+	int (*main)(int argc, char **argv, char **envp);
+};
+static struct applet applets[];
+
+static void showhelp()
+{
+	struct applet *ap;
+	printf("available applets:\n");
+	for (ap = &applets[0]; ap->name; ++ap)
+		printf(" %-9s", ap->name);
+	printf("\n");
+}
+
+static int sh_main(int argc, char **argv, char **envp)
+{
+	struct utsname utsname;
+	char *username = "root";
+	char *hostname;
+	char buf[BUFSIZE];
+	ssize_t n;
+	char *bp = buf;
+	ssize_t len = 0;
+	int neof = 0;
+	int err;
+	int uid;
+	struct itimerval it = {
+		{ 0, 0 },
+		{ 0, 0 }
+	};
+	uid = getuid();
+	
+	printf("stupid shell v -0.1\n");
+	err = uname(&utsname);
+	if (!err) {
+		hostname = utsname.nodename;
+	} else {
+		hostname = "localhost";
+	}
+	
+	for (;;) {
+		setitimer(ITIMER_REAL, &it, NULL);
+		if (len == 0)
+			printf("%s@%s:%s%c ", username, hostname, "~",
+			       uid ? '$' : '#');
+		n = read(0, bp, BUFSIZE - len);
+		if (n < 0) {
+			printf("read error\n");
+			return 1;
+		}
+		len += n;
+		bp += n;
+		if (len == 0) {
+			++neof;
+			if (neof > 3) {
+				printf ("exit\n");
+				break;
+			}
+			printf("Use \"exit\" to leave the shell.\n");
+			continue;
+		}
+		if (len == BUFSIZE || buf[len-1] == '\n') {
+			char *cmd;
+			size_t cmdlen;
+			int i;
+			buf[len-1] = '\0';
+			len = 0;
+			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
+				;
+			cmd = bp;
+			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
+				;
+			*bp = '\0';
+			cmdlen = bp - cmd;
+			bp = buf;
+			if (cmdlen == 0)
+				continue;
+			
+			if (!strcmp(cmd, "exit")) {
+				break;
+			} else if (!strcmp(cmd, "help")) {
+				showhelp();
+			} else {
+				int n = run(cmd, NULL, envp);
+				if (n < 0) {
+					printf(
+					  "stupidsh: %s: command not found\n",
+					   cmd);
+				}
+			}
+			bp = buf;
+			len = 0;
+			neof = 0;
+		}
+	}
+	return 0;
+}
+
+static struct applet applets[] = {
+	{ "sh", sh_main },
+	{ "tests", tests_main },
+	{ "top", top_main },
+	{ "cat", cat_main },
+	{ "true", true_main },
+	{ "false", false_main },
+	{ "clear", clear_main },
+	{ "uname", uname_main },
+	{ "env", env_main },
+	{ "id", id_main },
+	{ "pause", pause_main },
+	{ "batt", batt_main },
+	{ "date", date_main },
+	{ "adjtime", adjtime_main },
+	{ "malloc", malloc_main },
+
+	{ NULL, NULL }
+};
+
+static int run_applet(const char *cmd, char **argv, char **envp)
+{
+	struct applet *ap;
+	int argc;
+	char **arg;
+	for (ap = &applets[0]; ap->name; ++ap) {
+		if (!strcmp(cmd, ap->name)) {
+			for (arg = &argv[0]; *arg; ++arg)
+				;
+			argc = arg - &argv[0];
+			return ap->main(argc, argv, envp);
+		}
+	}
+	return -1;
+}
+
+static int run(const char *cmd, char **argv, char **envp)
+{
+	int err;
+	int pid;
+	err = run_applet(cmd, argv, envp);
+	if (err >= 0) return err;
+	
+	/*
+	 * here we would vfork and try to execve(2) the command
+	 * in the child (in a real shell, that is)
+	 */
+	pid = vfork();
+	if (pid == 0) {
+		err = execve(cmd, argv, envp);
+		printf("error: couldn't execute %s\n", cmd);
+		_exit(err);
+	} else if (pid > 0) {
+		/* parent process. we chill here until the child dies */
+		wait(&err);
+	} else {
+		printf("error: couldn't vfork\n");
+	}
+	
+	return err;
+}
+
+int main_bittybox(int argc, char **argv, char **envp)
+{
+	int n = run_applet(argv[0], argv, envp);
+	if (n < 0) {
+		printf("bittybox: unknown applet \"%s\"\n", argv[0]);
+		showhelp();
+	}
+	return n;
+}
+
+int main_init(int argc, char *argv[], char *envp[])
+{
+	int fd;
+	int err;
+	int pid;
+	
+	fd = open("/dev/vt", O_RDWR); /* 0 */
+	if (fd < 0) return -1;
+	dup(fd); /* 1 */
+	dup(fd); /* 2 */
+	
+	pid = vfork();
+	if (pid <= 0) {
+		if (pid < 0) {
+			printf(
+			  "Hey, this is init. There was a problem vforking.\n"
+			  "Dropping to a single-process shell now.\n");
+		}
+		argv[0] = "sh";
+		err = execve(argv[0], argv, envp);
+		printf("still in init, execve failed with error %d\n", err);
+	} 
+	
+	/* sit here and reap zombie processes */
+	/* a real init process would also spawn tty's and stuff */
+	for (;;) {
+		wait(NULL);
+	}
 }
