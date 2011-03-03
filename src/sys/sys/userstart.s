@@ -74,7 +74,8 @@ SYS_getloadavg1  = 160
 	.global _exit
 _exit:
 	sys	exit
-0:	bra.s	0b
+0:	nop
+	bra.s	0b
 
 mksyscall	open
 mksyscall	close
