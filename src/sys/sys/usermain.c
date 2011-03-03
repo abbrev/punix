@@ -22,6 +22,7 @@
 #define _BSD_SOURCE
 
 //#include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -676,16 +677,53 @@ static int tests_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
-static int cat_main(int argc, char **argv, char **envp)
+static int docat(int fd)
 {
 	char buf[BUFSIZE];
 	ssize_t n;
 	for (;;) {
-		n = read(0, buf, BUFSIZE);
+		n = read(fd, buf, BUFSIZE);
 		if (n <= 0) break;
 		write(1, buf, n);
 	}
-	return n < 0 ? 1 : 0;
+	return n;
+}
+
+static int cat_main(int argc, char **argv, char **envp)
+{
+	int err, n;
+	int fd;
+	int i;
+	
+	if (argc <= 1) {
+		n = docat(0);
+		if (!n) err = 1;
+		return err;
+	}
+	
+	for (i = 1; i < argc; ++i) {
+		fd = open(argv[i], O_RDONLY);
+		if (fd < 0) {
+			printf("cat: %s: cannot open file for reading\n",
+			       argv[i]);
+			continue;
+		}
+		n = docat(fd);
+		if (!n) err = 1;
+		close(fd);
+	}
+	return err;
+}
+
+static int echo_main(int argc, char **argv, char **envp)
+{
+	int i;
+	for (i = 1; i < argc; ++i) {
+		if (i > 1) putchar(' ');
+		printf("%s", argv[i]);
+	}
+	putchar('\n');
+	return 0;
 }
 
 static int false_main(int argc, char **argv, char **envp)
@@ -984,7 +1022,7 @@ static int top_main(int argc, char *argv[], char **envp)
 	return 0;
 }
 
-static int run(const char *, char **, char **);
+static int run(const char *, int, char **, char **);
 struct applet {
 	const char *name;
 	int (*main)(int argc, char **argv, char **envp);
@@ -1000,6 +1038,115 @@ static void showhelp()
 	printf("\n");
 }
 
+enum {
+	TOKEN_ERR_SUCCESS = 0,
+	TOKEN_ERR_EOL,
+	TOKEN_ERR_UNMATCHED_DQUOTE,
+	TOKEN_ERR_UNMATCHED_SQUOTE
+};
+
+const unsigned char _ctype[256] = {
+	_C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C,
+	_C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C,
+	_S, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P,
+	_N, _N, _N, _N, _N, _N, _N, _N, _N, _N, _P, _P, _P, _P, _P, _P,
+	_P, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U,
+	_U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _U, _P, _P, _P, _P, _P,
+	_P, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L,
+	_L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _L, _P, _P, _P, _P, _C,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+};
+
+/*
+          2 3 4 5 6 7       30 40 50 60 70 80 90 100 110 120
+        -------------      ---------------------------------
+       0:   0 @ P ` p     0:    (  2  <  F  P  Z  d   n   x
+       1: ! 1 A Q a q     1:    )  3  =  G  Q  [  e   o   y
+       2: " 2 B R b r     2:    *  4  >  H  R  \  f   p   z
+       3: # 3 C S c s     3: !  +  5  ?  I  S  ]  g   q   {
+       4: $ 4 D T d t     4: "  ,  6  @  J  T  ^  h   r   |
+       5: % 5 E U e u     5: #  -  7  A  K  U  _  i   s   }
+       6: & 6 F V f v     6: $  .  8  B  L  V  `  j   t   ~
+       7: ´ 7 G W g w     7: %  /  9  C  M  W  a  k   u  DEL
+       8: ( 8 H X h x     8: &  0  :  D  N  X  b  l   v
+       9: ) 9 I Y i y     9: ´  1  ;  E  O  Y  c  m   w
+       A: * : J Z j z
+       B: + ; K [ k {
+       C: , < L \ l |
+       D: - = M ] m }
+       E: . > N ^ n ~
+       F: / ? O _ o DEL
+*/
+
+/*
+ * get a token from the string *s, null terminate the token in *s, update *s
+ * and *err, and return the token
+ * also handle escaping (\) and quoting (" and ') and return an error
+ * if there are unmatched quotes
+ */
+static char *gettoken(char **s, int *err)
+{
+	int quote = '\0';
+	int escape = 0;
+	char *c, *token;
+	char *out;
+	c = *s;
+	if (*c == '\0') {
+		/* no more tokens */
+eol:
+		*err = TOKEN_ERR_EOL;
+		return NULL;
+	}
+	while (*c && isspace(*c))
+		++c;
+	if (*c == '\0') {
+		/* no token found */
+		goto eol;
+	}
+	token = c;
+	out = c;
+	while (*c && (escape || quote || !isspace(*c))) {
+		if (escape) {
+			/* copy this character literally */
+			*out++ = *c;
+			escape = 0;
+		} else if (*c == '\'' || *c == '"') {
+			if (!quote) {
+				quote = *c;
+			} else if (quote == *c) {
+				quote = '\0';
+			} else {
+				*out++ = *c;
+			}
+		} else {
+			if (*c == '\\' && !quote) escape = 1;
+			else *out++ = *c;
+		}
+		++c;
+	}
+	if (quote) {
+		if (quote == '\'')
+			*err = TOKEN_ERR_UNMATCHED_SQUOTE;
+		else if (quote == '"')
+			*err = TOKEN_ERR_UNMATCHED_DQUOTE;
+		return NULL;
+	}
+	if (*c) {
+		*c++ = '\0';
+	}
+	*out = '\0';
+	*s = c;
+	return token;
+}
+
+#define MAXARGC (BUFSIZE/2+1)
 static int sh_main(int argc, char **argv, char **envp)
 {
 	struct utsname utsname;
@@ -1016,6 +1163,8 @@ static int sh_main(int argc, char **argv, char **envp)
 		{ 0, 0 },
 		{ 0, 0 }
 	};
+	int aargc;
+	char *aargv[BUFSIZE/2+1];
 	uid = getuid();
 	
 	printf("stupid shell v -0.1\n");
@@ -1049,33 +1198,50 @@ static int sh_main(int argc, char **argv, char **envp)
 		}
 		if (len == BUFSIZE || buf[len-1] == '\n') {
 			char *cmd;
-			size_t cmdlen;
+			char *s;
+			char *token;
 			int i;
-			buf[len-1] = '\0';
-			len = 0;
-			for (bp = buf; *bp == '\t' || *bp == ' ' || *bp == '\n'; ++bp)
-				;
-			cmd = bp;
-			for (; *bp && *bp != '\t' && *bp != ' ' && *bp != '\n'; ++bp)
-				;
-			*bp = '\0';
-			cmdlen = bp - cmd;
-			bp = buf;
-			if (cmdlen == 0)
-				continue;
+			int err = 0;
 			
+			buf[len-1] = '\0';
+			s = buf;
+			aargc = 0;
+			while ((token = gettoken(&s, &err)) != NULL) {
+				if (aargc >= MAXARGC) {
+					err = -1; /* XXX */
+					break;
+				}
+				aargv[aargc++] = token;
+			}
+			if (err && err != TOKEN_ERR_EOL) {
+				const char *errstr = "too many arguments";
+				switch (err) {
+				case TOKEN_ERR_UNMATCHED_DQUOTE:
+					errstr = "unmatched double quote";
+					break;
+				case TOKEN_ERR_UNMATCHED_SQUOTE:
+					errstr = "unmatched single quote";
+					break;
+				}
+				printf("stupidsh: error: %s\n", errstr);
+				goto nextline;
+			}
+			aargv[aargc] = NULL;
+			
+			cmd = aargv[0];
 			if (!strcmp(cmd, "exit")) {
 				break;
 			} else if (!strcmp(cmd, "help")) {
 				showhelp();
 			} else {
-				int n = run(cmd, NULL, envp);
+				int n = run(cmd, aargc, aargv, envp);
 				if (n < 0) {
 					printf(
 					  "stupidsh: %s: command not found\n",
 					   cmd);
 				}
 			}
+nextline:
 			bp = buf;
 			len = 0;
 			neof = 0;
@@ -1089,6 +1255,7 @@ static struct applet applets[] = {
 	{ "tests", tests_main },
 	{ "top", top_main },
 	{ "cat", cat_main },
+	{ "echo", echo_main },
 	{ "true", true_main },
 	{ "false", false_main },
 	{ "clear", clear_main },
@@ -1104,27 +1271,22 @@ static struct applet applets[] = {
 	{ NULL, NULL }
 };
 
-static int run_applet(const char *cmd, char **argv, char **envp)
+static int run_applet(const char *cmd, int argc, char **argv, char **envp)
 {
 	struct applet *ap;
-	int argc;
-	char **arg;
 	for (ap = &applets[0]; ap->name; ++ap) {
 		if (!strcmp(cmd, ap->name)) {
-			for (arg = &argv[0]; *arg; ++arg)
-				;
-			argc = arg - &argv[0];
 			return ap->main(argc, argv, envp);
 		}
 	}
 	return -1;
 }
 
-static int run(const char *cmd, char **argv, char **envp)
+static int run(const char *cmd, int argc, char **argv, char **envp)
 {
 	int err;
 	int pid;
-	err = run_applet(cmd, argv, envp);
+	err = run_applet(cmd, argc, argv, envp);
 	if (err >= 0) return err;
 	
 	/*
@@ -1148,7 +1310,7 @@ static int run(const char *cmd, char **argv, char **envp)
 
 int main_bittybox(int argc, char **argv, char **envp)
 {
-	int n = run_applet(argv[0], argv, envp);
+	int n = run_applet(argv[0], argc, argv, envp);
 	if (n < 0) {
 		printf("bittybox: unknown applet \"%s\"\n", argv[0]);
 		showhelp();
