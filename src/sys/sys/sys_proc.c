@@ -116,11 +116,9 @@ void sys_execve()
 	
 	void *text = NULL;
 	char *data = NULL;
-	char *stack = NULL;
 	char *ustack = NULL;
 	size_t textsize;
 	size_t datasize;
-	size_t stacksize;
 	size_t ustacksize;
 	
 	long size = 0;
@@ -155,18 +153,8 @@ void sys_execve()
 	envc = ap - envp; /* number of env vectors */
 	
 #define STACKSIZE 1024
-#define USTACKSIZE 1024
+#define USTACKSIZE 4096
 #define UDATASIZE 1024
-	/* allocate the system stack */
-	stacksize = STACKSIZE;
-	stack = memalloc(&stacksize, 0);
-	if (!stack) {
-		P.p_error = ENOMEM;
-		goto error_stack;
-	}
-	stack += stacksize;
-	kprintf("execve():  stack=%08lx\n", stack);
-	
 	/* allocate the user stack */
 	ustacksize = USTACKSIZE;
 	ustack = memalloc(&ustacksize, 0);
@@ -206,8 +194,6 @@ void sys_execve()
 		 * this in a common routine? */
 #if 1
 		memfree(NULL, P.p_pid);
-		if (P.p_stack)
-			memfree(P.p_stack - P.p_stacksize, 0);
 		if (P.p_ustack)
 			memfree(P.p_ustack - P.p_ustacksize, 0);
 		/*
@@ -218,12 +204,10 @@ void sys_execve()
 			memfree(P.p_data, 0);
 #endif
 	}
-	P.p_stack = stack;
 	P.p_ustack = ustack;
 	P.p_text = text;
 	P.p_data = data;
 	
-	P.p_stacksize = stacksize;
 	P.p_ustacksize = ustacksize;
 	P.p_datasize = datasize;
 	
@@ -264,8 +248,6 @@ error_data:
 	memfree(data, 0);
 error_ustack:
 	memfree(ustack - ustacksize, 0);
-error_stack:
-	memfree(stack - stacksize, 0);
 error_noent:
 }
 
