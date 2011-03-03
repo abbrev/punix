@@ -702,7 +702,11 @@ static int cat_main(int argc, char **argv, char **envp)
 	}
 	
 	for (i = 1; i < argc; ++i) {
-		fd = open(argv[i], O_RDONLY);
+		if (!strcmp(argv[i], "-")) {
+			fd = 0; /* stdin */
+		} else {
+			fd = open(argv[i], O_RDONLY);
+		}
 		if (fd < 0) {
 			printf("cat: %s: cannot open file for reading\n",
 			       argv[i]);
@@ -710,7 +714,7 @@ static int cat_main(int argc, char **argv, char **envp)
 		}
 		n = docat(fd);
 		if (!n) err = 1;
-		close(fd);
+		if (fd != 0) close(fd);
 	}
 	return err;
 }
