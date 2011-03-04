@@ -260,14 +260,22 @@ static void testrandom(int argc, char *argv[], char *envp[])
 	userpause();
 }
 
+#define AUDIOBUFSIZE 1024
 static void testaudio(int argc, char *argv[], char *envp[])
 {
 	int i;
 	int audiofd;
-	long audioleft[1024];
-	long audioright[1024];
-	long audiocenter[1024];
+	long *audioleft = NULL;
+	long *audioright = NULL;
+	long *audiocenter = NULL;
 	
+	audioleft = malloc(1024);
+	audioright = malloc(1024);
+	audiocenter = malloc(1024);
+	if (!audioleft || !audioright || !audiocenter) {
+		printf("could not allocate audio buffers!\n");
+		goto free;
+	}
 	audiofd = open("/dev/audio", O_RDWR);
 	printf("audiofd = %d\n", audiofd);
 	
@@ -295,6 +303,10 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	close(audiofd);
 	
 	userpause();
+free:
+	free(audioleft);
+	free(audioright);
+	free(audiocenter);
 }
 
 static const char varpkt1[] = {
