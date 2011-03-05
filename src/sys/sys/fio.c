@@ -119,7 +119,7 @@ void rdwr_inode(struct inode *inop, int mode)
 	}
         dev = inop->i_rdev;
         type = inop->i_mode & IFMT;
-	if (mode == FREAD) inop->i_flag != IACC;
+	if (mode == FREAD) inop->i_flag |= IACC;
 	
         if (type == IFCHR) {
 		if (mode == FWRITE) {
