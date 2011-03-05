@@ -122,7 +122,7 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 			if (p->p_waitchan)
 				unsleep(p);
 			//kprintf("%s (%d)\n", __FILE__, __LINE__);
-			sched_run();
+			sched_run(p);
 			goto resume;
 		}
 		if (p->p_waitchan == 0) {
