@@ -41,6 +41,7 @@ int kputs(char *);
  */
 STARTUP(void kmain())
 {
+	calloutinit();
 	lcdinit();
 	vtinit();
 	meminit();

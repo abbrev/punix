@@ -31,6 +31,11 @@
 #include "callout.h"
 #include "globals.h"
 
+void calloutinit()
+{
+	G.callout[0].c_func = NULL;
+}
+
 /*
  * This arranges for func(arg) to be called in time/HZ seconds.
  * The callout array is sorted in order of times as a delta list.
@@ -62,7 +67,8 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	if (c2 >= &G.callout[NCALL-1])
 		return -1;
 	
-	c1->c_dtime -= t;
+	if (c1->c_func)
+		c1->c_dtime -= t;
 	
 	/* move entries upward to make room for this new entry */
 	do {
