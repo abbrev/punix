@@ -15,9 +15,16 @@ struct globals {
 	char exec_ram[60];
 	char fpram[8*12+3*4];
 /* old: these must be first -- referenced from assembly code */
-	struct timespec _walltime; /* old: must be first! see entry.s (Int_3) */
+	long seconds;
 	struct timespec _realtime;
-	struct timespec timeoffset;
+	/*
+	 * realtime_mono monotonically increases and is never adjusted (only
+	 * incremented). This is used with ITIMER_REAL timers and can be used
+	 * with clock_gettime() when clk_id = CLOCK_MONOTONIC.
+	 * Note: the absolute value of this clock is arbitrary. Only
+	 * differences between values are meaningful.
+	 */
+	struct timespec _realtime_mono;
 	long _timeadj;
 	/* this is for getrealtime() */
 	struct {
@@ -37,6 +44,10 @@ struct globals {
 	long cumulrunning;
 	struct file file[NFILE];
 	unsigned long loadavg[3];
+	/*
+	 * Note: we *could* use realtime_mono as the uptime clock and get rid
+	 * of the uptime variable. Both clocks count up the same way.
+	 */
 	struct timespec _uptime;
 	long _loadavtime;
 	
@@ -169,8 +180,8 @@ extern int updlock;
 # else
 
 #define G (*(struct globals *)0x5c00)
-#define walltime G._walltime
 #define realtime G._realtime
+#define realtime_mono G._realtime_mono
 #define timeadj  G._timeadj
 #define ioport   G._ioport
 #define updlock  G._updlock

@@ -71,10 +71,9 @@ STARTUP(void trace())
 } while (0)
 
 /* SLEWRATE is in microseconds per tick */
-/* 512 us = 0.512 ms */
-#define SLEWRATE (512 / HZ)
+#define SLEWRATE (512 / HZ) /* 512 ppm */
 #define BIGADJ 1000000L /* 1 s */
-#define BIGSLEWRATE (5000 / HZ)
+#define BIGSLEWRATE (5000 / HZ) /* 5000 ppm */
 
 STARTUP(void hardclock(unsigned short ps))
 {
@@ -115,19 +114,24 @@ STARTUP(void hardclock(unsigned short ps))
 			delta = timeadj < 0 ? -timeadj : timeadj;
 		}
 		if (timeadj < 0) delta = -delta;
-		G.timeoffset.tv_nsec += delta * 1000;
-		timeadj -= delta;
+		realtime.tv_nsec += delta * 1000;
 		
-		if (G.timeoffset.tv_nsec >= SECOND) {
-			G.timeoffset.tv_nsec -= SECOND;
-			++G.timeoffset.tv_sec;
-		} else if (G.timeoffset.tv_nsec < 0) {
-			G.timeoffset.tv_nsec += SECOND;
-			--G.timeoffset.tv_sec;
+		/* probably don't need to do this since BUMPNTIME below will
+		 * bump realtime up by more than the delta anyway */
+#if 0
+		if (realtime.tv_nsec >= SECOND) {
+			realtime.tv_nsec -= SECOND;
+			++realtime.tv_sec;
+		} else if (realtime.tv_nsec < 0) {
+			realtime.tv_nsec += SECOND;
+			--realtime.tv_sec;
 		}
+#endif
 	}
 #endif
 	
+	BUMPNTIME(&realtime, TICK);
+	BUMPNTIME(&realtime_mono, TICK);
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
 	++loadavtime;
@@ -179,6 +183,7 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	/* do call-outs */
 	
+	*(long *)(0x4c00+0xf00-16) = G.callout[0].c_dtime;
 	if (G.callout[0].c_func == NULL)
 		goto out;
 	
@@ -227,10 +232,36 @@ out:	spl0();
  * RTC interrupt handler. This runs even when the calc is off, when hardclock()
  * does not run.
  */
+/*
+ * Note 0: since this is a single increment instruction now, it can be easily
+ * moved directly to the assembly-language interrupt handler (once global
+ * variables work in TIGCC)
+ *
+ * Note 1: to keep realtime in sync when the calc powers down, we need to keep
+ * track of the delta between realtime and seconds right before power down.
+ * Some code to show what I mean:
+ *
+ * void power_off()
+ * {
+ * 	// other stuff that should be done before power-down (eg, sync())
+ * 	delta = realtime.tv_sec - seconds;
+ * 	power_down() // the low-level power-down routine
+ * 	realtime.tv_sec = seconds + delta;
+ * }
+ *
+ * If seconds doesn't increment while it is powered off (that is, if the calc
+ * is powered off for less than a second), there will be some time loss
+ * (<1 second) in the realtime clock. In fact, there will be time loss whenever
+ * there is less time until the next "seconds" increment after power-on than
+ * before power-off. On the flip side, there will be time gain when there is
+ * more time until the next increment after power-on than at power-off.
+ * However, these time gains and losses are symmetrical (each should happen 50%
+ * of the time, theoretically), so any drift because of this should be
+ * negligible (plus we are on a graphing calculator with probably inaccurate
+ * hardware clock(s) anyway).
+ */
 STARTUP(void updwalltime())
 {
-	/* the tv_nsec field of walltime maintains the "0" time of G.ticks%HZ */
-	++walltime.tv_sec;
-	walltime.tv_nsec = (G.ticks+1) % HZ;
+	++G.seconds;
 }
 #endif

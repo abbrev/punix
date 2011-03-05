@@ -65,11 +65,11 @@ STARTUP(void kmain())
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
 #endif
-	if (walltime.tv_sec < 1000000000L) { /* before ~2001 */
-		walltime.tv_sec = REALTIME;
-		walltime.tv_nsec = 0;
+	if (realtime.tv_sec < 1000000000L) { /* before ~2001 */
+		realtime.tv_sec = REALTIME;
+		realtime.tv_nsec = 0;
 	}
-	realtime = walltime;
+	G.seconds = realtime.tv_sec;
 	uptime.tv_sec = uptime.tv_nsec = 0;
 	spl0();
 	bogomips();

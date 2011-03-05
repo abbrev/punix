@@ -104,25 +104,16 @@ STARTUP(void timersub(struct timeval *a, struct timeval *b, struct timeval *res)
  * getrealtime() takes.
  */
 /* 12MHz ~= 83 ns per cpu clock */
-#define RTINCR (200 * 83) /* ns */
+#define RTINCR (100 * 83) /* ns */
 void getrealtime(struct timespec *tsp)
 {
-	struct timespec wt;
+	struct timespec rt;
 	struct timespec offset;
 	int t;
 	
 	int x = splclock();
-#if 0
-	/* this isn't strictly necessary */
-	if (G.timeoffset.tv_sec) {
-		walltime.tv_sec += G.timeoffset.tv_sec;
-		G.timeoffset.tv_sec = 0;
-	}
-#endif
-	offset = G.timeoffset;
-	wt = walltime;
+	rt = realtime;
 	t = G.ticks;
-	splx(x);
 	
 	if (t == G.rt.lasttime) {
 		G.rt.incr += RTINCR;
@@ -130,23 +121,18 @@ void getrealtime(struct timespec *tsp)
 		G.rt.incr = 0;
 		G.rt.lasttime = t;
 	}
-	wt.tv_nsec = (t - wt.tv_nsec) % HZ;
-	wt.tv_nsec = wt.tv_nsec * TICK + G.rt.incr;
-	normalize_timespec(&wt);
-	timespecadd(&wt, &offset, tsp);
+	offset.tv_sec = 0;
+	offset.tv_nsec = G.rt.incr;
+	splx(x);
+	
+	timespecadd(&rt, &offset, tsp);
 }
 
 /* setrealtime() sets the real time to the given timespec */
 void setrealtime(struct timespec *ts)
 {
-	struct timespec rt, dt;
 	int x = splclock();
-	getrealtime(&rt);
-	
-	/* timeoffset += ts - rt */
-	timespecsub(ts, &rt, &dt);
-	timespecadd(&G.timeoffset, &dt, &G.timeoffset);
-	
+	realtime = *ts;
 	splx(x);
 }
 
@@ -155,15 +141,14 @@ STARTUP(static void getit(int which, struct itimerval *value))
 {
 	struct itimerval itv;
 	struct itimerspec tv;
-	struct timespec rt;
 	int x;
 	
 	x = splclock();
-	getrealtime(&rt);
 	tv = P.p_itimer[which];
 	if (which == ITIMER_REAL) {
 		/* convert from absolute to relative time */
 		if (timespecisset(&tv.it_value)) {
+			struct timespec rt = realtime_mono;
 			if (timespeccmp(&tv.it_value, &rt, <))
 				timespecclear(&tv.it_value);
 			else
@@ -201,9 +186,9 @@ STARTUP(void sys_getitimer())
 
 STARTUP(static int itimerfix(struct timespec *tv))
 {
-	if (tv->tv_sec < 0 || tv->tv_sec > 100000000L ||
-	    tv->tv_nsec < 0 || tv->tv_nsec >= SECOND)
-		return EINVAL;
+	if (tv->tv_sec < 0 || 100000000L < tv->tv_sec ||
+	    tv->tv_nsec < 0 || SECOND <= tv->tv_nsec)
+		return (P.p_error = EINVAL);
 	if (tv->tv_sec == 0 && tv->tv_nsec != 0 && tv->tv_nsec < TICK)
 		tv->tv_nsec = TICK;
 	return 0;
@@ -216,7 +201,7 @@ STARTUP(long hzto(struct timespec *tv))
 	struct timespec rt;
 	int x = splclock();
 	
-	getrealtime(&rt);
+	rt = realtime_mono;
 	timespecsub(tv, &rt, &diff);
 	
 	if (diff.tv_sec < 0)
@@ -238,7 +223,7 @@ STARTUP(void realitexpire(void *vp))
 	struct timespec rt;
 	
 	x = splclock();
-	getrealtime(&rt);
+	rt = realtime_mono;
 	/*
 	 * It's possible for us to be called before the real timer actually
 	 * ought to go off, such as if the timespec is too large to be 
@@ -274,7 +259,6 @@ STARTUP(void sys_setitimer())
 	struct itimera *ap = (struct itimera *)P.p_arg;
 	struct itimerval aitv;
 	struct itimerspec itv;
-	struct timespec rt;
 	int x;
 	
 	if ((unsigned)ap->which > 2) {
@@ -298,7 +282,6 @@ STARTUP(void sys_setitimer())
 	itv.it_value.tv_nsec = 1000 * aitv.it_value.tv_usec;
 	
 	if (itimerfix(&itv.it_value) || itimerfix(&itv.it_interval)) {
-		P.p_error = EINVAL;
 		return;
 	}
 	
@@ -314,13 +297,13 @@ STARTUP(void sys_setitimer())
 #endif
 	
 	x = splclock();
-	getrealtime(&rt);
-	
 	P.p_itimer[ap->which] = itv;
 	
 	if (ap->which == ITIMER_REAL) {
 		untimeout(realitexpire, &P);
 		if (timespecisset(&itv.it_value)) {
+			struct timespec rt = realtime_mono;
+	
 			//kprintf("setitimer: setting realitexpire in %ld.%09ld seconds\n", itv.it_value.tv_sec, itv.it_value.tv_nsec);
 			timespecadd(&itv.it_value, &rt, &itv.it_value);
 #if 0
@@ -430,6 +413,10 @@ static struct timeval *usec_to_timeval(long usec, struct timeval *tv)
 	return tv;
 }
 
+/* 2145 seconds */
+#define MAXADJ (LONG_MAX / 1000000L - 2)
+#define MINADJ (LONG_MIN / 1000000L + 2)
+
 /* int adjtime(const struct timeval *delta, struct timeval *olddelta); */
 STARTUP(void sys_adjtime())
 {
@@ -455,8 +442,8 @@ STARTUP(void sys_adjtime())
 			error = EFAULT;
 			goto out;
 		}
-		if (tv.tv_sec >= (LONG_MAX / 1000000L) ||
-		    tv.tv_sec <= (LONG_MIN / 1000000L) ||
+		if (tv.tv_sec > MAXADJ ||
+		    tv.tv_sec < MINADJ ||
 		    !usec_in_range(tv.tv_usec)) {
 			error = EINVAL;
 			goto out;
