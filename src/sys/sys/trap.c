@@ -193,12 +193,12 @@ STARTUP(void hardclock(unsigned short ps))
 		goto out;
 	
 	++G.calloutlock;
-	spl0();
 	
 	if (G.callout[0].c_dtime <= 0) {
 		int t = 0;
 		struct callout *c1, *c2, c;
 		do {
+			int x;
 			c = G.callout[0];
 			c1 = &G.callout[0];
 			c2 = &G.callout[1];
@@ -206,17 +206,19 @@ STARTUP(void hardclock(unsigned short ps))
 			do {
 				*c1 = *c2++;
 			} while (c1++->c_func);
+			x = spl0();
 			c.c_func(c.c_arg);
+			splx(x);
 			t += c.c_dtime;
 		} while (G.callout[0].c_func != NULL && t <= 0);
 	}
 	G.calloutlock = 0;
 	
-out:	spl0();
+out:	//spl0();
 	
 	scankb();
 	
-	spl1();
+	//spl1();
 	
 	if (!USERMODE(ps)) return;
 	
