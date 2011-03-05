@@ -80,6 +80,7 @@ STARTUP(void hardclock(unsigned short ps))
 	int itimerdecr(struct itimerspec *itp, long nsec);
 	int sig;
 	int whereami;
+	long nsec = TICK;
 	
 	splclock();
 	
@@ -114,23 +115,12 @@ STARTUP(void hardclock(unsigned short ps))
 			delta = timeadj < 0 ? -timeadj : timeadj;
 		}
 		if (timeadj < 0) delta = -delta;
-		realtime.tv_nsec += delta * 1000;
-		
-		/* probably don't need to do this since BUMPNTIME below will
-		 * bump realtime up by more than the delta anyway */
-#if 0
-		if (realtime.tv_nsec >= SECOND) {
-			realtime.tv_nsec -= SECOND;
-			++realtime.tv_sec;
-		} else if (realtime.tv_nsec < 0) {
-			realtime.tv_nsec += SECOND;
-			--realtime.tv_sec;
-		}
-#endif
+		timeadj -= delta;
+		nsec += delta * 1000;
 	}
 #endif
 	
-	BUMPNTIME(&realtime, TICK);
+	BUMPNTIME(&realtime, nsec);
 	BUMPNTIME(&realtime_mono, TICK);
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
