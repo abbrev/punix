@@ -92,7 +92,7 @@ static inline int spl(int x)
 #define spl5() spl(5)
 #define spl6() spl(6)
 #define spl7() spl(7)
-#define splclock() spl3()
+#define splclock() spl1()
 
 void stop(struct proc *);
 
