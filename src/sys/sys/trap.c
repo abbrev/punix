@@ -197,16 +197,18 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	if (G.callout[0].c_dtime <= 0) {
 		int t = 0;
-		struct callout *c1, *c2;
-		c1 = c2 = &G.callout[0];
+		struct callout *c1, *c2, c;
 		do {
-			c2->c_func(c2->c_arg);
-			++c2;
-			t += c2->c_dtime;
-		} while (c2->c_func != NULL && t <= 0);
-		do
-			*c1 = *c2++;
-		while (c1++->c_func);
+			c = G.callout[0];
+			c1 = &G.callout[0];
+			c2 = &G.callout[1];
+			/* remove the first callout before calling it */
+			do {
+				*c1 = *c2++;
+			} while (c1++->c_func);
+			c.c_func(c.c_arg);
+			t += c.c_dtime;
+		} while (G.callout[0].c_func != NULL && t <= 0);
 	}
 	G.calloutlock = 0;
 	
