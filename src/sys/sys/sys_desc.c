@@ -60,9 +60,11 @@
 #include <stddef.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "proc.h"
 #include "file.h"
+#include "buf.h"
 #include "dev.h"
 #include "punix.h"
 #include "process.h"
