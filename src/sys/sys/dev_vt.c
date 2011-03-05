@@ -1257,23 +1257,12 @@ static void dovtoutput(int ch, struct tty *tp)
 	cursor(tp);
 }
 
-/* This hack solves the problem of calling vtoutput() from hardclock() while
- * not spending too much time in interrupt mode. Meh. */
 static void vtoutput(int ch, struct tty *tp)
 {
 	int c;
 	int x = spl7();
-	if (G.vt.lock) {
-		putc(ch, &tp->t_outq);
-		splx(x);
-		return;
-	}
-	++G.vt.lock;
-	splx(x);
-	while ((c = getc(&tp->t_outq)) != -1)
-		dovtoutput(c, tp);
 	dovtoutput(ch, tp);
-	G.vt.lock = 0;
+	splx(x);
 }
 
 /*
