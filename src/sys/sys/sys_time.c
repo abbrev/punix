@@ -471,6 +471,13 @@ STARTUP(void sys_time())
 	P.p_retval = sec;
 }
 
+/*
+ * getloadavg1() is like getloadavg() in BSD/Linux, but this version returns
+ * load averages as 16.16 fixed-point values rather than as doubles (since we
+ * do not support floating-point yet).
+ * This system call may be deprecated in the future when or if floating point
+ * is supported.
+ */
 STARTUP(void sys_getloadavg1())
 {
 	struct a {
