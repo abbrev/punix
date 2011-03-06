@@ -306,14 +306,14 @@ STARTUP(void postsig(int sig))
 			panic("postsig action");
 #endif
 		
-		spl7();
+		int x = spl7();
 		if (P.p_psflags & SAS_OLDMASK) {
 			returnmask = P.p_oldmask;
 			P.p_psflags &= ~SAS_OLDMASK;
 		} else
 			returnmask = P.p_sigmask;
 		P.p_sigmask |= P.p_sigmasks[sig] | mask;
-		spl0();
+		splx(x);
 		++P.p_rusage.ru_nsignals;
 		sendsig(action, sig, returnmask);
 		return;
