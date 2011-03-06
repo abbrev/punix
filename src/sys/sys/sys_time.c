@@ -444,7 +444,8 @@ STARTUP(void sys_adjtime())
 		}
 		if (tv.tv_sec > MAXADJ ||
 		    tv.tv_sec < MINADJ ||
-		    !usec_in_range(tv.tv_usec)) {
+		    tv.tv_usec < -1000000L ||
+		    tv.tv_usec >  1000000L) {
 			error = EINVAL;
 			goto out;
 		}
