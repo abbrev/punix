@@ -116,11 +116,9 @@ STARTUP(void swtch())
 	while (!(p = earliest_deadline_proc())) {
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
-		//splx(x);
 		*(short *)(0x4c00+0xf00-26) = 0xffff;
 		cpuidle();
 		*(short *)(0x4c00+0xf00-26) = 0;
-		//x = spl1();
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */
 	}
@@ -161,7 +159,8 @@ static void set_state(struct proc *p, int state)
 	if (state == P_RUNNING) {
 		++G.numrunning;
 		/* preempt the current process */
-		if (time_before(p->p_deadline, current->p_deadline)) {
+		if (!current ||
+		    time_before(p->p_deadline, current->p_deadline)) {
 			++G.need_resched;
 			//istick = 0;
 		}
