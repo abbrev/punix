@@ -79,6 +79,14 @@ static void endvfork()
 #endif
 }
 
+static void *stackalloc(size_t *size)
+{
+	void *p = memalloc(size, 0);
+	if (p)
+		p += *size; /* stack starts at the top */
+	return p;
+}
+
 /* the following are inherited by the child from the parent (this list comes from execve(2) man page in FreeBSD 6.2):
 	process ID           see getpid(2)
 	parent process ID    see getppid(2)
@@ -161,26 +169,23 @@ void sys_execve()
 	envc = ap - envp; /* number of env vectors */
 	
 #define STACKSIZE 1024
-#define USTACKSIZE 4096
+#define USTACKSIZE 8192
 #define UDATASIZE 1024
 	/* allocate the user stack */
 	ustacksize = USTACKSIZE;
-	ustack = memalloc(&ustacksize, 0);
+	ustack = stackalloc(&ustacksize);
 	if (!ustack) {
-		P.p_error = ENOMEM;
 		goto error_ustack;
 	}
-	ustack += ustacksize;
-	//kprintf("execve(): ustack=%08lx\n", ustack);
+	kprintf("execve(): ustack=%08lx\n", ustack);
 	
 	/* allocate the data section */
 	datasize = UDATASIZE;
 	data = memalloc(&datasize, 0);
 	if (!data) {
-		P.p_error = ENOMEM;
 		goto error_data;
 	}
-	//kprintf("execve():   data=%08lx\n", data);
+	kprintf("execve():   data=%08lx\n", data);
 	//printheaplist();
 	
 	size = (size + 1) & ~1; /* size must be even */
@@ -354,10 +359,15 @@ void sys_vfork()
 #if 1
 	struct proc *cp = NULL;
 	pid_t pid;
-	void *sp = NULL;
+	void *stack = NULL;
+	size_t stacksize = STACKSIZE;
 	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
 	
-	goto nomem; /* XXX: remove this once vfork is completely written */
+	/* XXX: remove this block once vfork is completely written */
+	{
+		P.p_error = ENOMEM;
+		return;
+	}
 	
 	/* spl7(); */
 	
@@ -365,26 +375,27 @@ void sys_vfork()
 	if (!cp)
 		goto nomem;
 	
-	*cp = P; /* copy our own process structure to the child */
+	*cp = *current; /* copy our own process structure to the child */
 	
 	pid = pidalloc();
 	P.p_retval = pid;
 	cp->p_pid = pid;
 	
 	/* allocate a kernel stack for the child */
-	/* sp = kstackalloc(); */
-	if (!sp)
+	stack = stackalloc(&stacksize);
+	if (!stack)
 		goto stackp;
 	
 	/* At this point there's no turning back! */
 	
-	cp->p_stack = sp;
-	cp->p_stacksize = 0; /* XXX */
-	cp->p_status = P_RUNNING; /* FIXME: use setrun() instead */
+	cp->p_stack = stack;
+	cp->p_stacksize = stacksize;
 	cp->p_flag |= P_VFORK;
+	cp->p_status = P_VFORKING; /* FIXME: use setrun() instead */
+	setrun(cp);
 	
 	/* use the new kernel stack but the same user stack */
-	setup_env(&cp->p_ctx, P.p_sfp, sp);
+	setup_env(&cp->p_ctx, P.p_sfp, stack);
 	
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
@@ -392,13 +403,13 @@ void sys_vfork()
 	
 	/* reclaim our stuff */
 	cp->p_flag |= P_VFDONE;
-	wakeup(current);
+	wakeup(current); /* ??? */
 	return;
 stackp:
+	memfree(stack - stacksize, 0);
 	pfree(cp);
 nomem:
 #endif
-	P.p_error = ENOMEM;
 }
 
 static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
