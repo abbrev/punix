@@ -43,6 +43,7 @@ OBJ	+= lcd.o dev_tty.o keyscan.o batt.o
 OBJ	+= kputs.o scroll.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
+OBJ	+= context.o
 OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o bogomips.o
@@ -92,6 +93,7 @@ calc.o: calc.s
 m68k.o: m68k.s
 string.o: string.s
 setjmp.o: setjmp.s
+context.o: context.s
 #${SYSINC}/lcd.inc: ${SYSINC}/lcdglo.inc
 #${SYSINC}/lcd.h: ${SYSINC}/lcdglo.h
 #${SYSINC}/cell.h: ${SYSINC}/cellglo.h ${SYSINC}/lcd.h
@@ -116,7 +118,7 @@ sys_prot.o: sys_prot.c
 sys_time.o: sys_time.c
 panic.o: panic.c ${SYSINC}/punix.h
 process.o: process.c ${SYSINC}/proc.h ${SYSINC}/process.h \
-		${STDINC}/assert.h ${SYSINC}/setjmp.h
+		${STDINC}/assert.h
 hanoi.o: hanoi.c
 abort.o: abort.c ${SYSINC}/punix.h
 assert.o: assert.c

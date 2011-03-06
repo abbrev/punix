@@ -10,9 +10,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <sched.h>
+#include <setjmp.h>
 
 #include "punix.h"
-#include "setjmp.h"
 #include "proc.h"
 #include "queue.h"
 #include "inode.h"
@@ -162,7 +162,7 @@ STARTUP(void slp(void *chan, int intr))
 	if (!intr || P.p_error == 0)
 		return;
 	
-	longjmp(P.p_qsav, 1);
+	longjmp(P.p_sigjmp, 1);
 }
 
 

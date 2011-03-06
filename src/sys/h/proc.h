@@ -73,6 +73,7 @@
 #include "ktime.h"
 #include "setjmp.h"
 #include "list.h"
+#include "context.h"
 
 #if 0
 #define NPROC	32
@@ -139,8 +140,7 @@ struct proc {
 	unsigned long p_deadline;
 	
 	/* execution state */
-	jmp_buf p_ssav;	/* for swapping procs */
-	jmp_buf p_qsav;	/* for interrupting syscalls */
+	struct context p_ctx; /* process context when switching procs */
 	int p_fpsaved;	/* floating-point state is saved? */
 	/* ??? p_fps; -- floating-point state */
 	
@@ -191,6 +191,7 @@ struct proc {
 	 * p_sigignore  => p_sigignore
 	 * p_sigcatch   => p_sigcatch
 	 */
+	jmp_buf p_sigjmp;	/* for interrupting syscalls */
 	sigset_t p_sig;		/* currently posted signals */
 	sigset_t p_sigmask;	/* current signal mask */
 	sigset_t p_oldmask;	/* saved mask from before sigpause */

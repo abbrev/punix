@@ -133,12 +133,12 @@ STARTUP(void swtch())
 		P.p_fpsaved = 1;
 	}
 	
-	if (setjmp(P.p_ssav))
-		return; /* we get here via longjmp */
+	if (csave(&P.p_ctx))
+		return; /* we get here via crestore */
 	
 	current = p;
 	
-	longjmp(P.p_ssav, 1);
+	crestore(&P.p_ctx);
 }
 #endif
 

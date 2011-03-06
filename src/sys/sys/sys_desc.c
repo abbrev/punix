@@ -102,7 +102,7 @@ STARTUP(static void rdwr(int mode))
 	
 	/* if we were interrupted by a signal, just return the byte count if
 	 * it's not zero, else return an error */
-	if (setjmp(P.p_qsav)) {
+	if (setjmp(P.p_sigjmp)) {
 		if (P.p_count == ap->count) {
 			P.p_error = EINTR;
 			return;

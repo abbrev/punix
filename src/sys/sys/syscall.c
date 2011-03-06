@@ -84,7 +84,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 again:
 	P.p_error = P.p_retval = 0;
 	
-	if (setjmp(P.p_qsav)) {
+	if (setjmp(P.p_sigjmp)) {
 		/* we get here if a signal arrives during the system call */
 		if (P.p_error == 0)
 			P.p_error = EINTR;

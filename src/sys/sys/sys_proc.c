@@ -31,8 +31,8 @@
 #include <sys/time.h>
 #include <sound.h>
 #include <sys/utsname.h>
+#include <setjmp.h>
 
-#include "setjmp.h"
 #include "proc.h"
 #include "punix.h"
 #include "process.h"
@@ -220,13 +220,13 @@ void sys_execve()
 	P.p_datasize = datasize;
 	
 	/* finally, set up the context to return to the new process image */
-	if (setjmp(P.p_ssav))
+	if (csave(&P.p_ctx))
 		return;
 	
 	/* go to the new user context */
-	P.p_ssav->usp = ustack;
+	P.p_ctx.usp = ustack;
 	P.p_sfp->pc = text;
-	longjmp(P.p_ssav, 1);
+	crestore(&P.p_ctx);
 	
 	return;
 	
@@ -355,7 +355,7 @@ void sys_vfork()
 	struct proc *cp = NULL;
 	pid_t pid;
 	void *sp = NULL;
-	void setup_env(jmp_buf env, struct syscallframe *sfp, long *sp);
+	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
 	
 	goto nomem; /* XXX: remove this once vfork is completely written */
 	
@@ -384,7 +384,7 @@ void sys_vfork()
 	cp->p_flag |= P_VFORK;
 	
 	/* use the new kernel stack but the same user stack */
-	setup_env(cp->p_ssav, P.p_sfp, sp);
+	setup_env(&cp->p_ctx, P.p_sfp, sp);
 	
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
