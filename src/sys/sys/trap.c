@@ -173,7 +173,6 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	/* do call-outs */
 	
-	*(long *)(0x4c00+0xf00-16) = G.callout[0].c_dtime;
 	if (G.callout[0].c_func == NULL)
 		goto out;
 	
