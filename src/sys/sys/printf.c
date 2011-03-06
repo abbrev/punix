@@ -17,8 +17,8 @@
 /* el-cheapo buffered output */
 int fflush(void *stream)
 {
-	char *b = G.charbuf;
-	ssize_t s = G.charbufsize;
+	char *b = G.user.charbuf;
+	ssize_t s = G.user.charbufsize;
 	while (s > 0) {
 		ssize_t n = write(1, b, s);
 		if (n < 0) break;
@@ -26,14 +26,14 @@ int fflush(void *stream)
 		s -= n;
 	}
 		
-	G.charbufsize = 0;
+	G.user.charbufsize = 0;
 	return 0;
 }
 
 STARTUP(int putchar(int c))
 {
-	G.charbuf[G.charbufsize++] = c;
-	if (G.charbufsize >= 128 || c == '\n')
+	G.user.charbuf[G.user.charbufsize++] = c;
+	if (G.user.charbufsize >= 128 || c == '\n')
 		fflush(NULL);
 	return (unsigned char)c;
 }

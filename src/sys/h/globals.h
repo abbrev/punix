@@ -156,10 +156,13 @@ struct globals {
 	/* temp/debugging variables */
 	int whereami;
 	int spin;
-	struct timeval lasttime;
-	struct rusage lastrusage;
-	char charbuf[128];
-	int charbufsize;
+	struct {
+		struct timeval lasttime;
+		struct rusage lastrusage;
+		char charbuf[128];
+		int charbufsize;
+		int _errno;
+	} user;
 	int nextinode;
 	/* end temp/debugging variables */
 	
@@ -188,5 +191,7 @@ extern int updlock;
 #define current  G._current
 #define loadavtime G._loadavtime
 #define uptime   G._uptime
+
+#define errno  G.user._errno
 
 # endif

@@ -110,12 +110,18 @@ mksyscall	adjtime
  */
 cerror:
 	| move	%d0,errno
+	move	%d0,-(%sp)
+	jbsr	seterrno
+	lea.l	(2,%sp),%sp
 	moveq.l	#-1,%d0
 	rts
 
 caerror:
 	| move	%d0,errno
-	move.l	#0,%a0
+	move	%d0,-(%sp)
+	jbsr	seterrno
+	lea.l	(2,%sp),%sp
+	sub.l	%a0,%a0
 	rts
 
 .macro mkstart name

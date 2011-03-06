@@ -48,6 +48,11 @@
 extern ssize_t write(int fd, const void *buf, size_t count);
 extern void _exit(int status);
 
+void seterrno(int e)
+{
+	errno = e;
+}
+
 static void println(char *s)
 {
 	write(2, s, strlen(s));
@@ -806,11 +811,13 @@ static int id_main(int argc, char **argv, char **envp)
 static int pause_main(int argc, char **argv, char **envp)
 {
 	struct sigaction sa;
+	int e;
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	alarm(3);
-	printf("pause returned %d\n", pause());
+	e = pause();
+	printf("pause returned %d (errno=%d)\n", e, errno);
 	return 0;
 }
 
@@ -922,10 +929,10 @@ static void updatetop()
 	getrusage(RUSAGE_SELF, &rusage);
 	gettimeofday(&tv, NULL);
 	
-	if (G.lasttime.tv_sec != 0 || G.lasttime.tv_usec != 0) {
-		timersub(&tv, &G.lasttime, &difftime);
-		timersub(&rusage.ru_utime, &G.lastrusage.ru_utime, &diffutime);
-		timersub(&rusage.ru_stime, &G.lastrusage.ru_stime, &diffstime);
+	if (G.user.lasttime.tv_sec != 0 || G.user.lasttime.tv_usec != 0) {
+		timersub(&tv, &G.user.lasttime, &difftime);
+		timersub(&rusage.ru_utime, &G.user.lastrusage.ru_utime, &diffutime);
+		timersub(&rusage.ru_stime, &G.user.lastrusage.ru_stime, &diffstime);
 		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
 		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
 		if (msec == 0) return;
@@ -989,8 +996,8 @@ static void updatetop()
 		cleareol();
 		printf(ESC "[J" ESC "[5H");
 	}
-	G.lasttime = tv;
-	G.lastrusage = rusage;
+	G.user.lasttime = tv;
+	G.user.lastrusage = rusage;
 }
 
 #define TOPBUFSIZE 200
@@ -1019,7 +1026,7 @@ static int top_main(int argc, char *argv[], char **envp)
 	sigaction(SIGALRM, &sa, NULL);
 	setitimer(ITIMER_REAL, &initit, NULL);
 	
-	G.lasttime.tv_sec = G.lasttime.tv_usec = 0;
+	G.user.lasttime.tv_sec = G.user.lasttime.tv_usec = 0;
 	while (!quit) {
 		updatetop();
 		n = read(0, buf, TOPBUFSIZE);
