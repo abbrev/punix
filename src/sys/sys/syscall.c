@@ -81,6 +81,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 		copyin(P.p_arg, &usp[1], callp->sy_narg*sizeof(int));
 #endif
 	
+again:
 	P.p_error = P.p_retval = 0;
 	
 	if (setjmp(P.p_qsav)) {
@@ -92,6 +93,13 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	}
 	
 	if (P.p_error) {
+		if (P.p_error == ERESTART) {
+			if (callp->sy_flags & SA_RESTART) {
+				goto again;
+			} else {
+				P.p_error = EINTR;
+			}
+		}
 		/* return the error */
 		sfp->sr |= PS_C; /* set carry */
 		retval = P.p_error;
@@ -106,7 +114,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 		swtch();
 	
 	/* XXX */
-	if (sig = issignal(&P))
+	if ((sig = issignal(&P)))
 		postsig(sig);
 	
 	G.whereami = WHEREAMI_USER;
