@@ -160,7 +160,7 @@ static struct heapentry *allocentry(int size, pid_t pid)
 	if (G.heap.heapsize >= HEAPSIZE) return NULL;
 	
 loop:
-#define SIZETHRESHOLD 2048L
+#define SIZETHRESHOLD 32768L
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heap.heaplist[G.heap.heapsize-1].start;
 		for (hp = &G.heap.heaplist[G.heap.heapsize-2]; hp >= &G.heap.heaplist[0]; --hp) {
@@ -239,7 +239,10 @@ void *memalloc(size_t *sizep, pid_t pid)
 		return NULL;
 	//kprintf("memalloc(%5u, %d)\n", (int)size, pid);
 	hp = allocentry(size, pid);
-	if (!hp) return NULL;
+	if (!hp) {
+		P.p_error = ENOMEM;
+		return NULL;
+	}
 	*sizep = (size_t)HEAPBLOCKSIZE * size;
 	return &G.heap.heap[hp->start];
 }
