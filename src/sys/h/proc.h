@@ -144,7 +144,7 @@ struct proc {
 	int p_fpsaved;	/* floating-point state is saved? */
 	/* ??? p_fps; -- floating-point state */
 	
-	struct syscallframe *p_sfp;	/* syscall frame pointer for vfork(2) */
+	struct context *p_vfork_ctx; /* context for execve(2) and vfork(2) */
 	
 	/* segments of user memory (note: the heap is global) */
 	void *p_ustack;

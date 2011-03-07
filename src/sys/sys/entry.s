@@ -240,22 +240,28 @@ _WaitKeyboard:
 	rts
 
 	.long	0xdeadd00d
+	|long dreg[5];  /* %d3-%d7 */
+	|long *usp;     /* %usp */
+	|long areg[5];  /* %a2-%a6 */
+	|long *sp;      /* %a7 */
+	|/* note: the following two align with a trap stack frame */
+	|short sr;      /* %sr */
+	|void *pc;      /* return address */
+
 | Assembly interface for C version; prototype of C version:
-| uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp)
+| uint32_t syscall(unsigned callno, struct context *ctx)
 _syscall:
-	movem.l	%d3-%d7/%a2-%a6,-(%sp)	| XXX: this is needed for vfork!
+	/* push a struct context onto the stack */
+	move.l	%usp,%a1
+	movem.l	%d3-%d7/%a1-%a7,-(%sp)
 	
-	pea.l	(%sp)		| struct syscallframe *sfp
-	
-	move.l	%usp,%a0
-	move.l	%a0,-(%sp)	| void **usp
-	
+	pea.l	(%sp)		| struct context *ctx
 	move	%d0,-(%sp)	| int callno
-	
 	bsr	syscall
-	adda.l	#10,%sp
+	adda.l	#6,%sp
 	
-	movem.l	(%sp)+,%d3-%d7/%a2-%a6
+	movem.l	(%sp)+,%d3-%d7/%a1-%a7
+	move.l	%a1,%usp
 	rte
 
 | jmp_buf

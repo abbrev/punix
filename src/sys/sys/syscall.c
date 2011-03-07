@@ -49,7 +49,8 @@
  * usp is for user arguments to this syscall
  * sfp is for setting/clearing carry to indicate error/success (and for vfork)
  */
-STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
+//STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
+STARTUP(uint32_t syscall(unsigned callno, struct context *ctx))
 {
 	extern const int nsysent;
 	struct sysent *callp;
@@ -59,7 +60,7 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 	G.whereami = WHEREAMI_SYSCALL;
 	
 	/* for vfork(2) and execve(2) */
-	P.p_sfp = sfp;
+	P.p_vfork_ctx = ctx;
 	//P.p_ustack = usp; /* is this actually necessary ? */
 	
 	/* get the system call entry */
@@ -74,11 +75,11 @@ STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 #if USPARGS
 #warning USPARGS might not be safe. See sys/proc.h for details.
 	/* this is not safe for reasons listed in sys/proc.h */
-	P.p_arg = &usp[1];
+	P.p_arg = &ctx->usp[1];
 #else
 	/* copy arguments from user stack to argument buffer in user struct */
 	if (callp->sy_narg) /* &usp[1] below skips over return address */
-		copyin(P.p_arg, &usp[1], callp->sy_narg*sizeof(int));
+		copyin(P.p_arg, &ctx->usp[1], callp->sy_narg*sizeof(int));
 #endif
 	
 again:
@@ -101,11 +102,11 @@ again:
 			}
 		}
 		/* return the error */
-		sfp->sr |= PS_C; /* set carry */
+		ctx->sr |= PS_C; /* set carry */
 		retval = P.p_error;
 	} else {
 		/* no error */
-		sfp->sr &= ~PS_C; /* clear carry */
+		ctx->sr &= ~PS_C; /* clear carry */
 		retval = P.p_retval;
 	}
 	

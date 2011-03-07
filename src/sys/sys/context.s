@@ -7,7 +7,8 @@
 .equ context.usp, 5*4
 .equ context.areg,6*4
 .equ context.sp, 11*4
-.equ context.pc, 12*4
+.equ context.sr, 12*4
+.equ context.pc, 12*4+2
 
 /* int csave(struct context *ctx); */
 csave:
@@ -15,6 +16,8 @@ csave:
 	
 	move.l	%usp,%a1
 	movem.l	%d3-%d7/%a1-%a7,(%a0)	| save %d3-%d7/%a2-%a7 and %usp
+	move	%sr,%d0
+	move	%d0,context.sr(%a0)
 	move.l	(%sp),context.pc(%a0)	| save return address
 	
 	moveq	#0,%d0
@@ -26,6 +29,8 @@ crestore:
 	
 	movem.l	(%a0)+,%d3-%d7/%a1-%a7	| restore %d3-%d7/%a2-%a7 and %usp
 	move.l	%a1,%usp
+	move	(%a0)+,%d0
+	move	%d0,%sr
 	move.l	(%a0),(%sp)		| restore return address
 	
 	moveq	#1,%d0

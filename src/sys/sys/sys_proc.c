@@ -225,13 +225,10 @@ void sys_execve()
 	P.p_datasize = datasize;
 	
 	/* finally, set up the context to return to the new process image */
-	if (csave(&P.p_ctx))
-		return;
 	
 	/* go to the new user context */
-	P.p_ctx.usp = ustack;
-	P.p_sfp->pc = text;
-	crestore(&P.p_ctx);
+	P.p_vfork_ctx->pc = text;
+	P.p_vfork_ctx->usp = ustack;
 	
 	return;
 	
@@ -395,7 +392,7 @@ void sys_vfork()
 	setrun(cp);
 	
 	/* use the new kernel stack but the same user stack */
-	setup_env(&cp->p_ctx, P.p_sfp, stack);
+	setup_env(&cp->p_ctx, NULL, stack);
 	
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
