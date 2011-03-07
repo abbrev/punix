@@ -242,7 +242,7 @@ static inline int vfork()
 		"	move #66,%%d0 \n"
 		"	trap #0 \n"
 		"	bcc 0f \n"
-		"	moveq #-1,%%d0 \n" /* we don't care about errno */
+		"	jbsr cerror \n"
 		"0:	move %%d0,%0 \n"
 		: "=r"(result)
 		:

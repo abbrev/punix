@@ -104,6 +104,7 @@ mksyscall	wait
 mksyscall	pause
 mksyscall	adjtime
 
+.global cerror, caerror
 /*
  * common routine to handle errors from system calls: set errno appropriately
  * and return -1.
