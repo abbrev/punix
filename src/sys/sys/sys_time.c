@@ -269,32 +269,33 @@ STARTUP(void sys_setitimer())
 	if (ap->ovalue)
 		getit(ap->which, ap->ovalue);
 	
-	/* just return if 'value' is NULL */
-	if (!ap->value)
-		return;
-	
-	if ((P.p_error = copyin(&aitv, ap->value, sizeof(aitv))))
-		return;
-	
-	itv.it_interval.tv_sec = aitv.it_interval.tv_sec;
-	itv.it_interval.tv_nsec = 1000 * aitv.it_interval.tv_usec;
-	itv.it_value.tv_sec = aitv.it_value.tv_sec;
-	itv.it_value.tv_nsec = 1000 * aitv.it_value.tv_usec;
-	
-	if (itimerfix(&itv.it_value) || itimerfix(&itv.it_interval)) {
-		return;
-	}
-	
+	if (ap->value) {
+		if ((P.p_error = copyin(&aitv, ap->value, sizeof(aitv))))
+			return;
+		
+		itv.it_interval.tv_sec = aitv.it_interval.tv_sec;
+		itv.it_interval.tv_nsec = 1000 * aitv.it_interval.tv_usec;
+		itv.it_value.tv_sec = aitv.it_value.tv_sec;
+		itv.it_value.tv_nsec = 1000 * aitv.it_value.tv_usec;
+		
+		if (itimerfix(&itv.it_value) || itimerfix(&itv.it_interval)) {
+			return;
+		}
 #if 1
-	/* round the timer's value up to the next whole tick so it doesn't
-	 * signal earlier than it should */
-	itv.it_value.tv_nsec += TICK - 1;
-	itv.it_value.tv_nsec -= (itv.it_value.tv_nsec % TICK);
-	if (itv.it_value.tv_nsec >= SECOND) {
-		itv.it_value.tv_sec++;
-		itv.it_value.tv_nsec -= SECOND;
-	}
+		/* round the timer's value up to the next whole tick so it
+		 * doesn't signal earlier than it should */
+		itv.it_value.tv_nsec += TICK - 1;
+		itv.it_value.tv_nsec -= (itv.it_value.tv_nsec % TICK);
+		if (itv.it_value.tv_nsec >= SECOND) {
+			itv.it_value.tv_sec++;
+			itv.it_value.tv_nsec -= SECOND;
+		}
 #endif
+	
+	} else {
+		/* treat it as a zero timer (interval=value=0) */
+		memset(&itv, 0, sizeof(itv));
+	}
 	
 	x = splclock();
 	P.p_itimer[ap->which] = itv;
