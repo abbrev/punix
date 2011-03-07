@@ -6,11 +6,10 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include "punix.h"
 #include "globals.h"
-
-#define isdigit(c)	((unsigned) ((c) - '0') <  (unsigned) 10)
 
 #undef fflush
 
