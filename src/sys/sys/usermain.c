@@ -47,18 +47,6 @@
 
 extern ssize_t write(int fd, const void *buf, size_t count);
 extern void _exit(int status);
-
-void seterrno(int e)
-{
-	errno = e;
-}
-
-static void println(char *s)
-{
-	write(2, s, strlen(s));
-	write(2, "\n", 1);
-}
-
 int printf(const char *format, ...);
 int putchar(int);
 //size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
@@ -69,6 +57,85 @@ int adjtime(const struct timeval *delta, struct timeval *olddelta);
 /* simple implementations of some C standard library functions */
 void *kmalloc(size_t *size);
 void kfree(void *ptr);
+
+
+void seterrno(int e)
+{
+	errno = e;
+}
+
+const int sys_nerr = 41;
+const char *sys_errlist[] = {
+	"Success",                     /* 0 */
+	"Operation not permitted",     /* 1 */
+	"No such file or directory",
+	"No such process",
+	"Interrupted system call",
+	"I/O error",
+	"No such device or address",
+	"Argument list too long",
+	"Exec format error",
+	"Bad file number",
+	"No child processes",          /* 10 */
+	"Try again",
+	"Out of memory",
+	"Permission denied",
+	"Bad address",
+	"Block device required",
+	"Device or resource busy",
+	"File exists",
+	"Cross-device link",
+	"No such device",
+	"Not a directory",             /* 20 */
+	"Is a directory",
+	"Invalid argument",
+	"File table overflow",
+	"Too many open files",
+	"Not a typewriter",
+	"Text file busy",
+	"File too large",
+	"No space left on device",
+	"Illegal seek",
+	"Read-only file system",       /* 30 */
+	"Too many links",
+	"Broken pipe",
+	"Math argument out of domain",
+	"Math result not representable",
+	"Resource deadlock would occur",
+	"File name too long",
+	"No record locks available",
+	"Syscall not implemented",
+	"Directory not empty",
+	"Too many symbolic links"      /* 40 */
+};
+
+#define ERRSTRLEN 20
+char *strerror(int e)
+{
+	static char errstr[ERRSTRLEN+1];
+	
+	if (e < 0 || e >= sizeof(sys_errlist) / sizeof(sys_errlist[0])) {
+		//sprintf("Unknown error %d", e);
+		//return errstr;
+		return "Unknown error";
+	}
+	return sys_errlist[e];
+}
+
+/* XXX: this prints to stdout instead of stderr */
+void perror(const char *s)
+{
+	int e = errno;
+	if (s && *s)
+		printf("%s: ", s);
+	printf("%s\n", strerror(e));
+}
+
+static void println(char *s)
+{
+	write(2, s, strlen(s));
+	write(2, "\n", 1);
+}
 
 void *malloc(size_t size)
 {
@@ -244,6 +311,13 @@ static void sigalrm()
 	printf("sigalrm\n");
 }
 
+static void testclock(int argc, char *argv[], char *envp[])
+{
+	printf("system clock:  %ld\n", realtime.tv_sec);
+	printf("seconds clock: %ld\n", G.seconds);
+	userpause();
+}
+
 static void testrandom(int argc, char *argv[], char *envp[])
 {
 	int i;
@@ -274,9 +348,9 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	long *audioright = NULL;
 	long *audiocenter = NULL;
 	
-	audioleft = malloc(1024);
-	audioright = malloc(1024);
-	audiocenter = malloc(1024);
+	audioleft = malloc(AUDIOBUFSIZE*sizeof(long));
+	audioright = malloc(AUDIOBUFSIZE*sizeof(long));
+	audiocenter = malloc(AUDIOBUFSIZE*sizeof(long));
 	if (!audioleft || !audioright || !audiocenter) {
 		printf("could not allocate audio buffers!\n");
 		goto free;
@@ -284,22 +358,22 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	audiofd = open("/dev/audio", O_RDWR);
 	printf("audiofd = %d\n", audiofd);
 	
-	for (i = 0; i < 1024; ++i) {
+	for (i = 0; i < AUDIOBUFSIZE; ++i) {
 		audioleft[i] = 0x00aaaa00;
 		audioright[i] = 0x00555500;
 		audiocenter[i] = 0x00ffff00;
 	}
 	
 	printf("playing left...\n");
-	write(audiofd, audioleft, sizeof(audioleft));
+	write(audiofd, audioleft, AUDIOBUFSIZE * sizeof(long));
 	ioctl(audiofd, SNDCTL_DSP_SYNC);
 	
 	printf("playing right...\n");
-	write(audiofd, audioright, sizeof(audioright));
+	write(audiofd, audioright, AUDIOBUFSIZE * sizeof(long));
 	ioctl(audiofd, SNDCTL_DSP_SYNC);
 	
 	printf("playing both...\n");
-	write(audiofd, audiocenter, sizeof(audiocenter));
+	write(audiofd, audiocenter, AUDIOBUFSIZE * sizeof(long));
 #if 0
 	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
 #endif
@@ -669,6 +743,7 @@ struct test {
 };
 
 static const struct test tests[] = {
+	{ "clock", testclock },
 	{ "/dev/random", testrandom },
 	{ "/dev/link", testlink },
 	{ "/dev/audio", testaudio },
@@ -725,8 +800,10 @@ static int cat_main(int argc, char **argv, char **envp)
 			fd = open(argv[i], O_RDONLY);
 		}
 		if (fd < 0) {
-			printf("cat: %s: cannot open file for reading\n",
-			       argv[i]);
+			int e = errno;
+			printf("cat: ");
+			errno = e;
+			perror(argv[i]);
 			continue;
 		}
 		n = docat(fd);
@@ -739,10 +816,10 @@ static int cat_main(int argc, char **argv, char **envp)
 static int echo_main(int argc, char **argv, char **envp)
 {
 	int i;
-	for (i = 1; i < argc; ++i) {
-		if (i > 1) putchar(' ');
-		printf("%s", argv[i]);
-	}
+	if (argc >= 2)
+		printf("%s", argv[1]);
+	for (i = 2; i < argc; ++i)
+		printf(" %s", argv[i]);
 	putchar('\n');
 	return 0;
 }
@@ -817,7 +894,7 @@ static int pause_main(int argc, char **argv, char **envp)
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	alarm(3);
 	e = pause();
-	printf("pause returned %d (errno=%d)\n", e, errno);
+	perror("pause");
 	return 0;
 }
 
@@ -1198,58 +1275,58 @@ static int sh_main(int argc, char **argv, char **envp)
 			printf("Use \"exit\" to leave the shell.\n");
 			continue;
 		}
-		if (len == BUFSIZE || buf[len-1] == '\n') {
-			char *cmd;
-			char *s;
-			char *token;
-			int i;
-			int err = 0;
-			
-			buf[len-1] = '\0';
-			s = buf;
-			aargc = 0;
-			while ((token = gettoken(&s, &err)) != NULL) {
-				if (aargc >= MAXARGC) {
-					err = -1; /* XXX */
-					break;
-				}
-				aargv[aargc++] = token;
-			}
-			if (err && err != TOKEN_ERR_EOL) {
-				const char *errstr = "too many arguments";
-				switch (err) {
-				case TOKEN_ERR_UNMATCHED_DQUOTE:
-					errstr = "unmatched double quote";
-					break;
-				case TOKEN_ERR_UNMATCHED_SQUOTE:
-					errstr = "unmatched single quote";
-					break;
-				}
-				printf("stupidsh: error: %s\n", errstr);
-				goto eol;
-			}
-			aargv[aargc] = NULL;
-			
-			if (aargc == 0) goto nextline;
-			cmd = aargv[0];
-			if (!strcmp(cmd, "exit")) {
+		if (len != BUFSIZE && buf[len-1] != '\n')
+			continue;
+		
+		char *cmd;
+		char *s;
+		char *token;
+		int i;
+		int err = 0;
+		
+		buf[len-1] = '\0';
+		s = buf;
+		aargc = 0;
+		while ((token = gettoken(&s, &err)) != NULL) {
+			if (aargc >= MAXARGC) {
+				err = -1; /* XXX */
 				break;
-			} else if (!strcmp(cmd, "help")) {
-				showhelp();
-			} else {
-				int n = run(cmd, aargc, aargv, envp);
-				if (n < 0) {
-					printf(
-					  "stupidsh: %s: command not found\n",
-					   cmd);
-				}
 			}
-eol:
-			neof = 0;
-nextline:
-			bp = buf;
-			len = 0;
+			aargv[aargc++] = token;
 		}
+		if (err && err != TOKEN_ERR_EOL) {
+			const char *errstr = "too many arguments";
+			switch (err) {
+			case TOKEN_ERR_UNMATCHED_DQUOTE:
+				errstr = "unmatched double quote";
+				break;
+			case TOKEN_ERR_UNMATCHED_SQUOTE:
+				errstr = "unmatched single quote";
+				break;
+			}
+			printf("stupidsh: error: %s\n", errstr);
+			goto eol;
+		}
+		aargv[aargc] = NULL;
+		
+		if (aargc == 0) goto nextline;
+		cmd = aargv[0];
+		if (!strcmp(cmd, "exit")) {
+			break;
+		} else if (!strcmp(cmd, "help")) {
+			showhelp();
+		} else {
+			int n = run(cmd, aargc, aargv, envp);
+			if (n < 0) {
+				printf("stupidsh: %s: command not found\n",
+				       cmd);
+			}
+		}
+eol:
+		neof = 0;
+nextline:
+		bp = buf;
+		len = 0;
 	}
 	return 0;
 }
@@ -1300,13 +1377,13 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	pid = vfork();
 	if (pid == 0) {
 		err = execve(cmd, argv, envp);
-		printf("error: couldn't execute %s\n", cmd);
+		perror(cmd);
 		_exit(err);
 	} else if (pid > 0) {
 		/* parent process. we chill here until the child dies */
 		wait(&err);
 	} else {
-		printf("error: couldn't vfork\n");
+		perror("vfork");
 	}
 	
 	return err;
