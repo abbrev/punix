@@ -234,19 +234,26 @@ STARTUP(void sys_open())
 	fd = falloc();
 	if (fd < 0)
 		return;
-	ip = &G.inode[G.nextinode++]; /* XXX very hackish :) */
+	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
 	if (!strcmp(ap->pathname, "/dev/vt"))
 		ip->i_rdev = DEV_VT;
 	else if (!strcmp(ap->pathname, "/dev/audio"))
 		ip->i_rdev = DEV_AUDIO;
 	else if (!strcmp(ap->pathname, "/dev/link"))
 		ip->i_rdev = DEV_LINK;
+	else if (!strcmp(ap->pathname, "/dev/null"))
+		ip->i_rdev = DEV_MISC | 0;
+	else if (!strcmp(ap->pathname, "/dev/zero"))
+		ip->i_rdev = DEV_MISC | 1;
+	else if (!strcmp(ap->pathname, "/dev/full"))
+		ip->i_rdev = DEV_MISC | 2;
 	else if (!strcmp(ap->pathname, "/dev/random"))
 		ip->i_rdev = DEV_MISC | 3;
 	else {
-		P.p_error = ESRCH;
+		P.p_error = ENOENT;
 		return;
 	}
+	++G.nextinode;
 	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
 	ip->i_mode = IFCHR;
 	
