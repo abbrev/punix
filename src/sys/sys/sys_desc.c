@@ -231,9 +231,6 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
-	fd = falloc();
-	if (fd < 0)
-		return;
 	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
 	if (!strcmp(ap->pathname, "/dev/vt"))
 		ip->i_rdev = DEV_VT;
@@ -253,6 +250,9 @@ STARTUP(void sys_open())
 		P.p_error = ENOENT;
 		return;
 	}
+	fd = falloc();
+	if (fd < 0)
+		return;
 	++G.nextinode;
 	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
 	ip->i_mode = IFCHR;
