@@ -1260,7 +1260,7 @@ static void dovtoutput(int ch, struct tty *tp)
 static void vtoutput(int ch, struct tty *tp)
 {
 	int c;
-	int x = spl7();
+	int x = splclock();
 	dovtoutput(ch, tp);
 	splx(x);
 }
