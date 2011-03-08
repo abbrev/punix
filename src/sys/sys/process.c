@@ -199,11 +199,8 @@ STARTUP(struct proc *palloc())
 /* free a process structure */
 STARTUP(void pfree(struct proc *p))
 {
-	if (p) {
-		/* remove this proc from the list */
-		list_del(&p->p_list);
+	if (p)
 		memfree(p, 0);
-	}
 }
 
 #define MAXPID	30000
@@ -217,7 +214,7 @@ STARTUP(int pidalloc())
 	static int mpid = 1;
 	*/
 	
-	print_list(&G.proc_list, "pidalloc: proc list");
+	//print_list(&G.proc_list, "pidalloc: proc list");
 	/*
 	 * mpid is the current pid.
 	 * pidchecked is the lowest pid after mpid that is currently used by a
@@ -284,7 +281,7 @@ STARTUP(void procinit())
 	
 	current = palloc();
 	assert(current);
-	list_add_tail(current, &G.proc_list);
+	list_add_tail(&current->p_list, &G.proc_list);
 	G.initproc = current;
 	
 	for (i = 0; i < NOFILE; ++i)
