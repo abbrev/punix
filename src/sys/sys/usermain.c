@@ -35,6 +35,7 @@
 #include <sys/time.h>
 #include <sound.h>
 #include <sys/utsname.h>
+#include <setjmp.h>
 
 
 /*
@@ -112,7 +113,7 @@ const char *sys_errlist[] = {
 #define ERRSTRLEN 20
 char *strerror(int e)
 {
-	static char errstr[ERRSTRLEN+1];
+	//static char errstr[ERRSTRLEN+1];
 	
 	if (e < 0 || e >= sizeof(sys_errlist) / sizeof(sys_errlist[0])) {
 		//sprintf("Unknown error %d", e);
@@ -457,6 +458,31 @@ static const struct comminfo {
 #define PKT_COMM_REQ 0xa2
 #define PKT_COMM_RTS 0xc9
 
+#define GETCALC_READ_TIMEOUT 10
+
+/*
+ * Read 'count' bytes into 'buf' from file 'fd'
+ * Return only when all bytes have been read,
+ * or longjmp to getcalcjmp on timeout
+ */
+ssize_t getcalcread(int fd, void *buf, size_t count)
+{
+	ssize_t n = 0;
+	struct itimerval it = {
+		{ 0, 0 },
+		{ GETCALC_READ_TIMEOUT, 0 },
+	};
+	while (count > 0) {
+		setitimer(ITIMER_REAL, &it, NULL);
+		n = read(fd, buf, count);
+		setitimer(ITIMER_REAL, NULL, NULL); /* clear timer */
+		if (n < 0) longjmp(G.user.getcalcjmp, 1);
+		count -= n;
+		buf += n;
+	};
+	return n;
+}
+
 static unsigned cksum(unsigned char *buf, ssize_t count)
 {
 	unsigned sum = 0;
@@ -477,7 +503,7 @@ static int recvpkthead(struct pkthead *pkt, int fd)
 	const struct comminfo *cip;
 	
 	/* read packet header */
-	n = read(fd, head, 4);
+	n = getcalcread(fd, head, 4);
 	if (n < 4) return -1;
 	
 	machid = head[0];
@@ -496,14 +522,6 @@ static int recvpkthead(struct pkthead *pkt, int fd)
 	return 0;
 }
 
-#define GETCALC_READ_TIMEOUT 10
-
-ssize_t getcalcread(int fd, void *buf, size_t count)
-{
-	alarm(GETCALC_READ_TIMEOUT);
-	return read(fd, buf, count);
-}
-
 static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 {
 	ssize_t n;
@@ -513,8 +531,7 @@ static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 	unsigned buf2[2];
 	const struct comminfo *cip;
 	
-	if (recvpkthead(pkt, fd) < 0)
-		return -1;
+	recvpkthead(pkt, fd);
 	
 	for (cip = &comminfo[0]; cip->id != -1; ++cip)
 		if (cip->id == pkt->commid) break;
@@ -531,7 +548,6 @@ static long recvpkt(struct pkthead *pkt, char *buf, size_t count, int fd)
 		p += n;
 	}
 	n = getcalcread(fd, buf2, 2); /* checksum */
-	if (n < 0) return -1;
 	checksum = buf2[0] | (buf2[1] << 8);
 	printf("checksum: %u (%s)\n", checksum, checksum == cksum(buf, pkt->length) ? "correct" : "INCORRECT");
 	return checksum;
@@ -559,7 +575,6 @@ static long discard(int fd, unsigned len)
 	while (len) {
 		n = getcalcread(fd, buf, len < sizeof(buf) ? len : sizeof(buf));
 		//printf("discard: read %ld bytes\n", n);
-		if (n < 0) return -1;
 		for (i = 0; i < n; ++i)
 			sum += buf[i];
 		len -= n;
@@ -574,8 +589,8 @@ static unsigned short getchecksum(int fd)
 	return buf[0] | (buf[1] << 8);
 }
 
-/* simple variable receiver - doesn't actually save variables anywhere */
-static void getcalc(int fd)
+/* simple variable receiver */
+static ssize_t getcalc(int fd, char *buf, size_t size)
 {
 	struct pkthead pkt;
 	static const struct pkthead ackpkt = { 0x88, PKT_COMM_ACK, 0 };
@@ -584,27 +599,31 @@ static void getcalc(int fd)
 	static const struct pkthead errpkt = { 0x88, PKT_COMM_ERR, 0 };
 	long n;
 	unsigned short sum, checksum;
+	ssize_t ret = 0;
 	enum {
 		RECV_START, RECV_WAITDATA, RECV_RXDATA
 	} state = RECV_START;
 	
 	struct sigaction sa;
 	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
+	sa.sa_flags = 0;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	
+	if (setjmp(G.user.getcalcjmp))
+	{
+		printf("TIMEOUT\n");
+		return -1;
+	}
+
 	for (;;) {
 		n = recvpkthead(&pkt, fd);
-		if (n < 0) goto timeout;
 		switch (state) {
 		case RECV_START:
 			printf("START\n");
 			if (pkt.commid == PKT_COMM_VAR || pkt.commid == PKT_COMM_RTS) {
 				n = discard(fd, pkt.length);
-				if (n < 0) goto timeout;
 				sum = n;
 				n = getchecksum(fd);
-				if (n < 0) goto timeout;
 				checksum = n;
 				if (checksum == sum) {
 					sendpkthead(&ackpkt, fd);
@@ -621,7 +640,7 @@ static void getcalc(int fd)
 				}
 			} else if (pkt.commid == PKT_COMM_EOT) {
 				sendpkthead(&ackpkt, fd);
-				return;
+				return ret;
 			} else {
 				goto error;
 			}
@@ -637,12 +656,12 @@ static void getcalc(int fd)
 			if (pkt.commid != PKT_COMM_DATA)
 				goto error;
 			//printf("reading and discarding variable data...\n");
-			n = discard(fd, pkt.length);
-			if (n < 0) goto timeout;
-			sum = n;
+			if (pkt.length > size) return -1;
+			n = getcalcread(fd, buf, pkt.length);
+			ret = n;
+			sum = cksum(buf, n);
 			//printf("reading variable data checksum...\n");
 			n = getchecksum(fd);
-			if (n < 0) goto timeout;
 			checksum = n;
 			if (checksum == sum) {
 				//printf("sending ACK\n");
@@ -655,16 +674,14 @@ static void getcalc(int fd)
 			break;
 		default:
 			printf("getcalc internal error (%d)\n", state);
-			return;
+			return -1;
 		}
 		//userpause();
 	}
 error:
 	printf("ERROR\n");
 	//send something??
-	return;
-timeout:
-	printf("TIMEOUT\n");
+	return -1;
 }
 
 #define BPERLINE 8
@@ -690,35 +707,60 @@ static void printhex(char buf[], int length)
 	putchar('\n');
 }
 
+/*
+ * 9xi variable format (reverse-engineered)
+ * (excludes 9xi header)
+ * 00 00 part of packet?
+ * 00 00 part of packet?
+ *
+ * 0c 17 bytes to read (3095)
+ * 00 67 height (103)
+ * 00 ef width (239) // not 240??
+ *
+ * 103*240/8 bytes bitmap (row-major order)
+ *
+ * df    end mark
+ */
+
+#define LINKBUFSIZE (3840)
 static void testlink(int argc, char *argv[], char *envp[])
 {
 	unsigned char *buf = NULL;
-	size_t buflen;
 	int linkfd;
 	struct pkthead packet;
+	int i;
+	ssize_t n;
 	
 	linkfd = open("/dev/link", O_RDWR);
 	printf("linkfd = %d\n", linkfd);
 	if (linkfd < 0) goto out;
 	
 	printf("Receiving variable...\n");
-	getcalc(linkfd);
+	buf = malloc(LINKBUFSIZE);
+	if (!buf) {
+		printf("testlink(): could not allocate buf\n");
+		return;
+	}
+	memset(buf, 0x42, LINKBUFSIZE);
+	n = getcalc(linkfd, buf, LINKBUFSIZE);
+	printf("getcalc returns %ld\n", n);
+	if (n >= 0) {
+		userpause();
+		clear();
+		memmove((void *)0x4c00L, buf+10, n-11);
+		alarm(5);
+		pause();
+	}
 	userpause();
+	alarm(1);
+	pause();
 	
 	printf("sending RDY packet...\n");
 	write(linkfd, rdypkt, sizeof(rdypkt));
 	
 	printf("reading packet...\n");
-	buflen = 64*1024L;
-	printf("buflen=%lu\n", buflen);
-	buf = malloc(buflen);
-	printf("buf=%08lx\n", (unsigned long)buf);
-	if (buf) {
-		recvpkt(&packet, buf, buflen, linkfd); /* ACK */
-		free(buf);
-	} else {
-		printf("testlink(): could not allocate buf\n");
-	}
+	recvpkt(&packet, buf, LINKBUFSIZE, linkfd); /* ACK */
+	free(buf);
 	
 	printf("closing link...\n");
 	close(linkfd);

@@ -1,4 +1,5 @@
 #include <termios.h>
+#include <setjmp.h>
 
 #include "flash.h"
 #include "callout.h"
@@ -163,6 +164,7 @@ struct globals {
 		char charbuf[128];
 		int charbufsize;
 		int _errno;
+		jmp_buf getcalcjmp;
 	} user;
 	int nextinode;
 	/* end temp/debugging variables */
