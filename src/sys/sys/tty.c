@@ -1,3 +1,4 @@
+#include <string.h>
 #include <sys/types.h>
 #include <termios.h>
 
@@ -142,9 +143,47 @@ void ttywakeup(struct tty *tp)
 
 /* Following functions should be moved into some other file */
 
-/* copy buffer to queue. return number of bytes not copied */
-/* TODO: optimize this by copying blocks of bytes from the buffer to the queue
- * rather than copying one byte at a time */
+#if 0
+struct queue {
+	int q_count;
+	int q_head, q_tail;
+	char q_buf[QSIZE];
+};
+#endif
+
+/* copy buffer to queue. return number of bytes copied */
+#if 1
+int b_to_q(char *bp, int count, struct queue *qp)
+{
+	int x;
+	int n = count;
+	x = spl5();
+	/* limit n to the free size of our queue */
+	if (n > QSIZE - qp->q_count)
+		n = QSIZE - qp->q_count;
+	if (n == 0)
+		goto out;
+	
+	if (qp->q_head < qp->q_tail || qp->q_head + n <= QSIZE) {
+		/* easy case: one contiguous block */
+		memmove(qp->q_buf + qp->q_head, bp, n);
+		qp->q_head = (qp->q_head + n) % QSIZE;
+	} else {
+		/* split case: two separate blocks */
+		int y = QSIZE - qp->q_head; /* upper block byte count */
+		int z = n - y; /* lower block byte count */
+		memmove(qp->q_buf + qp->q_head, bp, y); /* copy upper block */
+		memmove(qp->q_buf, bp + y, z); /* copy lower block */
+		qp->q_head = z;
+	}
+	qp->q_count += n;
+	
+out:
+	splx(x);
+	return n;
+}
+#else
+/* unoptimized version */
 int b_to_q(char *bp, int count, struct queue *qp)
 {
 	int n = count;
@@ -152,12 +191,43 @@ int b_to_q(char *bp, int count, struct queue *qp)
 	while (n && putc(*bp++, qp) >= 0)
 		--n;
 	
-	return n;
+	return count - n;
 }
+#endif
 
 /* copy queue to buffer. return number of bytes copied */
-/* TODO: optimize this by copying blocks of bytes from the queue to the buffer
- * rather than copying one byte at a time */
+#if 1
+/* XXX: this has NOT been tested */
+int q_to_b(struct queue *qp, char *bp, int count)
+{
+	int x;
+	int n = count;
+	x = spl5();
+	if (n > qp->q_count)
+		n = qp->q_count;
+	if (n == 0)
+		goto out;
+	
+	if (qp->q_tail < qp->q_head || qp->q_tail + n <= QSIZE) {
+		/* single block */
+		memmove(bp, qp->q_buf + qp->q_tail, n);
+		qp->q_tail = (qp->q_tail + n) % QSIZE;
+	} else {
+		/* two blocks */
+		int y = QSIZE - qp->q_tail; /* upper block byte count */
+		int z = n - y; /* lower block byte count */
+		memmove(bp, qp->q_buf + qp->q_tail, y); /* copy upper block */
+		memmove(bp + y, qp->q_buf, z); /* copy lower block */
+		qp->q_tail = z;
+	}
+	qp->q_count -= n;
+
+out:
+	splx(x);
+	return n;
+}
+#else
+/* unoptimized version */
 int q_to_b(struct queue *qp, char *bp, int count)
 {
 	int n = 0;
@@ -170,6 +240,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 	
 	return n;
 }
+#endif
 
 /* concatenate from queue 'from' to queue 'to' */
 /* TODO: this can also be optimized much as b_to_q and q_to_b can */
