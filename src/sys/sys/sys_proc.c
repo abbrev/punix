@@ -394,6 +394,7 @@ void sys_vfork()
 	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	P.p_retval = pid;
 	cp->p_pid = pid;
+	cp->p_pptr = current;
 	
 	/* allocate a kernel stack for the child */
 	stack = stackalloc(&stacksize);
