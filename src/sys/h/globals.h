@@ -150,6 +150,7 @@ struct globals {
 		int scroll_lock;
 		int bell;
 	} vt;
+	int cpubusy;
 	
 	int batt_level;
 	

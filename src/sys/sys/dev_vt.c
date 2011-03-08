@@ -1225,6 +1225,8 @@ void vtinit()
 	G.vt.lock = 0;
 	G.vt.scroll_lock = 0;
 	G.vt.bell = 0;
+	G.cpubusy = 1;
+	showstatus();
 	qclear(&G.vt.vt[0].t_rawq);
 	qclear(&G.vt.vt[0].t_canq);
 	qclear(&G.vt.vt[0].t_outq);
