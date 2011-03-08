@@ -820,20 +820,17 @@ static int docat(int fd)
 		if (n <= 0) break;
 		write(1, buf, n);
 	}
-	return n;
+	return (n < 0);
 }
 
 static int cat_main(int argc, char **argv, char **envp)
 {
-	int err, n;
+	int err = 0, n;
 	int fd;
 	int i;
 	
-	if (argc <= 1) {
-		n = docat(0);
-		if (!n) err = 1;
-		return err;
-	}
+	if (argc <= 1)
+		return docat(0);
 	
 	for (i = 1; i < argc; ++i) {
 		if (!strcmp(argv[i], "-")) {
@@ -842,14 +839,12 @@ static int cat_main(int argc, char **argv, char **envp)
 			fd = open(argv[i], O_RDONLY);
 		}
 		if (fd < 0) {
-			int e = errno;
-			printf("cat: ");
-			errno = e;
-			perror(argv[i]);
+			printf("cat: %s\n", strerror(errno));
+			err = 1;
 			continue;
 		}
-		n = docat(fd);
-		if (!n) err = 1;
+		if (docat(fd))
+			err = 1;
 		if (fd != 0) close(fd);
 	}
 	return err;
@@ -1288,6 +1283,7 @@ static int sh_main(int argc, char **argv, char **envp)
 	char *aargv[BUFSIZE/2+1];
 	uid = getuid();
 	
+	G.user.laststatus = 0;
 	printf("stupid shell v -0.1\n");
 	err = uname(&utsname);
 	if (!err) {
@@ -1355,14 +1351,12 @@ static int sh_main(int argc, char **argv, char **envp)
 		cmd = aargv[0];
 		if (!strcmp(cmd, "exit")) {
 			break;
+		} else if (!strcmp(cmd, "laststatus")) {
+			printf("%d\n", G.user.laststatus);
 		} else if (!strcmp(cmd, "help")) {
 			showhelp();
 		} else {
-			int n = run(cmd, aargc, aargv, envp);
-			if (n < 0) {
-				printf("stupidsh: %s: command not found\n",
-				       cmd);
-			}
+			G.user.laststatus = run(cmd, aargc, aargv, envp);
 		}
 eol:
 		neof = 0;
@@ -1370,7 +1364,7 @@ nextline:
 		bp = buf;
 		len = 0;
 	}
-	return 0;
+	return G.user.laststatus;
 }
 
 static struct applet applets[] = {
@@ -1407,7 +1401,7 @@ static int run_applet(const char *cmd, int argc, char **argv, char **envp)
 
 static int run(const char *cmd, int argc, char **argv, char **envp)
 {
-	int err;
+	int err = 0;
 	int pid;
 	err = run_applet(cmd, argc, argv, envp);
 	if (err >= 0) return err;
@@ -1419,13 +1413,18 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	pid = vfork();
 	if (pid == 0) {
 		err = execve(cmd, argv, envp);
-		perror(cmd);
-		_exit(err);
+		if (errno == ENOENT) {
+			printf("sh: command not found\n");
+		} else {
+			printf("sh: %s: %s\n", cmd, strerror(errno));
+		}
+		_exit(127);
 	} else if (pid > 0) {
 		/* parent process. we chill here until the child dies */
 		wait(&err);
 	} else {
-		perror("vfork");
+		printf("sh: cannot vfork: %s\n", strerror(errno));
+		err = 42;
 	}
 	
 	return err;

@@ -165,6 +165,7 @@ struct globals {
 		int charbufsize;
 		int _errno;
 		jmp_buf getcalcjmp;
+		int laststatus;
 	} user;
 	int nextinode;
 	/* end temp/debugging variables */
