@@ -235,10 +235,7 @@ retry:
 		struct list_head *lp;
 		G.pidchecked = MAXPID;
 		
-		list_for_each(lp, &G.proc_list) {
-			kprintf("lp=%08lx lp->next=%08lx\n", lp, lp->next);
-			p = list_entry(lp, struct proc, p_list);
-		//list_for_each_entry(p, &G.proc_list, p_list) {
+		list_for_each_entry(p, &G.proc_list, p_list) {
 			if (p->p_pid == G.mpid || p->p_pgrp == G.mpid) {
 				++G.mpid;
 				if (G.mpid >= G.pidchecked)
