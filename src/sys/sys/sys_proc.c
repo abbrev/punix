@@ -464,7 +464,6 @@ loop:
 		} else if (pid < (pid_t)-1) {
 			if (p->p_pgrp != -pid) continue;
 		}
-		kprintf("dowait4: found pid=%d (ppid=%d)\n", p->p_pid, p->p_pptr->p_pid);
 		++nfound;
 		if (P.p_flag & P_NOCLDWAIT)
 			continue;
@@ -493,6 +492,7 @@ loop:
 	}
 	error = tsleep(current, PWAIT|PCATCH, 0);
 	if (!error) goto loop;
+	P.p_error = error;
 	return;
 	
 found:
