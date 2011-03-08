@@ -113,15 +113,17 @@ STARTUP(void swtch())
 			current->p_deadline += longest_deadline_offset();
 	}
 	
+	G.cpubusy = 0;
+	showstatus();
 	while (!(p = earliest_deadline_proc())) {
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
-		*(short *)(0x4c00+0xf00-26) = 0xffff;
 		cpuidle();
-		*(short *)(0x4c00+0xf00-26) = 0;
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */
 	}
+	G.cpubusy = 1;
+	showstatus();
 	
 	G.need_resched = 0;
 	

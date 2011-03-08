@@ -5,7 +5,8 @@ all: bin2c upper.inc small-upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
      status-none.inc status-2nd.inc status-alpha.inc status-bell.inc \
      status-capslock.inc status-compose1.inc status-compose2.inc \
      status-diamond.inc status-hand.inc status-shift.inc status-scrolllock.inc \
-     status-batt0.inc status-batt1.inc status-batt2.inc status-batt3.inc status-batt4.inc 
+     status-batt0.inc status-batt1.inc status-batt2.inc status-batt3.inc status-batt4.inc \
+     status-busy.inc
 	touch all
 clean:
 	rm -f *.inc all bin2c
@@ -58,4 +59,6 @@ status-batt2.inc: status-batt2.pbm bin2c
 status-batt3.inc: status-batt3.pbm bin2c
 	${STATUS2C} <$< >$@
 status-batt4.inc: status-batt4.pbm bin2c
+	${STATUS2C} <$< >$@
+status-busy.inc: status-busy.pbm bin2c
 	${STATUS2C} <$< >$@

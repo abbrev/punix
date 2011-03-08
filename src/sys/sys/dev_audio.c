@@ -112,26 +112,32 @@ STARTUP(void audioread(dev_t dev))
 {
 }
 
+/*
+ * MAXCOPYSIZE is the maximum number of bytes that we copy at a time from the
+ * audio buffer provided by the user to the audio queue. This ensures that the
+ * audio interrupt can run at least once between each time we write to the
+ * audio queue (we have only about 12e6/8192 = 1464 cycles between each audio
+ * interrupt to copy data to the audio queue).
+ */
+#define MAXCOPYSIZE 16
+
 /* write audio samples to the audio queue */
 STARTUP(void audiowrite(dev_t dev))
 {
-	int ch;
 	int x;
+
+	while (P.p_count) {
 	
-	for (; P.p_count; ++P.p_base, --P.p_count) {
-		ch = *P.p_base;
-		while (putc(ch, &G.audio.q) < 0) {
+		size_t n;
+		n = b_to_q(P.p_base, MIN(P.p_count, MAXCOPYSIZE), &G.audio.q);
+		P.p_base += n;
+		P.p_count -= n;
+		if (n == 0) {
 			if (!G.audio.play) /* playback is halted */
 				return;
 			
-			x = spl5(); /* prevent the audio int from trying to wake
-			             * us up before we go to sleep */
-			
-			/* FIXME: Set the low water value according to the
-			 * amount of data we're trying to write (within upper
-			 * and lower limits, of course), . */
-			
-			G.audio.lowat = QSIZE - 32; /* XXX constant */
+			x = spl5();
+			G.audio.lowat = QSIZE - MAXCOPYSIZE;
 			
 			slp(&G.audio.q, 1);
 			splx(x);

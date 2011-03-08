@@ -317,6 +317,7 @@ static const unsigned short status[][4] = {
 #include "glyphsets/status-batt2.inc"
 #include "glyphsets/status-batt3.inc"
 #include "glyphsets/status-batt4.inc"
+#include "glyphsets/status-busy.inc"
 };
 
 #define STATUS_NONE        0
@@ -338,7 +339,8 @@ static const unsigned short status[][4] = {
 #define STATUS_BATT2      12
 #define STATUS_BATT3      13
 #define STATUS_BATT4      14
-#define STATUS_LAST       14
+#define STATUS_BUSY       15
+#define STATUS_LAST       15
 
 static void drawmod(int pos, int m)
 {
@@ -361,8 +363,8 @@ static void drawmod(int pos, int m)
 void showstatus(void)
 {
 	/* TI-92+: */
-	/* compose hand capslock shift diamond 2nd bell */
-	/* 6       5    4        3     2       1   0    */
+	/* scroll-lock compose hand capslock shift diamond 2nd busy bell */
+	/* 8           7       6    5        4     3       2   1    0    */
 	
 	int batt;
 	int x = spl7();
@@ -372,13 +374,14 @@ void showstatus(void)
 	if (batt < 0) batt = 0;
 	
 	drawmod(0, G.vt.bell ? STATUS_BELL : STATUS_BATT0+batt);
-	drawmod(1, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
-	drawmod(2, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
-	drawmod(3, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
-	drawmod(4, G.vt.key_caps ? STATUS_CAPSLOCK : STATUS_NONE);
-	drawmod(5, mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
-	drawmod(6, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
-	drawmod(7, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
+	drawmod(1, G.cpubusy ? STATUS_BUSY : STATUS_NONE);
+	drawmod(2, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
+	drawmod(3, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
+	drawmod(4, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
+	drawmod(5, G.vt.key_caps ? STATUS_CAPSLOCK : STATUS_NONE);
+	drawmod(6, mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
+	drawmod(7, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
+	drawmod(8, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
 	splx(x);
 }
 
@@ -539,11 +542,13 @@ void scankb()
 			}
 			showstatus();
 		} while (kdiff);
+		showstatus();
 		goto end;
 	}
 	/* no key was pressed or released, so repeat the previous key */
-	if (!G.vt.key_repeat || G.vt.key_previous == 0) goto end;
-	if (!--G.vt.key_repeat_counter) {
+	if (G.vt.key_repeat &&
+	    G.vt.key_previous != 0 &&
+	    --G.vt.key_repeat_counter == 0) {
 		G.vt.key_repeat_counter = G.vt.key_repeat_delay;
 		addkey(G.vt.key_previous);
 	}

@@ -12,6 +12,11 @@ struct queue {
 	char q_buf[QSIZE];
 };
 #else
+/*
+ * q_head points to the next available slot for a byte
+ * q_tail points to the next available byte
+ * both q_head and q_tail are post-incremented
+ */
 struct queue {
 	int q_count;
 	int q_head, q_tail;
@@ -29,5 +34,13 @@ int putc(int ch, struct queue *qp);
 int unputc(struct queue *qp);
 int getc(struct queue *qp);
 int ungetc(int ch, struct queue *qp);
+
+/* copy buffer to queue. return number of bytes copied */
+int b_to_q(char *bp, int count, struct queue *qp);
+/* copy queue to buffer. return number of bytes copied */
+int q_to_b(struct queue *qp, char *bp, int count);
+/* concatenate from queue 'from' to queue 'to' */
+void catq(struct queue *from, struct queue *to);
+
 
 #endif

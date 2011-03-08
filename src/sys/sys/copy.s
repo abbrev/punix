@@ -14,11 +14,11 @@ chkaddr:
 	cmp.l	#0x6000,%d1	| low address XXX: constant
 	blo	1f
 	move.l	%d1,%d2
+	subq.l	#1,%d2
 	add.l	%d0,%d2		| %d2 is end address of range
-	cmp.l	%d2,%d1		| check for wrap-around
-	bhi	1f
+	bcs	1f		| check for wrap-around
 	cmp.l	#0x40000,%d2	| high address
-	bhi	1f
+	bhs	1f
 	rts	| looks aight...
 1:	| Fault!
 	lea.l	4(%sp),%sp	| pop off our return address
