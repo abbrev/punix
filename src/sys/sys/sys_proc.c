@@ -329,9 +329,8 @@ void doexit(int status)
 	if (P.p_flag & P_VFORK) {
 		endvfork();
 	}
-	wakeup(current);
-#if 0
 	psignal(P.p_pptr, SIGCHLD);
+#if 0
 	wakeup(P.p_pptr);
 #endif
 	/* TODO: free our resources here */
@@ -405,7 +404,7 @@ void sys_vfork()
 	/* At this point there's no turning back! */
 	
 	list_add_tail(&cp->p_list, &G.proc_list);
-	print_list(&G.proc_list, "vfork: proc list");
+	//print_list(&G.proc_list, "vfork: proc list");
 	
 	cp->p_stack = stack;
 	cp->p_stacksize = stacksize;
