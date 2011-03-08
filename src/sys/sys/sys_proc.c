@@ -70,9 +70,11 @@ static void endvfork()
 	
 	pp = P.p_pptr;
 	P.p_flag &= ~P_VFORK;
-	wakeup(pp);
+	wakeup(current);
+#if 0
 	while (!(P.p_flag&P_VFDONE))
 		slp(pp, 0);
+#endif
 #if 0
 	P.p_dsize = pp->p_dsize = 0; /* are these necessary? */
 	P.p_ssize = pp->p_ssize = 0; /* " */
@@ -116,9 +118,7 @@ void sys_execve()
 	char **envp = uap->envp;
 	
 	/*
-	 * XXX: this version does not load the binary from a file, allocate
-	 * memory, or any of that fun stuff (as these capabilities have not
-	 * been implemented in Punix yet).
+	 * XXX: this version does not load the binary from a file yet
 	 */
 	
 	
@@ -177,7 +177,7 @@ void sys_execve()
 	if (!ustack) {
 		goto error_ustack;
 	}
-	kprintf("execve(): ustack=%08lx\n", ustack);
+	//kprintf("execve(): ustack=%08lx\n", ustack);
 	
 	/* allocate the data section */
 	datasize = UDATASIZE;
@@ -185,7 +185,7 @@ void sys_execve()
 	if (!data) {
 		goto error_data;
 	}
-	kprintf("execve():   data=%08lx\n", data);
+	//kprintf("execve():   data=%08lx\n", data);
 	//printheaplist();
 	
 	size = (size + 1) & ~1; /* size must be even */
@@ -199,9 +199,9 @@ void sys_execve()
 	copyenv(&v, &s, argp);
 	copyenv(&v, &s, envp);
 	
-	if (P.p_flag & P_VFORK)
+	if (P.p_flag & P_VFORK) {
 		endvfork();
-	else {
+	} else {
 		/* free our resources */
 		/* this is similar to what _exit(2) needs to do--perhaps put
 		 * this in a common routine? */
@@ -326,9 +326,20 @@ void doexit(int status)
 			}
 		}
 	}
+	if (P.p_flag & P_VFORK) {
+		endvfork();
+	}
+	wakeup(current);
+#if 0
 	psignal(P.p_pptr, SIGCHLD);
 	wakeup(P.p_pptr);
+#endif
+	/* TODO: free our resources here */
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
+	sched_exit(current);
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	swtch();
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 }
 
 void sys_pause()
@@ -351,6 +362,10 @@ void sys_fork()
 	P.p_error = ENOSYS;
 }
 
+#define PUSHL(stack, value) (*--((long *)(stack)) = (value))
+#define PUSHW(stack, value) (*--((short *)(stack)) = (value))
+#define PUSHB(stack, value) (*--((char *)(stack)) = (value))
+
 void sys_vfork()
 {
 #if 1
@@ -361,7 +376,7 @@ void sys_vfork()
 	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
 	
 	/* XXX: remove this block once vfork is completely written */
-	{
+	if (0) {
 		P.p_error = ENOMEM;
 		return;
 	}
@@ -374,7 +389,9 @@ void sys_vfork()
 	
 	*cp = *current; /* copy our own process structure to the child */
 	
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	pid = pidalloc();
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	P.p_retval = pid;
 	cp->p_pid = pid;
 	
@@ -382,25 +399,44 @@ void sys_vfork()
 	stack = stackalloc(&stacksize);
 	if (!stack)
 		goto stackp;
+	//kprintf("vfork(): stack=%08lx\n", stack);
 	
 	/* At this point there's no turning back! */
+	
+	list_add_tail(&cp->p_list, &G.proc_list);
+	print_list(&G.proc_list, "vfork: proc list");
 	
 	cp->p_stack = stack;
 	cp->p_stacksize = stacksize;
 	cp->p_flag |= P_VFORK;
-	cp->p_status = P_VFORKING; /* FIXME: use setrun() instead */
+	cp->p_status = P_VFORKING;
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	setrun(cp);
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
+
+	void return_from_vfork();
+	cp->p_ctx = *P.p_vfork_ctx;
+	//kprintf("vfork(): ctx.pc =%08lx\n", cp->p_ctx.pc);
+
+	/* push return address and SR onto the stack */
+	PUSHL(stack, cp->p_ctx.pc);
+	PUSHW(stack, 0x0000); /* user mode SR */
+	PUSHL(stack, 0); /* dummy return address */
 	
-	/* use the new kernel stack but the same user stack */
-	setup_env(&cp->p_ctx, NULL, stack);
-	
+	cp->p_ctx.pc = return_from_vfork;
+	cp->p_ctx.sp = stack;
+	cp->p_ctx.sr = 0x2000; /* supervisor mode SR */
+
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
 		slp(cp, 0);
 	
 	/* reclaim our stuff */
+#if 0
 	cp->p_flag |= P_VFDONE;
 	wakeup(current); /* ??? */
+#endif
 	return;
 stackp:
 	memfree(stack - stacksize, 0);
@@ -472,6 +508,7 @@ found:
 	}
 	
 	if (p->p_status == P_ZOMBIE) {
+		list_del(&p->p_list);
 		pfree(p);
 	}
 }

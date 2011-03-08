@@ -972,6 +972,12 @@ static int malloc_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+static int pid_main(int argc, char **argv, char **envp)
+{
+	printf("%d\n", getpid());
+	return 0;
+}
+
 static int exec_command(int ch)
 {
 	switch (ch) {
@@ -1348,6 +1354,7 @@ static struct applet applets[] = {
 	{ "date", date_main },
 	{ "adjtime", adjtime_main },
 	{ "malloc", malloc_main },
+	{ "pid", pid_main },
 
 	{ NULL, NULL }
 };
@@ -1381,7 +1388,10 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		_exit(err);
 	} else if (pid > 0) {
 		/* parent process. we chill here until the child dies */
-		wait(&err);
+		pid = wait(&err);
+		if (pid < 0)
+			perror("wait");
+		printf("wait(%d) = %d\n", err, pid);
 	} else {
 		perror("vfork");
 	}
@@ -1418,13 +1428,28 @@ int main_init(int argc, char *argv[], char *envp[])
 			  "Dropping to a single-process shell now.\n");
 		}
 		argv[0] = "sh";
+		argv[1] = NULL;
 		err = execve(argv[0], argv, envp);
 		printf("still in init, execve failed with error %d\n", err);
 	} 
 	
+	printf("This is the parent process of init\n");
+	
 	/* sit here and reap zombie processes */
 	/* a real init process would also spawn tty's and stuff */
+	struct itimerval it = {
+		{ 1, 0 },
+		{ 1, 0 },
+	};
+	struct sigaction sa;
+	sa.sa_handler = sigalrm;
+	sa.sa_flags = SA_RESTART;
+	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
+	setitimer(ITIMER_REAL, &it, NULL);
 	for (;;) {
-		wait(NULL);
+		if (wait(NULL) < 0) {
+			//perror("init: wait");
+			pause();
+		}
 	}
 }
