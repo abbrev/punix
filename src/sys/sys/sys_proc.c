@@ -419,7 +419,7 @@ void sys_vfork()
 	//kprintf("vfork(): ctx.pc =%08lx\n", cp->p_ctx.pc);
 
 	/* push return address and SR onto the stack */
-	PUSHL(stack, cp->p_ctx.pc);
+	PUSHL(stack, (long)cp->p_ctx.pc);
 	PUSHW(stack, 0x0000); /* user mode SR */
 	PUSHL(stack, 0); /* dummy return address */
 	
