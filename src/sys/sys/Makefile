@@ -101,7 +101,8 @@ context.o: context.s
 ${SYSINC}/proc.h: ${SYSINC}/file.h ${STDINC}/sys/types.h \
 	${STDINC}/time.h ${STDINC}/signal.h
 ${SYSINC}/process.h: ${SYSINC}/proc.h
-dev_vt.o: dev_vt.c glyphsets/all
+dev_vt.o: dev_vt.c
+keyscan.o: keyscan.c glyphsets/all
 
 md5.o: md5.c
 qsort.o: qsort.c
