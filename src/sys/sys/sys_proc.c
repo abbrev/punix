@@ -89,6 +89,35 @@ static void *stackalloc(size_t *size)
 	return p;
 }
 
+/*
+ * release the resources of this process
+ * if we are vfork'd, just end the vfork
+ * otherwise free our memory
+ */
+static void release_resources()
+{
+	if (P.p_flag & P_VFORK) {
+		endvfork();
+	} else {
+		/* free our resources */
+#if 1
+		memfree(NULL, P.p_pid); /* free all user allocations */
+		if (P.p_ustack) {
+			memfree(P.p_ustack, 0);
+			P.p_ustack = NULL;
+		}
+		/*
+		if (P.p_text)
+			memfree(P.p_text, 0);
+		*/
+		if (P.p_data) {
+			memfree(P.p_data, 0);
+			P.p_data = NULL;
+		}
+#endif
+	}
+}
+
 /* the following are inherited by the child from the parent (this list comes from execve(2) man page in FreeBSD 6.2):
 	process ID           see getpid(2)
 	parent process ID    see getppid(2)
@@ -125,6 +154,7 @@ void sys_execve()
 	void *text = NULL;
 	char *data = NULL;
 	char *ustack = NULL;
+	char *ustackstart = NULL;
 	size_t textsize;
 	size_t datasize;
 	size_t ustacksize;
@@ -135,9 +165,9 @@ void sys_execve()
 	int argc, envc;
 	
 	/* XXX */
-	void start_init(), start_bittybox();
+	void sh_start(), init_start(), bittybox_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
-		text = start_init;
+		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
 	         !strcmp(pathname, "top") ||
 	         !strcmp(pathname, "false") ||
@@ -147,9 +177,10 @@ void sys_execve()
 	         !strcmp(pathname, "id") ||
 	         !strcmp(pathname, "batt") ||
 	         !strcmp(pathname, "date") ||
-	         !strcmp(pathname, "adjtime") ||
-	         !strcmp(pathname, "sh"))
-		text = start_bittybox;
+	         !strcmp(pathname, "adjtime"))
+		text = bittybox_start;
+	else if (!strcmp(pathname, "sh"))
+		text = sh_start;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;
@@ -170,7 +201,7 @@ void sys_execve()
 	
 #define STACKSIZE 1024
 #define USTACKSIZE 8192
-#define UDATASIZE 1024
+#define UDATASIZE 3072
 	/* allocate the user stack */
 	ustacksize = USTACKSIZE;
 	ustack = stackalloc(&ustacksize);
@@ -178,6 +209,7 @@ void sys_execve()
 		goto error_ustack;
 	}
 	//kprintf("execve(): ustack=%08lx\n", ustack);
+	ustackstart = ustack - ustacksize;
 	
 	/* allocate the data section */
 	datasize = UDATASIZE;
@@ -199,30 +231,13 @@ void sys_execve()
 	copyenv(&v, &s, argp);
 	copyenv(&v, &s, envp);
 	
-	if (P.p_flag & P_VFORK) {
-		endvfork();
-	} else {
-		/* free our resources */
-		/* this is similar to what _exit(2) needs to do--perhaps put
-		 * this in a common routine? */
-#if 1
-		memfree(NULL, P.p_pid);
-		if (P.p_ustack)
-			memfree(P.p_ustack - P.p_ustacksize, 0);
-		/*
-		if (P.p_text)
-			memfree(P.p_text, 0);
-		*/
-		if (P.p_data)
-			memfree(P.p_data, 0);
-#endif
-	}
-	P.p_ustack = ustack;
+	/* free our old user stack and data segment */
+	release_resources();
+	P.p_ustack = ustackstart;
 	P.p_text = text;
 	P.p_data = data;
 	
-	P.p_ustacksize = ustacksize;
-	P.p_datasize = datasize;
+	//P.p_datasize = datasize;
 	
 	/* finally, set up the context to return to the new process image */
 	
@@ -233,6 +248,8 @@ void sys_execve()
 	return;
 	
 	/*
+	 * following comments are out of date:
+	 *
 	 * open binary file (filename is given in the file if it's a script)
 	 * allocate memory for user stack
 	 * allocate memory for user data
@@ -255,10 +272,9 @@ void sys_execve()
 	 * return
 	 */
 error_data:
-	memfree(data, 0);
-error_ustack:
-	memfree(ustack - ustacksize, 0);
-error_noent:
+	memfree(ustackstart, 0);
+error_ustack: ;
+error_noent: ;
 }
 
 void doexit(int status)
@@ -326,19 +342,16 @@ void doexit(int status)
 			}
 		}
 	}
-	if (P.p_flag & P_VFORK) {
-		endvfork();
-	}
 	psignal(P.p_pptr, SIGCHLD);
+	release_resources();
+	memfree(P.p_stack, 0);
+	P.p_stack = NULL;
 #if 0
 	wakeup(P.p_pptr);
 #endif
 	/* TODO: free our resources here */
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	sched_exit(current);
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	swtch();
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 }
 
 void sys_pause()
@@ -365,6 +378,18 @@ void sys_fork()
 #define PUSHW(stack, value) (*--((short *)(stack)) = (value))
 #define PUSHB(stack, value) (*--((char *)(stack)) = (value))
 
+/*
+ * memory allocations and frees:
+ * vfork:
+ * 	allocate kernel stack
+ * execve:
+ * 	allocate new user stack and data segment
+ * 	free old user stack and data segment if not vfork
+ * exit:
+ * 	free user stack and data segment if not vfork
+ * 	free kernel stack
+ */
+
 void sys_vfork()
 {
 #if 1
@@ -388,9 +413,7 @@ void sys_vfork()
 	
 	*cp = *current; /* copy our own process structure to the child */
 	
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	pid = pidalloc();
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	P.p_retval = pid;
 	cp->p_pid = pid;
 	cp->p_pptr = current;
@@ -406,13 +429,10 @@ void sys_vfork()
 	list_add_tail(&cp->p_list, &G.proc_list);
 	//print_list(&G.proc_list, "vfork: proc list");
 	
-	cp->p_stack = stack;
-	cp->p_stacksize = stacksize;
+	cp->p_stack = stack - stacksize;
 	cp->p_flag |= P_VFORK;
 	cp->p_status = P_VFORKING;
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	setrun(cp);
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 
 	void return_from_vfork();
 	cp->p_ctx = *P.p_vfork_ctx;
@@ -427,7 +447,6 @@ void sys_vfork()
 	cp->p_ctx.sp = stack;
 	cp->p_ctx.sr = 0x2000; /* supervisor mode SR */
 
-	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
 		slp(cp, 0);
@@ -439,7 +458,6 @@ void sys_vfork()
 #endif
 	return;
 stackp:
-	memfree(stack - stacksize, 0);
 	pfree(cp);
 nomem:
 #endif
