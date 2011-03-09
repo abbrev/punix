@@ -52,6 +52,11 @@
 .section _st1,"rx"
 .even
 
+G = 0x5c00
+seconds = G+0
+onkey = G+180
+powerstate = G+182
+
 /*
  * Bus or Address error exception stack frame:
  *        15     5    4     3    2            0 
@@ -157,6 +162,8 @@ LINE_1010:
 
 | Scan for the hardware to know what keys are pressed 
 Int_1:
+	tst	powerstate
+	bne	1f		| ZZZZzzz
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	
 	move	5*4(%sp),-(%sp)		| old ps
@@ -178,7 +185,7 @@ trapret:
 	move.l  %a0,%usp
 	
 0:	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+1:	rte
 
 /*
  * Does nothing. Why ? Look:
@@ -194,9 +201,6 @@ Int_2:	move.w	#0x2600,%sr
 	move.w	#0x00FF,0x60001A	| acknowledge Int2
 oldInt_3:	rte				| Clock for int 3 ?
 
-G = 0x5c00
-
-seconds = G+0
 Int_3:
 .if 1
 	addq.l	#1,seconds	| ++seconds
@@ -216,16 +220,19 @@ Int_4:
 
 | System timers.
 Int_5:
+	tst	powerstate
+	bne	1f		| ZZZZzzz
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	audiointr	| just call the C routine
 	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+1:	rte
 
 | ON Int.
 |	2ND / DIAMOND : Off
 |	ESC : Reset
 Int_6:
-	/* FIXME: handle ON key */
+	move.b	#0,0x60001a	| acknowledge the key press
+	move	#1,onkey
 	rte
 
 | send signal SIGSEGV

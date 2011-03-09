@@ -15,9 +15,12 @@
 struct globals {
 	long seconds; /* XXX: see entry.s */
 	struct timespec _realtime;
+	
 	/* all RAM below here can (should) be cleared on boot. see start.s */
 	char exec_ram[60]; /* XXX: see flash.s */
 	char fpram[8*12+3*4]; /* XXX: see fpuem.s */
+	int onkey; /* set to 1 when ON key is pressed. see entry.s */
+	int powerstate; /* set to 1 when power is off. see entry.s */
 	/*
 	 * realtime_mono monotonically increases and is never adjusted (only
 	 * incremented). This is used with ITIMER_REAL timers and can be used
@@ -165,7 +168,6 @@ struct globals {
 		int charbufsize;
 		int _errno;
 		jmp_buf getcalcjmp;
-		int laststatus;
 	} user;
 	int nextinode;
 	/* end temp/debugging variables */
