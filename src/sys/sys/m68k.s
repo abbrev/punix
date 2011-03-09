@@ -81,3 +81,41 @@ stacktrace:
 	move.l	%a0,%d0
 	lsr.l	#2,%d0
 	rts
+
+G = 0x5c00
+seconds = G+0
+realtime = G+4
+onkey = G+180 | see globals.h
+powerstate = G+182 | see globals.h
+
+| power off the CPU and LCD, and maintain the realtime clock.
+| wake on int 6 (ON key), int 4 (link activity), and int 3 (1 Hz clock)
+| void cpupoweroff();
+.global cpupoweroff
+cpupoweroff:
+	move	%sr,%d0
+	move	#0x2700,%sr
+	move.l	realtime,%d2	| realtime.tv_sec
+	sub.l	seconds,%d2
+	move	%d0,%sr
+	
+	lea.l	0x60001c,%a0
+	move.b	(%a0),%d1
+	move.b	#0x3c,(%a0)	| shut off LCD
+	
+	clr	onkey
+	move	#1,powerstate
+	
+0:	move.b	#0x0c,0x600005	| bit 3 => int 4, bit 2 => int 3
+	tst	onkey
+	beq	0b
+	
+	clr	powerstate
+	
+	move.b  %d1,(%a0)	| turn on LCD
+	
+	move	#0x2700,%sr
+	add.l	seconds,%d2
+	move.l	%d2,realtime
+	move	%d0,%sr
+	rts
