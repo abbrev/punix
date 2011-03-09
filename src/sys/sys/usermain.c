@@ -800,6 +800,12 @@ unsigned long long sr64(unsigned long long, unsigned);
 
 #define BUFSIZE 512
 
+static int poweroff_main(int argc, char **argv, char **envp)
+{
+	poweroff();
+	return 0;
+}
+
 static int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
@@ -1400,6 +1406,7 @@ static struct applet applets[] = {
 	{ "adjtime", adjtime_main },
 	{ "malloc", malloc_main },
 	{ "pid", pid_main },
+	{ "poweroff", poweroff_main },
 
 	{ NULL, NULL }
 };

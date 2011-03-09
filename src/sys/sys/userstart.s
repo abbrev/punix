@@ -45,6 +45,7 @@ SYS_getrusage    = 117
 SYS_settimeofday = 122
 SYS_adjtime      = 140
 SYS_getloadavg1  = 160
+SYS_poweroff = 69
 
 .macro	sys call
 	move	#SYS_\call,%d0
@@ -103,6 +104,7 @@ mksyscall	wait
 |mksyscall	vfork
 mksyscall	pause
 mksyscall	adjtime
+mksyscall	poweroff
 
 .global cerror, caerror
 /*

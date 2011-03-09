@@ -506,3 +506,10 @@ out:
 	G.whereami = whereami;
 }
 
+void cpupoweroff();
+void sys_poweroff()
+{
+	if (!suser())
+		return;
+	cpupoweroff();
+}

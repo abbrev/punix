@@ -67,6 +67,8 @@ void sys_getdtablesize();
 
 void sys_sigaction();
 
+void sys_poweroff();
+
 #define sys_link	sys_NONE
 #define sys_unlink	sys_NONE
 #define sys_chdir	sys_NONE
@@ -172,7 +174,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_vfork, 0},
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},
-	{0, sys_NONE, 0},
+	{0, sys_poweroff, 0},
 	{0, sys_NONE, 0},		/* 70 */
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},
