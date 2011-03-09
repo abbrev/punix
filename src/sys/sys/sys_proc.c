@@ -427,7 +427,6 @@ void sys_vfork()
 	/* At this point there's no turning back! */
 	
 	list_add_tail(&cp->p_list, &G.proc_list);
-	//print_list(&G.proc_list, "vfork: proc list");
 	
 	cp->p_stack = stack - stacksize;
 	cp->p_flag |= P_VFORK;
