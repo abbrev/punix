@@ -196,11 +196,10 @@ oldInt_3:	rte				| Clock for int 3 ?
 
 G = 0x5c00
 
+seconds = G+0
 Int_3:
-.if 0
-	addq.l	#1,G+0	| walltime.tv_sec++
-	|clr.l	G+4	| walltime.tv_nsec = 0
-	move.l	#-1000000000/256,G+4	| walltime.tv_nsec = -TICK
+.if 1
+	addq.l	#1,seconds	| ++seconds
 .else
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	jbsr	updwalltime
