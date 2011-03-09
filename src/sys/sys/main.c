@@ -74,4 +74,5 @@ STARTUP(void kmain())
 	uptime.tv_sec = uptime.tv_nsec = 0;
 	spl0();
 	bogomips();
+	kputchar('\n');
 }
