@@ -839,7 +839,7 @@ static int cat_main(int argc, char **argv, char **envp)
 			fd = open(argv[i], O_RDONLY);
 		}
 		if (fd < 0) {
-			printf("cat: %s\n", strerror(errno));
+			printf("cat: %s: %s\n", argv[i], strerror(errno));
 			err = 1;
 			continue;
 		}
@@ -1274,9 +1274,9 @@ int sh_main(int argc, char **argv, char **envp)
 	struct utsname utsname;
 	char *username = "root";
 	char *hostname;
-	char buf[BUFSIZE];
+	char *buf;
 	ssize_t n;
-	char *bp = buf;
+	char *bp;
 	ssize_t len = 0;
 	int neof = 0;
 	int err;
@@ -1286,11 +1286,19 @@ int sh_main(int argc, char **argv, char **envp)
 		{ 0, 0 }
 	};
 	int aargc;
-	char *aargv[BUFSIZE/2+1];
-	uid = getuid();
+	char **aargv;
+	int laststatus = 0;
 	
-	G.user.laststatus = 0;
 	printf("stupid shell v -0.1\n");
+	
+	buf = malloc(BUFSIZE);
+	aargv = malloc(sizeof(char *)*(BUFSIZE/2+1));
+	if (!buf || !aargv) {
+		printf("sh: can't allocate buffers!\n");
+		return 1;
+	}
+	
+	uid = getuid();
 	err = uname(&utsname);
 	if (!err) {
 		hostname = utsname.nodename;
@@ -1298,6 +1306,7 @@ int sh_main(int argc, char **argv, char **envp)
 		hostname = "localhost";
 	}
 	
+	bp = buf;
 	for (;;) {
 		setitimer(ITIMER_REAL, &it, NULL);
 		if (len == 0)
@@ -1356,12 +1365,14 @@ int sh_main(int argc, char **argv, char **envp)
 		cmd = aargv[0];
 		if (!strcmp(cmd, "exit")) {
 			break;
-		} else if (!strcmp(cmd, "laststatus")) {
-			printf("%d\n", G.user.laststatus);
+		} else if (!strcmp(cmd, "status")) {
+			printf("%d\n", laststatus);
+			laststatus = 0;
 		} else if (!strcmp(cmd, "help")) {
 			showhelp();
+			laststatus = 0;
 		} else {
-			G.user.laststatus = run(cmd, aargc, aargv, envp);
+			laststatus = run(cmd, aargc, aargv, envp);
 		}
 eol:
 		neof = 0;
@@ -1369,7 +1380,7 @@ nextline:
 		bp = buf;
 		len = 0;
 	}
-	return G.user.laststatus;
+	return laststatus;
 }
 
 static struct applet applets[] = {
