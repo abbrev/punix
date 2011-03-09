@@ -1412,6 +1412,9 @@ static struct applet applets[] = {
 	{ "malloc", malloc_main },
 	{ "pid", pid_main },
 	{ "poweroff", poweroff_main },
+	{ "exit", NULL },
+	{ "status", NULL },
+	{ "help", NULL },
 
 	{ NULL, NULL }
 };
@@ -1421,6 +1424,7 @@ static int run_applet(const char *cmd, int argc, char **argv, char **envp)
 	struct applet *ap;
 	for (ap = &applets[0]; ap->name; ++ap) {
 		if (!strcmp(cmd, ap->name)) {
+			if (!ap->main) break;
 			return ap->main(argc, argv, envp);
 		}
 	}
