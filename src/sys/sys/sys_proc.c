@@ -118,6 +118,16 @@ static void release_resources()
 	}
 }
 
+/* push a long/word/byte onto a stack */
+#define PUSHL(stack, value) (*--((long *)(stack)) = (value))
+#define PUSHW(stack, value) (*--((short *)(stack)) = (value))
+#define PUSHB(stack, value) (*--((char *)(stack)) = (value))
+
+/* XXX: these values need to be loaded from the binary file */
+#define STACKSIZE 1024
+#define USTACKSIZE 2048
+#define UDATASIZE 1
+
 /* the following are inherited by the child from the parent (this list comes from execve(2) man page in FreeBSD 6.2):
 	process ID           see getpid(2)
 	parent process ID    see getppid(2)
@@ -194,16 +204,17 @@ void sys_execve()
 	for (ap = argp; *ap; ++ap)
 		size += strlen(*ap) + 1;
 	argc = ap - argp; /* number of arg vectors */
+	size += (argc+1)*sizeof(char *);
 	
 	for (ap = envp; *ap; ++ap)
 		size += strlen(*ap) + 1;
 	envc = ap - envp; /* number of env vectors */
+	size += (envc+1)*sizeof(char *);
+
+	size += sizeof(int); /* for argc */
 	
-#define STACKSIZE 1024
-#define USTACKSIZE 8192
-#define UDATASIZE 3072
 	/* allocate the user stack */
-	ustacksize = USTACKSIZE;
+	ustacksize = USTACKSIZE + size;
 	ustack = stackalloc(&ustacksize);
 	if (!ustack) {
 		goto error_ustack;
@@ -225,9 +236,9 @@ void sys_execve()
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
 	
 	ustack = (char *)v;
-	*--(int *)ustack = argc;
+	PUSHW(ustack, argc);
 	
-	/* copy arguments */
+	/* copy arguments and environment */
 	copyenv(&v, &s, argp);
 	copyenv(&v, &s, envp);
 	
@@ -373,10 +384,6 @@ void sys_fork()
 {
 	P.p_error = ENOSYS;
 }
-
-#define PUSHL(stack, value) (*--((long *)(stack)) = (value))
-#define PUSHW(stack, value) (*--((short *)(stack)) = (value))
-#define PUSHB(stack, value) (*--((char *)(stack)) = (value))
 
 /*
  * memory allocations and frees:
