@@ -24,6 +24,18 @@ void printheaplist()
 }
 #endif
 
+#define EACHENTRY(h) ((h) = &G.heap.heaplist[1]; (h) < &G.heap.heaplist[G.heap.heapsize]; ++(h))
+
+static void printfree()
+{
+	int x = 0;
+	struct heapentry *hp;
+	for EACHENTRY(hp) {
+		x += hp->start - hp[-1].end;
+	}
+	kprintf("free: %ld bytes\n", (long)HEAPBLOCKSIZE * x);
+}
+
 static size_t largest_unallocated_chunk_size()
 {
 	int size = 0;
@@ -368,8 +380,10 @@ static void freeall(pid_t pid)
 	struct heapentry *hp;
 	
 	for (hp = &G.heap.heaplist[0]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp)
-		if (pid == hp->pid)
+		if (pid == hp->pid) {
 			removeentry(hp);
+			--hp;
+		}
 }
 
 #if 0
