@@ -22,7 +22,7 @@ archive     = (__ld_program_size + 0x200000 + 0xffff) |& 0xffff | !!!
 archive_end = 0x400000
 
 .section _st1,"x"
-exec_ram = 0x5c00 | XXX
+exec_ram = 0x5c00+4+8 | XXX see globals.h
 
 | short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"), size_t size asm("%d3"))
 FlashWrite:

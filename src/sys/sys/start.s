@@ -93,11 +93,14 @@ the_beginning:
 	bset.b	#1,0x1D(%a6)		| Enable LCD on HW2
 	move.w	#0xFFFF,0x1A(%a5)	| acknowledge AutoInt 6 & AutoInt 2
 	
-	| Clear 256K of RAM
-	suba.l	%a0,%a0
-	moveq	#-1,%d0			| 256K / 4 = 64K-1 = 0xFFFF
+zero_start = 0x5c00+4+8
+.if 1
+	| clear RAM starting after realtime clock
+	move.l	#zero_start,%a0
+	move.l	#(0x40000-zero_start)/4-1,%d0
 0:	clr.l	(%a0)+
 	dbra	%d0,0b
+.endif
 		
 	| Copy Vector Table
 	bsr	InstallVectors

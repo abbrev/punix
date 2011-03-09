@@ -13,11 +13,11 @@
 #include "sched.h"
 
 struct globals {
-	char exec_ram[60];
-	char fpram[8*12+3*4];
-/* old: these must be first -- referenced from assembly code */
-	long seconds;
+	long seconds; /* XXX: see entry.s */
 	struct timespec _realtime;
+	/* all RAM below here can (should) be cleared on boot. see start.s */
+	char exec_ram[60]; /* XXX: see flash.s */
+	char fpram[8*12+3*4]; /* XXX: see fpuem.s */
 	/*
 	 * realtime_mono monotonically increases and is never adjusted (only
 	 * incremented). This is used with ITIMER_REAL timers and can be used

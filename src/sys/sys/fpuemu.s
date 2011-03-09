@@ -93,7 +93,7 @@ xxxxxx is almost always a 6-bit field
 .data
 |fpregs: .ds.b	8*fpregsize	| 8 registers, 96 bits each
 |srcfpreg: .ds.b	12
-.equ	fpregs,0x5c00+60
+.equ	fpregs,0x5c00+4+8+60	| see globals.h
 .equ	srcfpreg,fpregs+8*fpregsize
 
 | fp control and status registers
