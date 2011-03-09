@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <utime.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "punix.h"
 #include "param.h"
