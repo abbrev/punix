@@ -171,33 +171,36 @@ STARTUP(void wakeup(void *chan))
 {
 	struct proc *p;
 	
-	list_for_each_entry(p, &G.proc_list, p_list)
+	list_for_each_entry(p, &G.proc_list, p_list) {
 		if (p->p_waitchan == chan) {
-			//kprintf("%s (%d)\n", __FILE__, __LINE__);
 			setrun(p);
 		}
+	}
 }
+
+void print_list(struct list_head *lp, char *s)
+{
+	struct list_head *listp;
+
+	list_for_each(listp, lp) {
+		kprintf(" %08lx next=%08lx prev=%08lx (%s)\n",
+			listp, listp->next, listp->prev, s);
+	}
+}
+
 
 /* allocate a process structure */
 STARTUP(struct proc *palloc())
 {
 	size_t psize = sizeof(struct proc);
-	struct proc *p = memalloc(&psize, 0);
-	
-	if (p) {
-		list_add(&p->p_list, &G.proc_list);
-	}
-	return p;
+	return memalloc(&psize, 0);
 }
 
 /* free a process structure */
 STARTUP(void pfree(struct proc *p))
 {
-	if (p) {
-		/* remove this proc from the list */
-		list_del(&p->p_list);
+	if (p)
 		memfree(p, 0);
-	}
 }
 
 #define MAXPID	30000
@@ -211,6 +214,7 @@ STARTUP(int pidalloc())
 	static int mpid = 1;
 	*/
 	
+	//print_list(&G.proc_list, "pidalloc: proc list");
 	/*
 	 * mpid is the current pid.
 	 * pidchecked is the lowest pid after mpid that is currently used by a
@@ -219,11 +223,13 @@ STARTUP(int pidalloc())
 	 */
 	++G.mpid;
 retry:
+	//kprintf("%s (%d)\n", __FILE__, __LINE__);
 	if (G.mpid >= MAXPID) {
 		G.mpid = 2;
 		G.pidchecked = 0;
 	}
 	if (G.mpid >= G.pidchecked) {
+		struct list_head *lp;
 		G.pidchecked = MAXPID;
 		
 		list_for_each_entry(p, &G.proc_list, p_list) {
@@ -275,6 +281,7 @@ STARTUP(void procinit())
 	
 	current = palloc();
 	assert(current);
+	list_add_tail(&current->p_list, &G.proc_list);
 	G.initproc = current;
 	
 	for (i = 0; i < NOFILE; ++i)

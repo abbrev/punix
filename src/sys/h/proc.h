@@ -152,10 +152,13 @@ struct proc {
 	void *p_text;
 	void *p_data;
 	
+#if 0
+	/* are these really needed? */
 	size_t p_ustacksize;
 	size_t p_stacksize;
 	size_t p_textsize;
 	size_t p_datasize;
+#endif
 	
 	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
 	struct rusage p_rusage;

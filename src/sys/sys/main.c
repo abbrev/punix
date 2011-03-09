@@ -53,7 +53,7 @@ STARTUP(void kmain())
 	flashinit();
 	batt_check();
 	
-#if 0
+#if 1
 	kprintf("%s build %s\n", uname_sysname, uname_version);
 #else
 	kprintf("%s v%s\n", uname_sysname, uname_release);

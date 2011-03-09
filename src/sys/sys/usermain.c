@@ -36,6 +36,7 @@
 #include <sound.h>
 #include <sys/utsname.h>
 #include <setjmp.h>
+//#include <sys/ioctl.h>
 
 
 /*
@@ -120,7 +121,7 @@ char *strerror(int e)
 		//return errstr;
 		return "Unknown error";
 	}
-	return sys_errlist[e];
+	return (char *)sys_errlist[e];
 }
 
 /* XXX: this prints to stdout instead of stderr */
@@ -728,7 +729,6 @@ static void testlink(int argc, char *argv[], char *envp[])
 	unsigned char *buf = NULL;
 	int linkfd;
 	struct pkthead packet;
-	int i;
 	ssize_t n;
 	
 	linkfd = open("/dev/link", O_RDWR);
@@ -773,7 +773,7 @@ out:
 static int banner(const char *s)
 {
 	static const char stars[] = "*****************************";
-	int h, i;
+	int h;
 	int l = strlen(s);
 	h = l / 2;
 	return printf("\n%s %s %s\n", &stars[h + (l%2)], s, &stars[h]);
@@ -825,7 +825,7 @@ static int docat(int fd)
 
 static int cat_main(int argc, char **argv, char **envp)
 {
-	int err = 0, n;
+	int err = 0;
 	int fd;
 	int i;
 	
@@ -1006,6 +1006,12 @@ static int malloc_main(int argc, char **argv, char **envp)
 		s -= 1024;
 	free(x);
 	printf("allocated up to %lu contiguous bytes\n", s);
+	return 0;
+}
+
+static int pid_main(int argc, char **argv, char **envp)
+{
+	printf("%d\n", getpid());
 	return 0;
 }
 
@@ -1263,7 +1269,7 @@ eol:
 }
 
 #define MAXARGC (BUFSIZE/2+1)
-static int sh_main(int argc, char **argv, char **envp)
+int sh_main(int argc, char **argv, char **envp)
 {
 	struct utsname utsname;
 	char *username = "root";
@@ -1319,7 +1325,6 @@ static int sh_main(int argc, char **argv, char **envp)
 		char *cmd;
 		char *s;
 		char *token;
-		int i;
 		int err = 0;
 		
 		buf[len-1] = '\0';
@@ -1368,7 +1373,6 @@ nextline:
 }
 
 static struct applet applets[] = {
-	{ "sh", sh_main },
 	{ "tests", tests_main },
 	{ "top", top_main },
 	{ "cat", cat_main },
@@ -1384,6 +1388,7 @@ static struct applet applets[] = {
 	{ "date", date_main },
 	{ "adjtime", adjtime_main },
 	{ "malloc", malloc_main },
+	{ "pid", pid_main },
 
 	{ NULL, NULL }
 };
@@ -1401,36 +1406,52 @@ static int run_applet(const char *cmd, int argc, char **argv, char **envp)
 
 static int run(const char *cmd, int argc, char **argv, char **envp)
 {
-	int err = 0;
+	int status;
 	int pid;
-	err = run_applet(cmd, argc, argv, envp);
-	if (err >= 0) return err;
+	char *s;
+	status = run_applet(cmd, argc, argv, envp);
+	if (status >= 0) return status;
 	
 	/*
 	 * here we would vfork and try to execve(2) the command
 	 * in the child (in a real shell, that is)
 	 */
 	pid = vfork();
-	if (pid == 0) {
-		err = execve(cmd, argv, envp);
-		if (errno == ENOENT) {
-			printf("sh: command not found\n");
-		} else {
-			printf("sh: %s: %s\n", cmd, strerror(errno));
-		}
-		_exit(127);
-	} else if (pid > 0) {
-		/* parent process. we chill here until the child dies */
-		wait(&err);
-	} else {
+	if (pid < 0) {
 		printf("sh: cannot vfork: %s\n", strerror(errno));
-		err = 42;
+		return 127;
+	} else if (pid == 0) {
+		execve(cmd, argv, envp);
+		switch (errno) {
+		case ENOENT:
+			s = "command not found";
+			break;
+		default:
+			s = strerror(errno);
+			break;
+		}
+		printf("sh: %s: %s\n", cmd, s);
+		_exit(127);
 	}
 	
-	return err;
+	/* parent process. we chill here until the child dies */
+	pid = wait(&status);
+	if (WIFEXITED(status)) {
+		status = WEXITSTATUS(status);
+	} else if (WIFSIGNALED(status)) {
+		status = WTERMSIG(status);
+		printf("sh: terminated with signal %d\n", status);
+	} else if (WIFSTOPPED(status)) {
+		status = WSTOPSIG(status);
+		printf("sh: stopped with signal %d\n", status);
+	} else {
+		printf("sh: unknown status %d\n", status);
+	}
+	
+	return status;
 }
 
-int main_bittybox(int argc, char **argv, char **envp)
+int bittybox_main(int argc, char **argv, char **envp)
 {
 	int n = run_applet(argv[0], argc, argv, envp);
 	if (n < 0) {
@@ -1440,7 +1461,7 @@ int main_bittybox(int argc, char **argv, char **envp)
 	return n;
 }
 
-int main_init(int argc, char *argv[], char *envp[])
+int init_main(int argc, char *argv[], char *envp[])
 {
 	int fd;
 	int err;
@@ -1459,13 +1480,28 @@ int main_init(int argc, char *argv[], char *envp[])
 			  "Dropping to a single-process shell now.\n");
 		}
 		argv[0] = "sh";
+		argv[1] = NULL;
 		err = execve(argv[0], argv, envp);
 		printf("still in init, execve failed with error %d\n", err);
 	} 
 	
+	//printf("This is the parent process of init\n");
+	
 	/* sit here and reap zombie processes */
 	/* a real init process would also spawn tty's and stuff */
 	for (;;) {
-		wait(NULL);
+		int pid;
+		int status;
+		pid = wait(&status);
+		if (pid < 0) {
+			if (errno == ECHILD) {
+				printf("init: no processes running\n");
+				pause();
+			} else {
+				perror("init: wait");
+			}
+		} else {
+			printf("init: reaped child (pid=%d status=%d)\n", pid, status);
+		}
 	}
 }

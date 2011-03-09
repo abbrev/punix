@@ -264,50 +264,9 @@ _syscall:
 	move.l	%a1,%usp
 	rte
 
-| jmp_buf
-.equ jmp_buf.reg,0
-.equ jmp_buf.sp,10*4
-.equ jmp_buf.usp,11*4
-.equ jmp_buf.retaddr,12*4
-
-| struct syscallframe
-.equ syscallframe.regs,0
-.equ syscallframe.sr,10*4
-.equ syscallframe.pc,10*4+2
-
-/* void setup_env(jmp_buf env, struct syscallframe *sfp, long *sp);
- * Setup the execution environment "env" using the syscallframe "sfp", the stack
- * pointer "sp", and the current user stack pointer. The syscallframe is pushed
- * onto the stack (*sp), and the new stack pointer is saved in the environment.
- * FIXME: make this routine work with the newer struct syscallframe
- * FIXME: make this routine cleaner and more elegant!
- */
-setup_env:
-	move.l	12(%sp),%a0		| %a0 = sp
-	move.l	8(%sp),%a1		| %a1 = sfp
-	
-	| setup the new trap frame
-	move.l	syscallframe.pc(%a1),-(%a0)	| push pc
-	clr	-(%a0)				| clear sr
-	
-	move.l	4(%sp),%a1		| %a1 = env
-	move.l	%a0,jmp_buf.sp(%a1)	| sp
-	
-	move.l	%usp,%a0
-	move.l	%a0,jmp_buf.usp(%a1)	| usp
-	
-	move.l	1f(%pc),jmp_buf.retaddr(%a1)
-	
-	move.l	8(%sp),%a0		| %a0 = tfp
-	move	#10-1,%d0
-0:	move.l	-(%a0),(%a1)+		| copy the saved regs to the child's env
-	dbra	%d0,0b
-	
-	rts
-
-/* the child process resumes here  */
-1:
-	move	#0,%d0	| return 0 to the child process
+.global return_from_vfork
+return_from_vfork:
+	moveq	#0,%d0
 	rte
 
 | unused for now
