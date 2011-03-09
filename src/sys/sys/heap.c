@@ -386,31 +386,6 @@ static void freeall(pid_t pid)
 		}
 }
 
-#if 0
-/* linear search method */
-void memfree(void *ptr, pid_t pid)
-{
-	struct heapentry *hp;
-	int start;
-	if (ptr == NULL)
-		return;
-	start = (ptr - (void *)G.heap.heap) / HEAPBLOCKSIZE;
-	
-	for (hp = &G.heap.heaplist[0]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp) {
-		if (start < hp->end) {
-			if (hp->start <= start) {
-				/* remove this heap entry */
-				if (!pid || pid == hp->pid)
-					removeentry(hp);
-				else
-					P.p_error = EFAULT;
-			}
-			return;
-		}
-	}
-}
-#else
-/* binary search method */
 void memfree(void *ptr, pid_t pid)
 {
 	struct heapentry *hp;
@@ -425,7 +400,6 @@ void memfree(void *ptr, pid_t pid)
 	else
 		P.p_error = EFAULT;
 }
-#endif
 
 void sys_kmalloc()
 {
