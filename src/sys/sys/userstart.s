@@ -126,8 +126,8 @@ caerror:
 	rts
 
 .macro mkstart name
-.global start_\name
-start_\name:
+.global \name\()_start
+\name\()_start:
 	move	(%sp),%d0		| argc
 	lea	2(%sp),%a0		| argv
 	move	%d0,%d1
@@ -137,7 +137,7 @@ start_\name:
 	move.l	%a1,-(%sp)	| char **env
 	move.l	%a0,-(%sp)	| char **argv
 	move	%d0,-(%sp)	| int argc
-	jbsr	main_\name	| main_\name(argc, argv, env)
+	jbsr	\name\()_main	| \name\()_main(argc, argv, env)
 	
 	move	%d0,-(%sp)
 	bsr	_exit
@@ -146,6 +146,7 @@ start_\name:
 
 mkstart	init
 mkstart bittybox
+mkstart sh
 
 	.global fadd
 | float fadd(float a, float b);

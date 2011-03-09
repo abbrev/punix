@@ -36,6 +36,7 @@
 #include <sound.h>
 #include <sys/utsname.h>
 #include <setjmp.h>
+//#include <sys/ioctl.h>
 
 
 /*
@@ -120,7 +121,7 @@ char *strerror(int e)
 		//return errstr;
 		return "Unknown error";
 	}
-	return sys_errlist[e];
+	return (char *)sys_errlist[e];
 }
 
 /* XXX: this prints to stdout instead of stderr */
@@ -728,7 +729,6 @@ static void testlink(int argc, char *argv[], char *envp[])
 	unsigned char *buf = NULL;
 	int linkfd;
 	struct pkthead packet;
-	int i;
 	ssize_t n;
 	
 	linkfd = open("/dev/link", O_RDWR);
@@ -773,7 +773,7 @@ out:
 static int banner(const char *s)
 {
 	static const char stars[] = "*****************************";
-	int h, i;
+	int h;
 	int l = strlen(s);
 	h = l / 2;
 	return printf("\n%s %s %s\n", &stars[h + (l%2)], s, &stars[h]);
@@ -825,7 +825,7 @@ static int docat(int fd)
 
 static int cat_main(int argc, char **argv, char **envp)
 {
-	int err = 0, n;
+	int err = 0;
 	int fd;
 	int i;
 	
@@ -1269,7 +1269,7 @@ eol:
 }
 
 #define MAXARGC (BUFSIZE/2+1)
-static int sh_main(int argc, char **argv, char **envp)
+int sh_main(int argc, char **argv, char **envp)
 {
 	struct utsname utsname;
 	char *username = "root";
@@ -1325,7 +1325,6 @@ static int sh_main(int argc, char **argv, char **envp)
 		char *cmd;
 		char *s;
 		char *token;
-		int i;
 		int err = 0;
 		
 		buf[len-1] = '\0';
@@ -1374,7 +1373,6 @@ nextline:
 }
 
 static struct applet applets[] = {
-	{ "sh", sh_main },
 	{ "tests", tests_main },
 	{ "top", top_main },
 	{ "cat", cat_main },
@@ -1453,7 +1451,7 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	return status;
 }
 
-int main_bittybox(int argc, char **argv, char **envp)
+int bittybox_main(int argc, char **argv, char **envp)
 {
 	int n = run_applet(argv[0], argc, argv, envp);
 	if (n < 0) {
@@ -1463,7 +1461,7 @@ int main_bittybox(int argc, char **argv, char **envp)
 	return n;
 }
 
-int main_init(int argc, char *argv[], char *envp[])
+int init_main(int argc, char *argv[], char *envp[])
 {
 	int fd;
 	int err;
@@ -1491,15 +1489,6 @@ int main_init(int argc, char *argv[], char *envp[])
 	
 	/* sit here and reap zombie processes */
 	/* a real init process would also spawn tty's and stuff */
-	struct itimerval it = {
-		{ 2, 0 },
-		{ 2, 0 },
-	};
-	struct sigaction sa;
-	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
-	sigaction(SIGALRM, &sa, NULL);
-	//setitimer(ITIMER_REAL, &it, NULL);
 	for (;;) {
 		int pid;
 		int status;
