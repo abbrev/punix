@@ -231,6 +231,11 @@ void sys_execve()
 	//kprintf("execve():   data=%08lx\n", data);
 	//printheaplist();
 	
+	/*
+	 * at this point we have all memory areas allocated. set up the new
+	 * process image
+	 */
+
 	size = (size + 1) & ~1; /* size must be even */
 	s = ustack - size; /* start of strings */
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
@@ -424,6 +429,14 @@ void sys_vfork()
 	P.p_retval = pid;
 	cp->p_pid = pid;
 	cp->p_pptr = current;
+	cp->p_rusage.ru_utime.tv_sec =
+	 cp->p_rusage.ru_utime.tv_usec =
+	 cp->p_rusage.ru_stime.tv_sec =
+	 cp->p_rusage.ru_stime.tv_usec = 0;
+	cp->p_crusage.ru_utime.tv_sec =
+	 cp->p_crusage.ru_utime.tv_usec =
+	 cp->p_crusage.ru_stime.tv_sec =
+	 cp->p_crusage.ru_stime.tv_usec = 0;
 	
 	/* allocate a kernel stack for the child */
 	stack = stackalloc(&stacksize);
