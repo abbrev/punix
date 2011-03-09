@@ -146,6 +146,8 @@ void flashinit(void)
 {
 	/* TODO: initialize the flash device driver */
 	
+	return;
+	
 	int i;
 	char test[] = "hello";
 	/* run a few tests on the Flash{Write,Erase} routines */
