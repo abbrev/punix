@@ -1285,6 +1285,11 @@ int sh_main(int argc, char **argv, char **envp)
 	char *bp;
 	ssize_t len = 0;
 	int neof = 0;
+	/*
+	 * ignoreeof should be initialized with the IGNOREEOF
+	 * environment variable
+	 */
+	int ignoreeof = 0;
 	int err;
 	int uid;
 	struct itimerval it = {
@@ -1295,7 +1300,7 @@ int sh_main(int argc, char **argv, char **envp)
 	char **aargv;
 	int laststatus = 0;
 	
-	printf("stupid shell v -0.1\n");
+	printf("stupid shell v0.2\n");
 	
 	buf = malloc(BUFSIZE);
 	aargv = malloc(sizeof(char *)*(BUFSIZE/2+1));
@@ -1327,7 +1332,7 @@ int sh_main(int argc, char **argv, char **envp)
 		bp += n;
 		if (len == 0) {
 			++neof;
-			if (neof > 3) {
+			if (neof > ignoreeof) {
 				printf ("exit\n");
 				break;
 			}
@@ -1362,7 +1367,7 @@ int sh_main(int argc, char **argv, char **envp)
 				errstr = "unmatched single quote";
 				break;
 			}
-			printf("stupidsh: error: %s\n", errstr);
+			printf("sh: error: %s\n", errstr);
 			goto eol;
 		}
 		aargv[aargc] = NULL;
@@ -1490,6 +1495,7 @@ int init_main(int argc, char *argv[], char *envp[])
 	dup(fd); /* 1 */
 	dup(fd); /* 2 */
 	
+spawn:
 	pid = vfork();
 	if (pid <= 0) {
 		if (pid < 0) {
@@ -1513,8 +1519,8 @@ int init_main(int argc, char *argv[], char *envp[])
 		pid = wait(&status);
 		if (pid < 0) {
 			if (errno == ECHILD) {
-				printf("init: no processes running\n");
-				pause();
+				printf("init: no processes running. starting new shell...\n");
+				goto spawn;
 			} else {
 				perror("init: wait");
 			}
