@@ -142,7 +142,11 @@ struct globals {
 		char key_array[KEY_NBR_ROW];
 		short key_mod, key_mod_sticky;
 		short key_compose;
-		unsigned char key_caps;
+		unsigned char caps_lock;
+		union {
+			unsigned char alpha_lock;
+			unsigned char hand_lock;
+		};
 		unsigned char compose;
 		unsigned char key_repeat; /* repeat enabled? */
 		unsigned char key_repeat_delay;

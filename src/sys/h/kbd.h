@@ -9,70 +9,106 @@
 #error TI89 and TI92P are undefined!
 #endif
 
-#define KEY_LEFT	 338
-#define KEY_UP		 337
-#define KEY_RIGHT	 344
-#define KEY_DOWN	 340
-#define KEY_CATALOG	 278
-
+#if 0
+/* these keycodes are the same as ASCII */
 #define KEY_VOID	 0
-#define KEY_ENTER	 13
-#define KEY_THETA	 136
-#define KEY_SIGN	 173
-#define KEY_BACK	 0x7f
-#define KEY_DEL		 277 /* XXX */
-#define KEY_STO		 22	/* Original Key code is 258 */
-#define KEY_COS		 260
-#define KEY_TAN		 261
-#define KEY_LN		 262
-#define KEY_CLEAR	 263
-#define KEY_ESC		 264
-#define KEY_APPS	 265
-#define KEY_MODE	 266
-#define KEY_F1		 268
-#define KEY_F2		 269
-#define KEY_F3		 270
-#define KEY_F4		 271
-#define KEY_F5		 272
-#define KEY_F6		 273
-#define KEY_F7		 274
-#define KEY_F8		 275
-#define KEY_SIN		 259
-#define KEY_INS		 4353
-#define KEY_ON		 267
-#define KEY_OFF		 4363
-#define KEY_OFF2	 16651
-#define KEY_QUIT	 4360
-#define KEY_SWITCH	 4361
-#define KEY_VARLINK	 4141
-#define KEY_CHAR	 4139
-#define KEY_ENTRY	 4109
-#define KEY_RCL		 4354
-#define KEY_MATH	 4149
-#define KEY_MEM		 4150
-#define KEY_ANS		 4372
-#define KEY_CUSTOM	 4147
-#define KEY_UNITS	 4400
-#define KEY_2ND		 0x1000
-#define KEY_DIAMOND	 0x2000
-#define KEY_SHIFT	 0x4000
-#define KEY_HAND	 0x8000
-#define KEY_ALPHA	 0x8000
-#define KEY_COMPOSE	 KEY_MODE
+#define KEY_ENTER	 13	/* carriage return (not linefeed) */
+#define KEY_STO		 22	/* this is tab in Punix */
+#define KEY_ESC		 27
+#define KEY_OR		 124	/* pipe | */
+#define KEY_BACK	 127	/* DEL */
+#endif
 
-#define KEY_INFEQUAL	 156
-#define KEY_DIFERENT	 157
-#define KEY_SUPEQUAL	 158
+enum {
+	/* keycodes below are not in ASCII. 0x100 <= keycode < 0x1000 */
+	KEY_THETA = 256,
+	KEY_SIGN,
+	KEY_LN,
+	KEY_SIN,
+	KEY_COS,
+	KEY_TAN,
+	KEY_ETOX,
+	KEY_ASIN,
+	KEY_ACOS,
+	KEY_ATAN,
+	KEY_XTONEGONE,
+	KEY_CLEAR,
+	KEY_APPS,
+	KEY_MODE,
+	KEY_COMPOSE = KEY_MODE,
+	KEY_ON,
+	KEY_F1,
+	KEY_F2,
+	KEY_F3,
+	KEY_F4,
+	KEY_F5,
+	KEY_F6,
+	KEY_F7,
+	KEY_F8,
+	KEY_F9,
+	KEY_F10,
+	KEY_F11,
+	KEY_F12,
+	KEY_F13,
+	KEY_F14,
+	KEY_F15,
+	KEY_F16,
+	KEY_DEL,
+	KEY_CATALOG,
+	KEY_UP,
+	KEY_LEFT,
+	KEY_DOWN,
+	KEY_RIGHT,
 
-#define KEY_EE		 149
-#define KEY_HOME	 277
+	KEY_INS,
+	KEY_OFF,
+	KEY_QUIT,
+	KEY_SWITCH,
+	KEY_VARLINK,
+	KEY_CHAR,
+	KEY_ENTRY,
+	KEY_RCL,
+	KEY_MATH,
+	KEY_MEM,
+	KEY_ANS,
+	KEY_CUSTOM,
+	KEY_UNITS,
+	KEY_OFF2,
+	KEY_ANGLE,
+	KEY_PI,
+	KEY_INTEGRAL,
+	KEY_DERIVATIVE,
+	KEY_SQRT,
+
+#if 0
+	/* what *are* these?? */
+	KEY_INFEQUAL,
+	KEY_DIFERENT,
+	KEY_SUPEQUAL,
+#endif
+
+	KEY_EE,
+	KEY_HOME,
+
+	/* not in TI-AMS */
+	KEY_CAPSLOCK,
+	KEY_ALPHALOCK,
+	KEY_HANDLOCK,
+
+
+	/* modifiers. these are bit fields */
+	KEY_2ND	    = 0x1000,
+	KEY_DIAMOND = 0x2000,
+	KEY_SHIFT   = 0x4000,
+	KEY_HAND    = 0x8000,
+	KEY_ALPHA   = 0x8000,
+};
+
 
 #ifdef TI89
 #define HELPKEYS_KEY (KEY_DIAMOND|KEY_EE)
 #elif defined(TI92P)
 #define HELPKEYS_KEY (KEY_DIAMOND|'k')
 #endif
-
-#define LINE_FEED 13
 
 #endif

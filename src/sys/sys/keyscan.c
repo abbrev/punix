@@ -8,30 +8,36 @@
 #include "kbd.h"
 #include "lcd.h"
 #include "globals.h"
+#include "cell.h"
 
 #define KBROWMASK (*(volatile short *)0x600018)
 #define KBCOLMASK (*(volatile char *)0x60001b)
 
+#define CR  '\r'
+#define ESC '\e'
+#define TAB '\t'
+#define DEL 127
+
 static const short Translate_Key_Table[][8] = {
 #ifdef TI89
 	{ KEY_UP,KEY_LEFT,KEY_DOWN,KEY_RIGHT,KEY_2ND,KEY_SHIFT,KEY_DIAMOND,KEY_ALPHA, },
-	{ KEY_ENTER,'+','-','*','/','^',KEY_CLEAR,KEY_F5, },
-	{ KEY_SIGN,'3','6','9',',','t',KEY_BACK,KEY_F4, },
+	{  CR,'+','-','*','/','^',KEY_CLEAR,KEY_F5, },
+	{ KEY_SIGN,'3','6','9',',','t',DEL,KEY_F4, },
 	{ '.','2','5','8',')','z',KEY_CATALOG,KEY_F3, },
 	{ '0','1','4','7','(','y',KEY_MODE,KEY_F2, },
-	{ KEY_APPS,KEY_STO,KEY_EE,KEY_OR,'=','x',KEY_HOME,KEY_F1, },
-	{ KEY_ESC,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID,KEY_VOID, },
+	{ KEY_APPS,TAB,KEY_EE,'|','=','x',KEY_HOME,KEY_F1, },
+	{ ESC,  0,  0,  0,  0,  0,  0,  0, },
 #else
 	{ KEY_2ND,KEY_DIAMOND,KEY_SHIFT,KEY_HAND,KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN, },
-	{ KEY_VOID,'z','s','w',KEY_F8,'1','2','3', },
-	{ KEY_VOID,'x','d','e',KEY_F3,'4','5','6', },
-	{ '\t','c','f','r',KEY_F7,'7','8','9', },
+	{   0,'z','s','w',KEY_F8,'1','2','3', },
+	{   0,'x','d','e',KEY_F3,'4','5','6', },
+	{ TAB,'c','f','r',KEY_F7,'7','8','9', },
 	{ ' ','v','g','t',KEY_F2,'(',')',',', },
 	{ '/','b','h','y',KEY_F6,KEY_SIN,KEY_COS,KEY_TAN, },
-	{ '^','n','j','u',KEY_F1,KEY_LN,KEY_ENTER,'p', },
+	{ '^','n','j','u',KEY_F1,KEY_LN, CR,'p', },
 	{ '=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*', },
-	{ KEY_BACK,KEY_THETA,'l','o','+',KEY_MODE,'\e',KEY_VOID, },
-	{ '-',KEY_ENTER,'a','q',KEY_F4,'0','.',KEY_SIGN, },
+	{ DEL,KEY_THETA,'l','o','+',KEY_MODE,ESC,  0, },
+	{ '-', CR,'a','q',KEY_F4,'0','.',KEY_SIGN, },
 #endif
 };
 
@@ -42,77 +48,138 @@ struct translate {
 };
 
 static const struct translate Translate_2nd[] = {
+	/* common 2nd key translations between TI-89 and TI-92+ */
+	{ '(','{' },
+	{ ')','}' },
+	{ ',','[' },
+	{ '/',']' },
+	{ '0','<' },
+	{ '.','>' },
+	{ DEL,KEY_INS },
+	{ CR,KEY_ENTRY },
+	{ ESC,KEY_QUIT },
+	{ TAB,KEY_RCL },
+#if 0
+	/* these characters are not in ISO-8859-1 */
+	{ '^',KEY_PI }, /* pi XXX */
+	{ '7',KEY_INTEGRAL }, /* integral (1/2) */
+	{ '8',KEY_DERIVATIVE }, /* derivative (1/4) */
+	{ '*',KEY_SQRT }, /* square root (") */
+#endif
+	{ '5',KEY_MATH },
+	{ '6',KEY_MEM },
+	{ '-',KEY_VARLINK },
+	{ '+',KEY_CHAR },
+#if 0
+	{ KEY_SIGN,KEY_ANS },
+#else
+	{ KEY_SIGN,'~' },
+#endif
+
+#ifdef TI92P
 	{ 'q','?' },
 	{ 'w','!' },
 	{ 'e',0xe9 }, /* e' */
 	{ 'r','@' },
 	{ 't','#' },
-#if 0
-	{ 'y',0x1a }, /* solid right triangle */ /* XXX */
-#endif
 	{ 'u',0xfc }, /* u" */
-#if 0
-	{ 'i',0x97 }, /* imaginary */
-#endif
 	{ 'o',0xd4 }, /* O^ */
 	{ 'p','_' },
 	{ 'a',0xe1 }, /* a` */
 	{ 's',0xdf }, /* German double s */
 	{ 'd',0xb0 }, /* degree */
-#if 0
-	{ 'f',0x9f }, /* angle XXX */
-	{ 'g',0x80 }, /* alpha */ /* XXX */
-#endif
 	{ 'g','`' },
 	{ 'h','&' },
-#if 0
-	{ 'j',0xbe }, /* infinity */
-#endif
 	{ 'k','|' },
 	{ 'l','"' },
+	{ 'z',KEY_CAPSLOCK },
 	{ 'x',0xa9 }, /* copyright */
 	{ 'c',0xc7 }, /* C, */
-#if 0
-	{ 'v',0x9d }, /* not equal XXX */
-#endif
 	{ 'b','\'' },
 	{ 'n',0xf1 }, /* n~ */
 	{ 'm',';' },
 	{ '=','\\' },
 	{ KEY_THETA,':' },
-	{ '(','{' },
-	{ ')','}' },
-	{ ',','[' },
-	{ '/',']' },
-#if 0
-	{ '^',0x8c }, /* pi XXX */
-	{ '7',0xbd }, /* integral (1/2) */
-	{ '8',0xbc }, /* derivative (1/4) */
-	{ '9',0xb4 }, /* ^-1 (accent) */
-	{ '*',0xa8 }, /* square root (") */
-	{ '4',0x8e }, /* Sigma XXX */
-#endif
-	{ '5',KEY_MATH },
-	{ '6',KEY_MEM },
-	{ '-',KEY_VARLINK },
 	{ '1',KEY_EE },
 	{ '2',KEY_CATALOG },
 	{ '3',KEY_CUSTOM },
-	{ '+',KEY_CHAR },
-	{ '0','<' },
-	{ '.','>' },
-	{ KEY_SIGN,'~' },
-#if 0
-	{ KEY_SIGN,KEY_ANS },
-#endif
-	{ KEY_BACK,KEY_INS },
-	{ KEY_ENTER,KEY_ENTRY },
 	{ KEY_APPS,KEY_SWITCH },
-	{ KEY_ESC,KEY_QUIT },
-	{ KEY_STO,KEY_RCL },
 	{ ' ','$' },
+	{ KEY_HAND, KEY_HANDLOCK },
+	{ KEY_LN, KEY_ETOX },
+	{ KEY_SIN, KEY_ASIN },
+	{ KEY_COS, KEY_ACOS },
+	{ KEY_TAN, KEY_ATAN },
+	{ '9', KEY_XTONEGONE },
+#if 0
+	/* these characters are not in ISO-8859-1 */
+	{ 'y',0x1a }, /* solid right triangle */ /* XXX */
+	{ 'i',0x97 }, /* imaginary */
+	{ 'f',KEY_ANGLE }, /* angle XXX */
+	{ 'g',0x80 }, /* alpha */ /* XXX */
+	{ 'j',0xbe }, /* infinity */
+	{ 'v',0x9d }, /* not equal XXX */
+	{ '9',0xb4 }, /* ^-1 (accent) */
+	{ '4',0x8e }, /* Sigma XXX */
+#endif
+#else /* TI89 */
+	{ KEY_F1, KEY_F6 },
+	{ KEY_F2, KEY_F7 },
+	{ KEY_F3, KEY_F8 },
+	{ 'x', KEY_LN },
+	{ 'y', KEY_SIN },
+	{ 'z', KEY_COS },
+	{ 't', KEY_TAN },
+	{ '=', '\'' },
+	{ '|', 0xb0 }, /* degree */
+	{ '9', ';' },
+	{ '4', ':' },
+	{ '1', '"' },
+	{ '2', '\\' },
+	{ '3', KEY_UNITS },
+	{ KEY_HOME, KEY_CUSTOM },
+	{ KEY_ALPHA, KEY_ALPHALOCK },
+	{ KEY_SHIFT, KEY_CAPSLOCK },
+#if 0
+	{ KEY_EE, KEY_ANGLE },
+	{ KEY_MODE, KEY_ARROW }, /* solid right arrow */
+#endif
+#endif
 	{ 0, 0 }
 };
+
+#ifdef TI89
+static const struct translate Translate_alpha[] = {
+	{ '=', 'a' },
+	{ '(', 'b' },
+	{ ')', 'c' },
+	{ ',', 'd' },
+	{ '/', 'e' },
+	{ '|', 'f' },
+	{ '7', 'g' },
+	{ '8', 'h' },
+	{ '9', 'i' },
+	{ '*', 'j' },
+	{ KEY_EE, 'k' },
+	{ '4', 'l' },
+	{ '5', 'm' },
+	{ '6', 'n' },
+	{ '-', 'o' },
+	{ TAB, 'p' },
+	{ '1', 'q' },
+	{ '2', 'r' },
+	{ '3', 's' },
+	{ '+', 'u' },
+	{ '0', 'v' },
+	{ '.', 'w' },
+	{ KEY_SIGN, ' ' },
+	{ 0, 0 },
+};
+#else
+static const struct translate Translate_hand[] = {
+	{ 0, 0 },
+};
+#endif
 
 static short translate(short key, const struct translate *tp)
 {
@@ -135,10 +202,15 @@ static const struct expand expand_table[] = {
 	{ KEY_RIGHT, "\e[C" },
 	{ KEY_DOWN, "\e[B" },
 	
-	{ KEY_COS, "cos " },
-	{ KEY_SIN, "sin " },
-	{ KEY_TAN, "tan " },
-	{ KEY_LN, "ln " },
+	{ KEY_COS, "cos(" },
+	{ KEY_SIN, "sin(" },
+	{ KEY_TAN, "tan(" },
+	{ KEY_LN, "ln(" },
+	{ KEY_ACOS, "acos(" },
+	{ KEY_ASIN, "asin(" },
+	{ KEY_ATAN, "atan(" },
+	{ KEY_ETOX, "e^(" },
+	{ KEY_XTONEGONE, "^-1" },
 /* FIXME: add more */	
 #if 1
 	{ KEY_INS, "\e[2~" },
@@ -152,7 +224,7 @@ static const struct expand expand_table[] = {
 	{ KEY_F7, "\e[18~" },
 	{ KEY_F8, "\e[19~" },
 #endif
- { 0, "" }
+	{ 0, "" }
 };
 
 static void expand(short key)
@@ -297,16 +369,15 @@ static short compose(short key)
 
 /* The status bitmaps and drawmod()/showstatus() are kind of a hack. It would be
  * nice if they were rewritten (but not essential since it works as it is) */
+#ifdef TI92P
+#define STATUSROWS 8
 static const unsigned short status[][4] = {
 #include "glyphsets/status-none.inc"
 #include "glyphsets/status-2nd.inc"
 #include "glyphsets/status-diamond.inc"
 #include "glyphsets/status-shift.inc"
-#ifdef TI92P
 #include "glyphsets/status-hand.inc"
-#else
-#include "glyphsets/status-alpha.inc"
-#endif
+#include "glyphsets/status-handlock.inc"
 #include "glyphsets/status-capslock.inc"
 #include "glyphsets/status-compose1.inc"
 #include "glyphsets/status-compose2.inc"
@@ -319,6 +390,28 @@ static const unsigned short status[][4] = {
 #include "glyphsets/status-batt4.inc"
 #include "glyphsets/status-busy.inc"
 };
+#else
+#define STATUSROWS 4
+static const unsigned short status[][2] = {
+#include "glyphsets/status-none-89.inc"
+#include "glyphsets/status-2nd-89.inc"
+#include "glyphsets/status-diamond-89.inc"
+#include "glyphsets/status-shift-89.inc"
+#include "glyphsets/status-alpha-89.inc"
+#include "glyphsets/status-alphalock-89.inc"
+#include "glyphsets/status-capslock-89.inc"
+#include "glyphsets/status-compose1-89.inc"
+#include "glyphsets/status-compose2-89.inc"
+#include "glyphsets/status-bell-89.inc"
+#include "glyphsets/status-scrolllock-89.inc"
+#include "glyphsets/status-batt0-89.inc"
+#include "glyphsets/status-batt1-89.inc"
+#include "glyphsets/status-batt2-89.inc"
+#include "glyphsets/status-batt3-89.inc"
+#include "glyphsets/status-batt4-89.inc"
+#include "glyphsets/status-busy-89.inc"
+};
+#endif
 
 #define STATUS_NONE        0
 #define STATUS_2ND         1
@@ -326,21 +419,29 @@ static const unsigned short status[][4] = {
 #define STATUS_SHIFT       3
 #ifdef TI92P
 #define STATUS_HAND        4
+#define STATUS_HANDLOCK    5
 #else
 #define STATUS_ALPHA       4
+#define STATUS_ALPHALOCK   5
 #endif
-#define STATUS_CAPSLOCK    5
-#define STATUS_COMPOSE1    6
-#define STATUS_COMPOSE2    7
-#define STATUS_BELL        8
-#define STATUS_SCROLLLOCK  9
-#define STATUS_BATT0      10
-#define STATUS_BATT1      11
-#define STATUS_BATT2      12
-#define STATUS_BATT3      13
-#define STATUS_BATT4      14
-#define STATUS_BUSY       15
-#define STATUS_LAST       15
+#define STATUS_CAPSLOCK    6
+#define STATUS_COMPOSE1    7
+#define STATUS_COMPOSE2    8
+#define STATUS_BELL        9
+#define STATUS_SCROLLLOCK 10
+#define STATUS_BATT0      11
+#define STATUS_BATT1      12
+#define STATUS_BATT2      13
+#define STATUS_BATT3      14
+#define STATUS_BATT4      15
+#define STATUS_BUSY       16
+#define STATUS_LAST       16
+
+#ifdef TI92P
+#define MODBASE ((char *)(LCD_MEM+0xf00-7*30-1))
+#else
+#define MODBASE ((char *)(LCD_MEM+6*NUMCELLROWS*LCD_INCY+19))
+#endif
 
 static void drawmod(int pos, int m)
 {
@@ -351,9 +452,9 @@ static void drawmod(int pos, int m)
 	if (m < 0 || STATUS_LAST < m) return;
 	if (pos < 0 || 30 <= pos) return;
 	//kprintf("drawmod(%d, %d)\n", pos, m);
-	s = (char *)(0x4c00L + 0xf00 - 7*30 - 1 - pos);
+	s = MODBASE - pos;
 	d = (char *)&status[m][0];
-	for (i = 0; i < 8; ++i) {
+	for (i = 0; i < STATUSROWS; ++i) {
 		*s = *d;
 		s+=30;
 		++d;
@@ -378,8 +479,14 @@ void showstatus(void)
 	drawmod(2, mod & KEY_2ND ? STATUS_2ND : STATUS_NONE);
 	drawmod(3, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
 	drawmod(4, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
-	drawmod(5, G.vt.key_caps ? STATUS_CAPSLOCK : STATUS_NONE);
-	drawmod(6, mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
+	drawmod(5, G.vt.caps_lock ? STATUS_CAPSLOCK : STATUS_NONE);
+#ifdef TI92P
+	drawmod(6, G.vt.hand_lock ? STATUS_HANDLOCK :
+	           mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
+#else
+	drawmod(6, G.vt.alpha_lock ? STATUS_ALPHALOCK :
+	           mod & KEY_ALPHA ? STATUS_ALPHA : STATUS_NONE);
+#endif
 	drawmod(7, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
 	drawmod(8, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
 	splx(x);
@@ -406,35 +513,71 @@ void bell(struct tty *ttyp)
 static void addkey(unsigned short key)
 {
 	unsigned short mod;
+	short k;
 	
+	mod = G.vt.key_mod | G.vt.key_mod_sticky;
+	
+	/* translate alpha and hand first */
+#ifdef TI89
+	if (!!(mod & KEY_ALPHA) ^ G.vt.alpha_lock) {
+		k = translate(key, Translate_alpha);
+		if (k) key = k;
+	}
+#else
+	if (!!(mod & KEY_HAND) ^ G.vt.hand_lock) {
+		k = translate(key, Translate_hand);
+		if (k) key = k;
+	}
+#endif
+	
+	/* translate 2nd (alt) second */
+	if (mod & KEY_2ND) {
+		k = translate(key, Translate_2nd);
+		if (k)
+			key = k;
+		else if (key < 0x1000) 
+			key |= mod;
+	}
+	
+	/* handle alpha/hand lock */
+#ifdef TI89
+	/* cycle alpha->alpha lock->none */
+	if (((mod & KEY_ALPHA) || G.vt.alpha_lock) && key == KEY_ALPHA) {
+		G.vt.alpha_lock = !G.vt.alpha_lock;
+		G.vt.key_mod_sticky &= ~KEY_ALPHA;
+		return;
+	}
+	
+	if (key == KEY_ALPHALOCK) {
+		G.vt.alpha_lock = !G.vt.alpha_lock;
+		goto end;
+	}
+#else
+	/* cycle hand->hand lock->none */
+	if (((mod & KEY_HAND) || G.vt.hand_lock) && key == KEY_HAND) {
+		G.vt.hand_lock = !G.vt.hand_lock;
+		G.vt.key_mod_sticky &= ~KEY_HAND;
+		return;
+	}
+	
+	if (key == KEY_HANDLOCK) {
+		G.vt.hand_lock = !G.vt.hand_lock;
+		goto end;
+	}
+#endif
+	
+	/* handle caps lock */
+	if (key == KEY_CAPSLOCK) {
+		G.vt.caps_lock = !G.vt.caps_lock;
+		goto end;
+	}
+
 	if (key >= 0x1000) {
 		G.vt.key_mod_sticky ^= key;
 		return;
 	}
 	
-	mod = G.vt.key_mod | G.vt.key_mod_sticky;
-	
-	if (mod & KEY_2ND) {
-		short k;
-		if (key == 'z') {
-			/* caps lock */
-			G.vt.key_caps = !G.vt.key_caps;
-			goto end;
-		}
-		k = translate(key, Translate_2nd);
-		if (k) key = k;
-		else   key |= mod;
-	}
-	
-	if (!!(mod & KEY_SHIFT) ^ G.vt.key_caps) {
-#if 0
-		key = toupper(key);
-#else
-		if ('a' <= key && key <= 'z')
-			key += 'A' - 'a';
-#endif
-	}
-	
+	/* handle diamond (control) */
 	if (mod & KEY_DIAMOND) {
 		if (key == '+') {
 			lcd_inc_contrast();
@@ -443,24 +586,56 @@ static void addkey(unsigned short key)
 			lcd_dec_contrast();
 			goto end;
 		}
-		if ('a' <= key && key <= 'z') {
+		
+		/* 
+		 * this could also be done with a "translate" table, but it
+		 * would be large given the wide range of characters to
+		 * translate
+		 */
+		if (0x61 <= key && key <= 0x7e) {
+			/* a-z, {, |, }, ~ */
 			key -= 0x60;
+		} else if (0x5b <= key && key <= 0x5f) {
+			/* [, \, ], ^, _ */
+			key -= 0x40;
 		} else if (key == '2') {
 			key = 0;
 		} else if ('3' <= key && key <= '7') {
 			key -= 0x18;
 		} else if (key == '8') {
 			key = 0x7f;
-		} else if (key == '/') {
-			key = 0x1f;
-		} else if (key == KEY_BACK) {
+		} else if (key == DEL) {
 			key = KEY_DEL;
 		} else if (key == '=') {
-			key = '%'; /* XXX */
-		} else if (('A' <= key && key <= 'Z')
-		           || (0x5b <= key && key <= 0x5f)) {
-			key -= 0x40;
+			key = '%'; /* XXX: inequal sign in TI-AMS */
+		} else if (key == '0') {
+			key = 0xab; /* << XXX: <= in TI-AMS */
+		} else if (key == '.') {
+			key = 0xbb; /* >> XXX: >= in TI-AMS */
+#ifdef TI89
+		} else if (key == KEY_MODE) {
+			key = '_';
+		} else if (key == '/') {
+			key = '!';
+		} else if (key == '*') {
+			key = '&';
+		} else if (key == ')') {
+			key = 0xa9; /* copyright */
+#else
+		} else if (key == '/') {
+			key == 0x1f;
+#endif
 		}
+	}
+	
+	/* convert lowercase to uppercase */
+	if (!!(mod & KEY_SHIFT) ^ G.vt.caps_lock) {
+#if 0
+		key = toupper(key);
+#else
+		if ('a' <= key && key <= 'z')
+			key += 'A' - 'a';
+#endif
 	}
 	
 	if (key == KEY_COMPOSE) {

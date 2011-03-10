@@ -255,7 +255,7 @@ static void reset(struct tty *tp)
 	int i;
 	
 	G.vt.xon = 1;
-	memset((void *)LCD_MEM, 0, 120*240/8); /* XXX constant */
+	memset((void *)LCD_MEM, 0, 6*NUMCELLROWS*LCD_INCY);
 #if 0
 	memset(G.vt.screen, 0, sizeof(G.vt.screen));
 #endif
@@ -1208,10 +1208,12 @@ void vtinit()
 {
 	short *horline;
 	
+#ifdef TI92P
 	for (horline = (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS];
 	 horline < (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS+LCD_INCY];
 	  ++horline)
 		*horline = ~0;
+#endif
 	
 	G.vt.vtstate = &states[STGROUND];
 	reset(&G.vt.vt[0]); /* XXX dev */
