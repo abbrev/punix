@@ -20,9 +20,9 @@
 #endif
 
 enum {
+	KEY_SIGN = 173,
 	/* keycodes below are not in ASCII. 0x100 <= keycode < 0x1000 */
 	KEY_THETA = 256,
-	KEY_SIGN,
 	KEY_LN,
 	KEY_SIN,
 	KEY_COS,
