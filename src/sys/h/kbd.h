@@ -59,6 +59,8 @@ enum {
 	KEY_LEFT,
 	KEY_DOWN,
 	KEY_RIGHT,
+	KEY_PGUP,
+	KEY_PGDOWN,
 
 	KEY_INS,
 	KEY_OFF,
@@ -89,6 +91,7 @@ enum {
 
 	KEY_EE,
 	KEY_HOME,
+	KEY_END,
 
 	/* not in TI-AMS */
 	KEY_CAPSLOCK,

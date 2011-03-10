@@ -75,6 +75,8 @@ static const struct translate Translate_2nd[] = {
 #else
 	{ KEY_SIGN,'~' },
 #endif
+	{ KEY_UP, KEY_PGUP },
+	{ KEY_DOWN, KEY_PGDOWN },
 
 #ifdef TI92P
 	{ 'q','?' },
@@ -201,6 +203,10 @@ static const struct expand expand_table[] = {
 	{ KEY_UP, "\e[A" },
 	{ KEY_RIGHT, "\e[C" },
 	{ KEY_DOWN, "\e[B" },
+	{ KEY_PGUP, "\e[5~" },
+	{ KEY_PGDOWN, "\e[6~" },
+	{ KEY_HOME, "\eOH" },
+	{ KEY_END, "\eOF" },
 	
 	{ KEY_COS, "cos(" },
 	{ KEY_SIN, "sin(" },
@@ -612,6 +618,10 @@ static void addkey(unsigned short key)
 			key = 0xab; /* << XXX: <= in TI-AMS */
 		} else if (key == '.') {
 			key = 0xbb; /* >> XXX: >= in TI-AMS */
+		} else if (key == KEY_UP) {
+			key = KEY_HOME;
+		} else if (key == KEY_DOWN) {
+			key = KEY_END;
 #ifdef TI89
 		} else if (key == KEY_MODE) {
 			key = '_';
