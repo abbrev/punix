@@ -46,10 +46,9 @@
  * upon return, carry indicates error
  */
 /* callno is the system call number
- * usp is for user arguments to this syscall
- * sfp is for setting/clearing carry to indicate error/success (and for vfork)
+ * ctx is the context of this syscall
+ *  (used to set/clear carry and for vfork()/execve())
  */
-//STARTUP(uint32_t syscall(unsigned callno, void **usp, struct syscallframe *sfp))
 STARTUP(uint32_t syscall(unsigned callno, struct context *ctx))
 {
 	extern const int nsysent;
@@ -60,7 +59,7 @@ STARTUP(uint32_t syscall(unsigned callno, struct context *ctx))
 	G.whereami = WHEREAMI_SYSCALL;
 	
 	/* for vfork(2) and execve(2) */
-	P.p_vfork_ctx = ctx;
+	P.p_syscall_ctx = ctx;
 	//P.p_ustack = usp; /* is this actually necessary ? */
 	
 	/* get the system call entry */

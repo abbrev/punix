@@ -98,6 +98,7 @@
  */
 #define USPARGS 1
 
+#if 0
 typedef long register_t;		/* machine register */
 
 struct stackframe {
@@ -107,10 +108,54 @@ struct stackframe {
 	uint16_t psw;
 	uint16_t dummy;		/* make size multiple of reg_t for system.c */
 };
+#endif
+
+#define P_NAMELEN 16
+
+/*
+ * struct zombproc contains only those fields needed by a zombie process to
+ * minimize memory consumed by such processes. The fields match up with the
+ * first fields in struct proc for obvious reasons.
+ */
+struct zombproc {
+	struct list_head p_list;
+	char p_status;	/* stopped, ready, running, zombie, etc. */
+
+	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
+	struct rusage p_rusage;
+	pid_t p_pid;		/* process id */
+	int p_waitstat;		/* status for wait() */
+	
+	char p_name[P_NAMELEN];	/* name of the process */
+};
 
 struct proc {
 	struct list_head p_list;
 	char p_status;	/* stopped, ready, running, zombie, etc. */
+
+	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
+	struct rusage p_rusage;
+	pid_t p_pid;		/* process id */
+	int p_waitstat;		/* status for wait() */
+	
+	char p_name[P_NAMELEN];	/* name of the process */
+
+	struct rusage p_crusage; /* children */
+	struct rlimit p_rlimit[7]; /* CONSTANT */
+	
+	/* id */
+	pid_t p_pgrp;		/* process group */
+	struct proc *p_pptr;	/* parent proc */
+	
+	uid_t p_ruid;		/* real user id */
+	uid_t p_euid;		/* effective user id */
+	uid_t p_svuid;		/* saved user id */
+	gid_t p_rgid;		/* real group id */
+	gid_t p_egid;		/* effective group id */
+	gid_t p_svgid;		/* saved group id */
+	gid_t p_groups[NGROUPS];	/* groups, -1 terminated */
+	
+	
 	int p_flag;
 	
 	/* syscalls */
@@ -123,12 +168,13 @@ struct proc {
 #else
 #error "USPARGS is not defined!"
 #endif
+	struct context *p_syscall_ctx; /* context for execve(2) and vfork(2) */
 	uint32_t p_retval;
 	int p_error;
 	
 	/* scheduling */
-	int p_cputime;	/* amount of cpu time we are using (decaying time) */
-	int p_pri;	/* run priority, calculated from cpuusage and nice */
+	//int p_cputime;/* amount of cpu time we are using (decaying time) */
+	//int p_pri;	/* run priority, calculated from cpuusage and nice */
 	/* the above might not be needed anymore with the new scheduler */
 	struct list_head p_runlist;
 	int p_sched_policy;
@@ -144,8 +190,6 @@ struct proc {
 	int p_fpsaved;	/* floating-point state is saved? */
 	/* ??? p_fps; -- floating-point state */
 	
-	struct context *p_vfork_ctx; /* context for execve(2) and vfork(2) */
-	
 	/* segments of user memory (note: the heap is global) */
 	void *p_ustack;
 	void *p_stack;
@@ -159,24 +203,6 @@ struct proc {
 	size_t p_textsize;
 	size_t p_datasize;
 #endif
-	
-	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
-	struct rusage p_rusage;
-	struct rusage p_crusage; /* children */
-	struct rlimit p_rlimit[7]; /* CONSTANT */
-	
-	/* id */
-	pid_t p_pid;		/* process id */
-	pid_t p_pgrp;		/* process group */
-	struct proc *p_pptr;	/* parent proc */
-	
-	uid_t p_ruid;		/* real user id */
-	uid_t p_euid;		/* effective user id */
-	uid_t p_svuid;		/* saved user id */
-	gid_t p_rgid;		/* real group id */
-	gid_t p_egid;		/* effective group id */
-	gid_t p_svgid;		/* saved group id */
-	gid_t p_groups[NGROUPS];	/* groups, -1 terminated */
 	
 	/* signals */
 	/* 2.11BSD => Punix
@@ -247,12 +273,6 @@ struct proc {
 #endif
 	struct itimerspec p_itimer[3]; /* REAL, VIRTUAL, and PROF timers */
 	
-#if 0
-//	struct proc *p_nextready;	/* pointer to next ready process */
-	sigset_t p_pending;	/* bit map for pending signals */
-//	unsigned p_pendcount;	/* count of pending and unfinished signals */
-#endif
-	
 	void *p_waitchan;
 	
 	struct nameicache {		/* last successful directory search */
@@ -260,10 +280,6 @@ struct proc {
 		ino_t nc_inumber;	/* inum of cached directory  */
 		dev_t nc_dev;		/* dev of cached directory */
 	} p_ncache;
-	
-	char p_name[16];	/* name of the process */
-	
-	int p_waitstat;		/* status for wait() */
 };
 
 /* states for p_status */

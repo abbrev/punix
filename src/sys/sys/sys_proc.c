@@ -32,6 +32,7 @@
 #include <sound.h>
 #include <sys/utsname.h>
 #include <setjmp.h>
+#include <assert.h>
 
 #include "proc.h"
 #include "punix.h"
@@ -236,6 +237,11 @@ void sys_execve()
 	 * process image
 	 */
 
+	/* copy the first argument (program name) to the p_name field */
+	strncpy(current->p_name, argp[0], P_NAMELEN - 1);
+	current->p_name[P_NAMELEN-1] = '\0';
+
+
 	size = (size + 1) & ~1; /* size must be even */
 	s = ustack - size; /* start of strings */
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
@@ -258,8 +264,8 @@ void sys_execve()
 	/* finally, set up the context to return to the new process image */
 	
 	/* go to the new user context */
-	P.p_vfork_ctx->pc = text;
-	P.p_vfork_ctx->usp = ustack;
+	P.p_syscall_ctx->pc = text;
+	P.p_syscall_ctx->usp = ustack;
 	
 	return;
 	
@@ -297,6 +303,7 @@ void doexit(int status)
 {
 	int i;
 	struct proc *q;
+	size_t zombsize = sizeof(struct zombproc);
 	
 	P.p_flag &= ~P_TRACED;
 	P.p_sigignore = ~0;
@@ -344,7 +351,8 @@ void doexit(int status)
 	}
 	
 	P.p_waitstat = status;
-	/* ruadd(&P.p_rusage, &P.p_crusage); */
+	/* add our children's rusage to our own */
+	ruadd(&P.p_rusage, &P.p_crusage);
 	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
@@ -362,10 +370,11 @@ void doexit(int status)
 	release_resources();
 	memfree(P.p_stack, 0);
 	P.p_stack = NULL;
-#if 0
-	wakeup(P.p_pptr);
-#endif
-	/* TODO: free our resources here */
+	struct zombproc *zp;
+	zp = memrealloc(current, &zombsize, MEMREALLOC_TOP, 0);
+	/* if this assert fails, there is a problem with the allocator */
+	assert(zp == current);
+
 	sched_exit(current);
 	swtch();
 }
@@ -451,10 +460,9 @@ void sys_vfork()
 	cp->p_stack = stack - stacksize;
 	cp->p_flag |= P_VFORK;
 	cp->p_status = P_VFORKING;
-	setrun(cp);
 
 	void return_from_vfork();
-	cp->p_ctx = *P.p_vfork_ctx;
+	cp->p_ctx = *P.p_syscall_ctx;
 	//kprintf("vfork(): ctx.pc =%08lx\n", cp->p_ctx.pc);
 
 	/* push return address and SR onto the stack */
@@ -465,6 +473,7 @@ void sys_vfork()
 	cp->p_ctx.pc = return_from_vfork;
 	cp->p_ctx.sp = stack;
 	cp->p_ctx.sr = 0x2000; /* supervisor mode SR */
+	sched_fork(cp);
 
 	/* wait for child to end its vfork */
 	while (cp->p_flag & P_VFORK)
@@ -482,12 +491,47 @@ nomem:
 #endif
 }
 
+#if 0
+/* current rusage structure */
+struct rusage {
+	struct timeval ru_utime;        /* user time used */
+	struct timeval ru_stime;        /* system time used */
+	long           ru_nvcsw;        /* voluntary context switches */
+	long           ru_nsignals;
+};
+#endif
+
+/* convert kernel rusage to user rusage */
+static void ru_to_user_ru(struct rusage *dest, struct rusage *src)
+{
+	*dest = *src;
+	dest->ru_utime.tv_usec = src->ru_utime.tv_usec * 1000000L / HZ;
+	dest->ru_stime.tv_usec = src->ru_stime.tv_usec * 1000000L / HZ;
+}
+
+/* NB: rusage times are stored as seconds:ticks */
+void ruadd(struct rusage *dest, struct rusage *src)
+{
+	dest->ru_utime.tv_sec += src->ru_utime.tv_sec;
+	dest->ru_utime.tv_usec += src->ru_utime.tv_usec;
+	if (dest->ru_utime.tv_usec >= HZ) {
+		dest->ru_utime.tv_usec -= HZ;
+		++dest->ru_utime.tv_sec;
+	}
+	dest->ru_stime.tv_sec += src->ru_stime.tv_sec;
+	dest->ru_stime.tv_usec += src->ru_stime.tv_usec;
+	if (dest->ru_stime.tv_usec >= HZ) {
+		dest->ru_stime.tv_usec -= HZ;
+		++dest->ru_stime.tv_sec;
+	}
+	dest->ru_nvcsw += src->ru_nvcsw;
+	dest->ru_nsignals += src->ru_nsignals;
+}
+
 static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 {
 	struct proc *p;
 	int nfound = 0;
-	int s;
-	struct rusage r;
 	int error;
 	
 loop:
@@ -514,7 +558,6 @@ loop:
 			goto found;
 		}
 		if (p->p_status == P_ZOMBIE) {
-			/* FIXME: free this proc for use by new processes */
 			goto found;
 		}
 	}
@@ -534,17 +577,20 @@ loop:
 found:
 	P.p_retval = p->p_pid;
 	if (status) {
-		if (copyout(status, &p->p_waitstat, sizeof(s)))
+		if (copyout(status, &p->p_waitstat, sizeof(*status)))
 			P.p_error = EFAULT;
 	}
 	
 	if (rusage) {
 		/* fill in rusage */
-		if (copyout(rusage, &p->p_rusage, sizeof(r)))
+		struct rusage r;
+		ru_to_user_ru(&r, &p->p_rusage);
+		if (copyout(rusage, &r, sizeof(*rusage)))
 			P.p_error = EFAULT;
 	}
 	
 	if (p->p_status == P_ZOMBIE) {
+		ruadd(&current->p_crusage, &p->p_rusage);
 		list_del(&p->p_list);
 		pfree(p);
 	}
