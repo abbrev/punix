@@ -335,7 +335,8 @@ STARTUP(int fdalloc(int d))
 	for (; d < NOFILE; ++d) {
 		if (P.p_ofile[d] == NULL) {
 			P.p_retval = d;
-			P.p_oflag[d] = 0;
+			//P.p_oflag[d] = 0;
+			fdflags_to_oflag(d, 0L);
 #if 0
 			if (d > P.p_lastfile)
 				P.p_lastfile = d;

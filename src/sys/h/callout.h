@@ -8,6 +8,6 @@ struct callout {
 };
 
 int timeout(void (*func)(void *), void *arg, long time);
-void untimeout(void (*func)(void *), void *arg);
+int untimeout(void (*func)(void *), void *arg);
 
 #endif

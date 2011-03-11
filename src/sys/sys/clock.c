@@ -85,15 +85,18 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 }
 
 /*
- * remove a pending callout
+ * Remove a pending callout.
+ * Return zero if no timeout was removed, or non-zero if one was removed.
  */
-STARTUP(void untimeout(void (*func)(void *), void *arg))
+STARTUP(int untimeout(void (*func)(void *), void *arg))
 {
 	struct callout *cp;
 	int x;
+	int canhastimeout = 0;
 	x = spl7();
 	for (cp = &G.callout[0]; cp < &G.callout[NCALL]; ++cp) {
 		if (cp->c_func == func && cp->c_arg == arg) {
+			canhastimeout = 1;
 			if (cp < &G.callout[NCALL-1] && cp[1].c_func)
 				cp[1].c_dtime += cp[0].c_dtime;
 			while (cp < &G.callout[NCALL-1]) {
@@ -105,4 +108,5 @@ STARTUP(void untimeout(void (*func)(void *), void *arg))
 		}
 	}
 	splx(x);
+	return canhastimeout;
 }

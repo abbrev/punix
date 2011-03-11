@@ -328,10 +328,70 @@ STARTUP(void sys_close())
 	closef(fp);
 }
 
+#define OFLAGIDX(num) ((num) >> 3) /* num/8 */
+#define OFLAGMASK(num) ((num) & 7) /* num%8 */
+#define SETBIT(x, bit) ((x) |= (1<<(bit)))
+#define CLRBIT(x, bit) ((x) &= ~(1<<(bit)))
+#define EQUBIT(x, bit, v) ((x) = ((x) & ~(1<<(bit)) | (1<<!!(v))))
+#define SETMASK(x, mask) ((x) |= (mask))
+#define CLRMASK(x, mask) ((x) &= ~(mask))
+#define EQUMASK(x, mask, v) ((x) = ((x) & ~(mask)) | (1<<!!(v)))
+#define GETMASK(x, mask) ((x) & (mask))
+
+/*
+ * convert an fdflags bitmap to the internal oflag structure for the given fd
+ */
+void fdflags_to_oflag(int fd, int fdflags)
+{
+	int idx = OFLAGIDX(fd);
+	unsigned char mask = OFLAGMASK(fd);
+	EQUMASK(current->p_oflag.cloexec[idx], mask, fdflags & FD_CLOEXEC);
+}
+
+/*
+ * convert the internal oflag structure to an fdflags bitmap for the given fd
+ */
+long oflag_to_fdflags(int fd)
+{
+	int idx = OFLAGIDX(fd);
+	unsigned char mask = OFLAGMASK(fd);
+	long fdflags = 0;
+	if (current->p_oflag.cloexec[idx] & mask)
+		fdflags |= FD_CLOEXEC;
+	/* add more here if we add more fd flags */
+	return fdflags;
+}
+
+/*
+ * clear the given fdflags (bitmap) in the internal oflag structure for the
+ * given fd
+ */
+void clear_fdflags(int fd, int fdflags)
+{
+	int idx = OFLAGIDX(fd);
+	unsigned char mask = OFLAGMASK(fd);
+	if (fdflags & FD_CLOEXEC) {
+		CLRMASK(current->p_oflag.cloexec[idx], mask);
+	}
+}
+
+/*
+ * set the given fdflags (bitmap) in the internal oflag structure for the
+ * given fd
+ */
+void set_fdflags(int fd, int fdflags)
+{
+	int idx = OFLAGIDX(fd);
+	unsigned char mask = OFLAGMASK(fd);
+	if (fdflags & FD_CLOEXEC) {
+		SETMASK(current->p_oflag.cloexec[idx], mask);
+	}
+}
+
 STARTUP(static void dupit(int newfd, struct file *oldfp, int flags))
 {
 	P.p_ofile[newfd] = oldfp;
-	P.p_oflag[newfd] = flags;
+	fdflags_to_oflag(newfd, flags);
 	++oldfp->f_count;
 	
 	P.p_retval = newfd;
@@ -353,7 +413,7 @@ STARTUP(void sys_dup())
 	if ((newfd = fdalloc(0)) < 0)
 		return;
 	
-	dupit(newfd, oldfp, P.p_oflag[ap->oldfd] & ~FD_CLOEXEC);
+	dupit(newfd, oldfp, oflag_to_fdflags(ap->oldfd) & ~FD_CLOEXEC);
 }
 
 STARTUP(void sys_dup2())
@@ -377,7 +437,7 @@ STARTUP(void sys_dup2())
 	
 	P.p_error = 0;
 	
-	dupit(ap->newfd, oldfp, P.p_oflag[ap->oldfd] & ~FD_CLOEXEC);
+	dupit(ap->newfd, oldfp, oflag_to_fdflags(ap->oldfd) & ~FD_CLOEXEC);
 }
 
 STARTUP(void sys_lseek())
@@ -495,10 +555,12 @@ STARTUP(void sys_fcntl())
 	} *ap = (struct a *)P.p_arg;
 	struct file *fp;
 	long arg;
-	char *ofp;
+	//char *ofp;
+	long fdflags;
 	
 	GETF(fp, ap->fd);
-	ofp = &P.p_oflag[ap->fd];
+	//ofp = &P.p_oflag[ap->fd];
+	fdflags = oflag_to_fdflags(ap->fd);
 	switch (ap->cmd) {
 		case F_DUPFD:
 			arg = ap->arg;
@@ -508,13 +570,14 @@ STARTUP(void sys_fcntl())
 			}
 			if ((arg = fdalloc(arg)) < 0)
 				return;
-			dupit(arg, fp, *ofp & ~FD_CLOEXEC);
+			dupit(arg, fp, fdflags & ~FD_CLOEXEC);
 			break;
 		case F_GETFD:
-			P.p_retval = *ofp & FD_CLOEXEC;
+			P.p_retval = fdflags & FD_CLOEXEC;
 			break;
 		case F_SETFD:
-			*ofp = (*ofp & ~FD_CLOEXEC) | (ap->arg & FD_CLOEXEC);
+			fdflags = (fdflags & ~FD_CLOEXEC) | (ap->arg & FD_CLOEXEC);
+			fdflags_to_oflag(ap->fd, fdflags);
 			break;
 		case F_GETFL:
 #define OFLAGS(x) ((x) - 1) /* FIXME: what is OFLAGS, really? */

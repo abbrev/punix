@@ -176,10 +176,12 @@ void sys_execve()
 	int argc, envc;
 	
 	/* XXX */
-	void sh_start(), init_start(), bittybox_start();
+	void sh_start(), init_start(), bittybox_start(), time_start();
+	void getty_start(), login_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
+	         !strcmp(pathname, "echo") ||
 	         !strcmp(pathname, "top") ||
 	         !strcmp(pathname, "false") ||
 	         !strcmp(pathname, "true") ||
@@ -192,6 +194,14 @@ void sys_execve()
 		text = bittybox_start;
 	else if (!strcmp(pathname, "sh"))
 		text = sh_start;
+	else if (!strcmp(pathname, "time"))
+		text = time_start;
+	else if (!strcmp(pathname, "bittybox"))
+		text = bittybox_start;
+	else if (!strcmp(pathname, "getty"))
+		text = getty_start;
+	else if (!strcmp(pathname, "login"))
+		text = login_start;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;
@@ -299,6 +309,33 @@ error_ustack: ;
 error_noent: ;
 }
 
+/* convert kernel rusage to user rusage */
+static void ru_to_user_ru(struct rusage *dest, struct rusage *src)
+{
+	*dest = *src;
+	dest->ru_utime.tv_usec = src->ru_utime.tv_usec * 1000000L / HZ;
+	dest->ru_stime.tv_usec = src->ru_stime.tv_usec * 1000000L / HZ;
+}
+
+/* NB: rusage times are stored as seconds:ticks */
+void ruadd(struct rusage *dest, struct rusage *src)
+{
+	dest->ru_utime.tv_sec += src->ru_utime.tv_sec;
+	dest->ru_utime.tv_usec += src->ru_utime.tv_usec;
+	if (dest->ru_utime.tv_usec >= HZ) {
+		dest->ru_utime.tv_usec -= HZ;
+		++dest->ru_utime.tv_sec;
+	}
+	dest->ru_stime.tv_sec += src->ru_stime.tv_sec;
+	dest->ru_stime.tv_usec += src->ru_stime.tv_usec;
+	if (dest->ru_stime.tv_usec >= HZ) {
+		dest->ru_stime.tv_usec -= HZ;
+		++dest->ru_stime.tv_sec;
+	}
+	dest->ru_nvcsw += src->ru_nvcsw;
+	dest->ru_nsignals += src->ru_nsignals;
+}
+
 void doexit(int status)
 {
 	int i;
@@ -370,11 +407,17 @@ void doexit(int status)
 	release_resources();
 	memfree(P.p_stack, 0);
 	P.p_stack = NULL;
+	
+	void realitexpire(void *);
+	/* remove pending ITIMER_REAL timeouts */
+	while (untimeout(realitexpire, current))
+		;
+
 	struct zombproc *zp;
 	zp = memrealloc(current, &zombsize, MEMREALLOC_TOP, 0);
 	/* if this assert fails, there is a problem with the allocator */
 	assert(zp == current);
-
+	
 	sched_exit(current);
 	swtch();
 }
@@ -500,33 +543,6 @@ struct rusage {
 	long           ru_nsignals;
 };
 #endif
-
-/* convert kernel rusage to user rusage */
-static void ru_to_user_ru(struct rusage *dest, struct rusage *src)
-{
-	*dest = *src;
-	dest->ru_utime.tv_usec = src->ru_utime.tv_usec * 1000000L / HZ;
-	dest->ru_stime.tv_usec = src->ru_stime.tv_usec * 1000000L / HZ;
-}
-
-/* NB: rusage times are stored as seconds:ticks */
-void ruadd(struct rusage *dest, struct rusage *src)
-{
-	dest->ru_utime.tv_sec += src->ru_utime.tv_sec;
-	dest->ru_utime.tv_usec += src->ru_utime.tv_usec;
-	if (dest->ru_utime.tv_usec >= HZ) {
-		dest->ru_utime.tv_usec -= HZ;
-		++dest->ru_utime.tv_sec;
-	}
-	dest->ru_stime.tv_sec += src->ru_stime.tv_sec;
-	dest->ru_stime.tv_usec += src->ru_stime.tv_usec;
-	if (dest->ru_stime.tv_usec >= HZ) {
-		dest->ru_stime.tv_usec -= HZ;
-		++dest->ru_stime.tv_sec;
-	}
-	dest->ru_nvcsw += src->ru_nvcsw;
-	dest->ru_nsignals += src->ru_nsignals;
-}
 
 static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 {

@@ -117,36 +117,26 @@ struct stackframe {
  * minimize memory consumed by such processes. The fields match up with the
  * first fields in struct proc for obvious reasons.
  */
-struct zombproc {
-	struct list_head p_list;
-	char p_status;	/* stopped, ready, running, zombie, etc. */
-
-	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
-	struct rusage p_rusage;
-	pid_t p_pid;		/* process id */
-	int p_waitstat;		/* status for wait() */
-	
-	char p_name[P_NAMELEN];	/* name of the process */
-};
-
 struct proc {
-	struct list_head p_list;
-	char p_status;	/* stopped, ready, running, zombie, etc. */
+	struct zombproc {
+		struct list_head p_list;
+		char p_status;	/* stopped, ready, running, zombie, etc. */
 
-	/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
-	struct rusage p_rusage;
-	pid_t p_pid;		/* process id */
-	int p_waitstat;		/* status for wait() */
-	
-	char p_name[P_NAMELEN];	/* name of the process */
+		/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
+		struct rusage p_rusage;
+		pid_t p_pid;		/* process id */
+		pid_t p_pgrp;		/* process group */
+		struct proc *p_pptr;	/* parent proc */
+		
+		int p_waitstat;		/* status for wait() */
+		
+		char p_name[P_NAMELEN];	/* name of the process */
+	};
 
 	struct rusage p_crusage; /* children */
 	struct rlimit p_rlimit[7]; /* CONSTANT */
 	
 	/* id */
-	pid_t p_pgrp;		/* process group */
-	struct proc *p_pptr;	/* parent proc */
-	
 	uid_t p_ruid;		/* real user id */
 	uid_t p_euid;		/* effective user id */
 	uid_t p_svuid;		/* saved user id */
@@ -240,7 +230,14 @@ struct proc {
 	
 	/* file descriptors */
 	struct file *p_ofile[NOFILE];	/* file structures for open files */
+#if 0
 	char p_oflag[NOFILE];	/* flags of open files */
+#else
+	struct oflag {
+		char cloexec[(NOFILE+7)/8];
+		/* add more fields here if we need more flags */
+	} p_oflag;
+#endif
 	int p_lastfile;
 	struct inode *p_cdir;	/* current directory */
 	struct inode *p_rdir;	/* root directory */
@@ -253,24 +250,13 @@ struct proc {
 	char *p_base;
 	size_t p_count;
 	off_t p_offset; /* need this? */
-#if 1
+#if 0
 	char p_dbuf[NAME_MAX+1]; /* need this? */
 #endif
 	const char *p_dirp; /* need this? */
 	struct inode *p_pdir;
 	struct direct p_dent;
 	
-#if 0
-	/* FIXME */
-	/* timing */
-	clock_t user_time;	/* user time in ticks */
-	clock_t sys_time;	/* sys time in ticks */
-	clock_t child_utime;	/* cumulative user time of children */
-	clock_t child_stime;	/* cumulative sys time of children */
-	clock_t p_alarm;	/* time of next alarm in ticks, or 0 */
-	struct itimerval p_itimer_virtual; /* virtual interval timer */
-	struct itimerval p_itimer_prof; /* profile interval timer */
-#endif
 	struct itimerspec p_itimer[3]; /* REAL, VIRTUAL, and PROF timers */
 	
 	void *p_waitchan;

@@ -833,30 +833,37 @@ static void clock_t_to_timeval(clock_t c, struct timeval *tv)
 	tv->tv_usec = c % CLOCKS_PER_SEC;
 }
 
-static int time_main(int argc, char **argv, char **envp)
+int time_main(int argc, char **argv, char **envp)
 {
 	int posix = 0;
 	int pid;
 	int err = 0;
+	char **v;
 	struct timeval start, end;
 	struct tms tms;
-	struct timeval selfu, selfs, childrenu, childrens;
-	if (!strcmp(argv[1], "-p")) {
+	struct timeval childu, childs;
+	v = argv;
+	if (argc > 1 && !strcmp(argv[1], "-p")) {
 		posix = 1;
-		++argv;
+		++v;
+		--argc;
 	}
-	++argv;
+	if (argc < 2) {
+		printf("Usage: %s [-p] utility [argument...]\n", argv[0]);
+		return 1;
+	}
+	++v;
 
 	gettimeofday(&start, NULL);
 	pid = vfork();
 	if (pid == 0) {
 		int err;
-		execve(argv[0], argv, envp);
+		execve(v[0], v, envp);
 		if (errno == ENOENT)
 			err = 127;
 		else
 			err = 126;
-		printf("time: cannot run %s: %s\n", argv[0], strerror(errno));
+		printf("%s: cannot run %s: %s\n", argv[0], v[0], strerror(errno));
 		_exit(err);
 	} else if (pid > 0) {
 		int status;
@@ -875,34 +882,40 @@ static int time_main(int argc, char **argv, char **envp)
 	times(&tms);
 	
 	timersub(&end, &start, &end);
-	clock_t_to_timeval(tms.tms_utime, &selfu);
-	clock_t_to_timeval(tms.tms_stime, &selfs);
-	clock_t_to_timeval(tms.tms_cutime, &childrenu);
-	clock_t_to_timeval(tms.tms_cstime, &childrens);
-	timeradd(&selfu, &childrenu, &selfu);
-	timeradd(&selfs, &childrens, &selfs);
+	clock_t_to_timeval(tms.tms_cutime, &childu);
+	clock_t_to_timeval(tms.tms_cstime, &childs);
 	
 	printf("real %ld.%03ld\n"
 	       "user %ld.%03ld\n"
 	       "sys %ld.%03ld\n",
 	       end.tv_sec, end.tv_usec/1000,
-	       selfu.tv_sec, selfu.tv_usec/1000,
-	       selfs.tv_sec, selfs.tv_usec/1000);
+	       childu.tv_sec, childu.tv_usec/1000,
+	       childs.tv_sec, childs.tv_usec/1000);
 
-	return 0;
+	return err;
+}
+
+static void printru(int which)
+{
+	struct rusage ru;
+	long minu, secu, msecu;
+	long mins, secs, msecs;
+	getrusage(which, &ru);
+	minu = ru.ru_utime.tv_sec / 60;
+	secu = ru.ru_utime.tv_sec % 60;
+	msecu = ru.ru_utime.tv_usec / 1000;
+	mins = ru.ru_stime.tv_sec / 60;
+	secs = ru.ru_stime.tv_sec % 60;
+	msecs = ru.ru_stime.tv_usec / 1000;
+	printf("%ldm%ld.%03lds %ldm%ld.%03lds\n",
+	       minu, secu, msecu,
+	       mins, secs, msecs);
 }
 
 static int times_main(int argc, char **argv, char **envp)
 {
-	struct rusage self, children;
-	getrusage(RUSAGE_SELF, &self);
-	getrusage(RUSAGE_CHILDREN, &children);
-	printf("%ld.%06lds %ld.%06lds\n",
-	       self.ru_utime.tv_sec, self.ru_utime.tv_usec,
-	       self.ru_stime.tv_sec, self.ru_stime.tv_usec);
-	printf("%ld.%06lds %ld.%06lds\n",
-	       children.ru_utime.tv_sec, children.ru_utime.tv_usec,
-	       children.ru_stime.tv_sec, children.ru_stime.tv_usec);
+	printru(RUSAGE_SELF);
+	printru(RUSAGE_CHILDREN);
 	return 0;
 }
 
@@ -1278,12 +1291,14 @@ struct applet {
 };
 static struct applet applets[];
 
-static void showhelp()
+static void showhelp(int shell)
 {
 	struct applet *ap;
 	printf("available applets:\n");
-	for (ap = &applets[0]; ap->name; ++ap)
+	for (ap = &applets[0]; ap->name; ++ap) {
+		if (!shell && ap->main == NULL) continue;
 		printf(" %-9s", ap->name);
+	}
 	printf("\n");
 }
 
@@ -1409,7 +1424,7 @@ int sh_main(int argc, char **argv, char **envp)
 	buf = malloc(BUFSIZE);
 	aargv = malloc(sizeof(char *)*(BUFSIZE/2+1));
 	if (!buf || !aargv) {
-		printf("sh: can't allocate buffers!\n");
+		printf("sh: fatal: can't allocate buffers!\n");
 		return 1;
 	}
 	
@@ -1484,7 +1499,7 @@ int sh_main(int argc, char **argv, char **envp)
 			printf("%d\n", laststatus);
 			laststatus = 0;
 		} else if (!strcmp(cmd, "help")) {
-			showhelp();
+			showhelp(1);
 			laststatus = 0;
 		} else {
 			laststatus = run(cmd, aargc, aargv, envp);
@@ -1517,7 +1532,7 @@ static struct applet applets[] = {
 	{ "pid", pid_main },
 	{ "poweroff", poweroff_main },
 	{ "times", times_main },
-	{ "time", time_main },
+	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
 	{ "help", NULL },
@@ -1586,12 +1601,100 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 
 int bittybox_main(int argc, char **argv, char **envp)
 {
-	int n = run_applet(argv[0], argc, argv, envp);
+	int n;
+	if (!strcmp(argv[0], "bittybox")) {
+		if (argc < 2) {
+			showhelp(0);
+			return 0;
+		}
+		++argv;
+		--argc;
+	}
+	n = run_applet(argv[0], argc, argv, envp);
 	if (n < 0) {
 		printf("bittybox: unknown applet \"%s\"\n", argv[0]);
-		showhelp();
+		showhelp(0);
 	}
 	return n;
+}
+
+#define GETTYBUFSIZE 42
+
+int getty_main(int argc, char *argv[], char *envp[])
+{
+	int fd;
+	char line[GETTYBUFSIZE];
+	char *bp;
+	size_t count;
+	ssize_t n;
+
+	fd = open("/dev/vt", O_RDWR); /* fd 0 */
+	if (fd < 0) return -1;
+	dup(fd); /* fd 1 */
+	dup(fd); /* fd 2 */
+
+	bp = line;
+	count = GETTYBUFSIZE;
+	printf("\nlogin: ");
+	for (;;) {
+		if (count == 0) return 1;
+		n = read(0, bp, count);
+		if (n < 0) return 1;
+		if (n == 0) return 1;
+		if (bp[n-1] != '\n') {
+			continue;
+		}
+		bp[n-1] = '\0';
+		argv[0] = "login";
+		argv[1] = line;
+		argv[2] = NULL;
+		execve(argv[0], argv, envp);
+		printf("getty: could not execute login!\n");
+		break;
+	}
+	printf("getty: fail!\n");
+	return 1;
+}
+
+#define LOGINBUFSIZE 42
+int login_main(int argc, char *argv[], char *envp[])
+{
+	char line[LOGINBUFSIZE];
+	char *bp;
+	size_t count;
+	ssize_t n;
+	static const char password[] = "password";
+	struct sigaction sa;
+
+	count = LOGINBUFSIZE;
+	bp = line;
+	printf("password: ");
+	for (;;) {
+		if (count == 0) goto badpass;
+		n = read(0, bp, count);
+		if (n < 0) return 1;
+		if (n == 0) goto badpass;
+		if (bp[n-1] == '\n') break;
+		bp += n;
+		count -= n;
+	}
+	
+	bp[n-1] = '\0';
+	if (!strcmp(argv[1], "root") &&
+	    !strcmp(line, password)) {
+		argv[0] = "sh";
+		argv[1] = NULL;
+		execve(argv[0], argv, envp);
+		return 1;
+	}
+badpass:
+	/* pause for a couple seconds */
+	sa.sa_handler = sigalrm;
+	sigaction(SIGALRM, &sa, NULL);
+	alarm(2);
+	pause();
+	printf("bad login!\n");
+	return 1;
 }
 
 int init_main(int argc, char *argv[], char *envp[])
@@ -1600,24 +1703,30 @@ int init_main(int argc, char *argv[], char *envp[])
 	int err;
 	int pid;
 	
+	if (getpid() != 1) {
+		/*
+		 * We're not the actual init process. We just look like it.
+		 * A real init process would tell process 1 to change the
+		 * current runlevel or start/stop system process, for example.
+		 */
+		return 0;
+	}
+
+spawn:
+	pid = vfork();
+	if (pid == 0) {
+		argv[0] = "getty";
+		argv[1] = NULL;
+		err = execve(argv[0], argv, envp);
+		return 1;
+	} 
+	
+#if 0
 	fd = open("/dev/vt", O_RDWR); /* 0 */
 	if (fd < 0) return -1;
 	dup(fd); /* 1 */
 	dup(fd); /* 2 */
-	
-spawn:
-	pid = vfork();
-	if (pid <= 0) {
-		if (pid < 0) {
-			printf(
-			  "Hey, this is init. There was a problem vforking.\n"
-			  "Dropping to a single-process shell now.\n");
-		}
-		argv[0] = "sh";
-		argv[1] = NULL;
-		err = execve(argv[0], argv, envp);
-		printf("still in init, execve failed with error %d\n", err);
-	} 
+#endif
 	
 	//printf("This is the parent process of init\n");
 	
@@ -1629,13 +1738,13 @@ spawn:
 		pid = wait(&status);
 		if (pid < 0) {
 			if (errno == ECHILD) {
-				printf("init: no processes running. starting new shell...\n");
+				//printf("init: no processes running. starting new getty...\n");
 				goto spawn;
 			} else {
-				perror("init: wait");
+				//perror("init: wait");
 			}
 		} else {
-			printf("init: reaped child (pid=%d status=%d)\n", pid, status);
+			//printf("init: reaped child (pid=%d status=%d)\n", pid, status);
 		}
 	}
 }

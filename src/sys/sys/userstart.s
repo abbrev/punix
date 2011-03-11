@@ -149,6 +149,9 @@ caerror:
 mkstart	init
 mkstart bittybox
 mkstart sh
+mkstart time
+mkstart getty
+mkstart login
 
 	.global fadd
 | float fadd(float a, float b);
