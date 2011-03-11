@@ -33,6 +33,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/times.h>
 #include <sound.h>
 #include <sys/utsname.h>
 #include <setjmp.h>
@@ -283,6 +284,26 @@ unsigned alarm(unsigned seconds)
 		++oldit.it_value.tv_sec;
 #endif
 	return oldit.it_value.tv_sec;
+}
+
+static clock_t timeval_to_clock_t(struct timeval *tv)
+{
+	return tv->tv_sec * CLOCKS_PER_SEC +
+	       tv->tv_usec * CLOCKS_PER_SEC / 1000000L;
+}
+
+clock_t times(struct tms *buf)
+{
+	struct rusage self, children;
+	struct timeval tod;
+	gettimeofday(&tod, NULL);
+	getrusage(RUSAGE_SELF, &self);
+	getrusage(RUSAGE_CHILDREN, &children);
+	buf->tms_utime = timeval_to_clock_t(&self.ru_utime);
+	buf->tms_stime = timeval_to_clock_t(&self.ru_stime);
+	buf->tms_cutime = timeval_to_clock_t(&children.ru_utime);
+	buf->tms_cstime = timeval_to_clock_t(&children.ru_stime);
+	return timeval_to_clock_t(&tod);
 }
 
 #define ESC "\x1b"
@@ -806,6 +827,85 @@ static int poweroff_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+static void clock_t_to_timeval(clock_t c, struct timeval *tv)
+{
+	tv->tv_sec = c / CLOCKS_PER_SEC;
+	tv->tv_usec = c % CLOCKS_PER_SEC;
+}
+
+static int time_main(int argc, char **argv, char **envp)
+{
+	int posix = 0;
+	int pid;
+	int err = 0;
+	struct timeval start, end;
+	struct tms tms;
+	struct timeval selfu, selfs, childrenu, childrens;
+	if (!strcmp(argv[1], "-p")) {
+		posix = 1;
+		++argv;
+	}
+	++argv;
+
+	gettimeofday(&start, NULL);
+	pid = vfork();
+	if (pid == 0) {
+		int err;
+		execve(argv[0], argv, envp);
+		if (errno == ENOENT)
+			err = 127;
+		else
+			err = 126;
+		printf("time: cannot run %s: %s\n", argv[0], strerror(errno));
+		_exit(err);
+	} else if (pid > 0) {
+		int status;
+		for (;;) {
+			wait(&status);
+			if (WIFEXITED(status)) {
+				err = WEXITSTATUS(status);
+				break;
+			}
+		}
+	} else {
+		perror("time");
+		return 1;
+	}
+	gettimeofday(&end, NULL);
+	times(&tms);
+	
+	timersub(&end, &start, &end);
+	clock_t_to_timeval(tms.tms_utime, &selfu);
+	clock_t_to_timeval(tms.tms_stime, &selfs);
+	clock_t_to_timeval(tms.tms_cutime, &childrenu);
+	clock_t_to_timeval(tms.tms_cstime, &childrens);
+	timeradd(&selfu, &childrenu, &selfu);
+	timeradd(&selfs, &childrens, &selfs);
+	
+	printf("real %ld.%03ld\n"
+	       "user %ld.%03ld\n"
+	       "sys %ld.%03ld\n",
+	       end.tv_sec, end.tv_usec/1000,
+	       selfu.tv_sec, selfu.tv_usec/1000,
+	       selfs.tv_sec, selfs.tv_usec/1000);
+
+	return 0;
+}
+
+static int times_main(int argc, char **argv, char **envp)
+{
+	struct rusage self, children;
+	getrusage(RUSAGE_SELF, &self);
+	getrusage(RUSAGE_CHILDREN, &children);
+	printf("%ld.%06lds %ld.%06lds\n",
+	       self.ru_utime.tv_sec, self.ru_utime.tv_usec,
+	       self.ru_stime.tv_sec, self.ru_stime.tv_usec);
+	printf("%ld.%06lds %ld.%06lds\n",
+	       children.ru_utime.tv_sec, children.ru_utime.tv_usec,
+	       children.ru_stime.tv_sec, children.ru_stime.tv_usec);
+	return 0;
+}
+
 static int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
@@ -1114,7 +1214,7 @@ static void updatetop()
 		pid = getpid();
 		/* BOGUS! we can't really use 'current' in userspace */
 		printf("\n%5d %-8s %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
-		       pid, "root", current->p_pri,
+		       pid, "root", 0,
 		       getpriority(PRIO_PROCESS, pid), (long)0, (long)0, 'R',
 		       totalcpu / 10, totalcpu % 10,
 		       (int)(ptime.tv_sec / 60), (int)(ptime.tv_sec % 60),
@@ -1302,6 +1402,10 @@ int sh_main(int argc, char **argv, char **envp)
 	
 	printf("stupid shell v0.2\n");
 	
+	/*
+	 * Notice that we do not explicitly free these buffers. Punix frees all
+	 * user memory allocations for the process upon exit. Nice.
+	 */
 	buf = malloc(BUFSIZE);
 	aargv = malloc(sizeof(char *)*(BUFSIZE/2+1));
 	if (!buf || !aargv) {
@@ -1412,6 +1516,8 @@ static struct applet applets[] = {
 	{ "malloc", malloc_main },
 	{ "pid", pid_main },
 	{ "poweroff", poweroff_main },
+	{ "times", times_main },
+	{ "time", time_main },
 	{ "exit", NULL },
 	{ "status", NULL },
 	{ "help", NULL },
