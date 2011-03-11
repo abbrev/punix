@@ -10,5 +10,11 @@ struct heapentry {
 void meminit();
 void *memalloc(size_t *sizep, pid_t pid);
 void memfree(void *ptr, pid_t pid);
+void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid);
+
+#define MEMREALLOC_BOTTOM (-1)
+#define MEMREALLOC_AUTO   0
+#define MEMREALLOC_TOP    1
+
 
 #endif
