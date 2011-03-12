@@ -8,49 +8,73 @@
 #include "queue.h"
 #include "inode.h"
 #include "globals.h"
+#include "exception.h"
 
 /* These are all called from interrupts in entry.s */
 
-STARTUP(void bus_error())
+STARTUP(void bus_error(union exception_info *eip))
 {
+	if (!USERMODE(eip->bus_error.status_register))
+		panic("bus error");
 	psignal(&P, SIGBUS);
 }
 
-STARTUP(void spurious())
+STARTUP(void spurious(union exception_info *eip))
 {
+	panic("spurious exception");
 }
 
-STARTUP(void address_error())
+STARTUP(void address_error(union exception_info *eip))
 {
-	panic("address error");
+	if (!USERMODE(eip->address_error.status_register))
+		panic("address error");
+	else {
+		kprintf("address error at PC %06lx\n",
+		        eip->address_error.program_counter);
+		panic("address error in usermode");
+	}
 	psignal(&P, SIGBUS);
 }
 
-STARTUP(void illegal_instr())
+STARTUP(void illegal_instr(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("illegal instruction");
+	else
+		panic("illegal instruction in usermode");
 	psignal(&P, SIGILL);
 }
 
-STARTUP(void zero_divide())
+STARTUP(void zero_divide(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("zero divide");
 	psignal(&P, SIGFPE);
 }
 
-STARTUP(void chk_instr())
+STARTUP(void chk_instr(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("chk instruction");
 }
 
-STARTUP(void i_trapv())
+STARTUP(void i_trapv(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("trapv");
 }
 
-STARTUP(void privilege())
+STARTUP(void privilege(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("privileged instruction");
 	psignal(&P, SIGILL);
 }
 
-STARTUP(void trace())
+STARTUP(void trace(union exception_info *eip))
 {
+	if (!USERMODE(eip->other.status_register))
+		panic("trace");
 }
 
 /* NB: user time is in ticks */

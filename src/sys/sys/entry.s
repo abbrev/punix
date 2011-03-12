@@ -82,76 +82,66 @@ powerstate = G+182
 	.long 0xbeef1001
 buserr:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
 	bsr	bus_error
 	bra	trapret
 
 	.long 0xbeef1002
 SPURIOUS:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
 	bsr	spurious
 	bra	trapret
 
 	.long 0xbeef1003
 ADDRESS_ERROR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
 	bsr	address_error
 	bra	trapret
 
 	.long 0xbeef1004
 ILLEGAL_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),-(%sp)
+	pea.l	5*4(%sp)
 	bsr	illegal_instr
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef1005
 | send signal SIGFPE
 ZERO_DIVIDE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),%a0
-	
-	| get the address of the divs/divu instruction
-	tst	-(%a0)
-	bne	0f
-	subq.l	#2,%a0	| immediate 16-bit operand
-0:	pea.l	(%a0)
-	
+	pea.l	5*4(%sp)
 	bsr	zero_divide
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef1006
 CHK_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),-(%sp)
+	pea.l	5*4(%sp)
 	bsr	chk_instr
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef1007
 I_TRAPV:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),-(%sp)
+	pea.l	5*4(%sp)
 	bsr	i_trapv
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef1008
 | send signal SIGILL
 PRIVILEGE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),-(%sp)
+	pea.l	5*4(%sp)
 	bsr	privilege
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef1009
 TRACE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	move.l	5*4+2(%sp),-(%sp)
+	pea.l	5*4(%sp)
 	bsr	trace
-	addq.l	#4,%sp
 	bra	trapret
 
 	.long 0xbeef100a
@@ -169,9 +159,11 @@ Int_1:
 	move	5*4(%sp),-(%sp)		| old ps
 	bsr	hardclock
 	addq.l	#2,%sp
+	bra	2f
 
 trapret:
-	move    5*4(%sp),%d0
+	addq.l	#4,%sp
+2:	move    5*4(%sp),%d0
 	and     #0x2000,%d0
 	bne.b   0f
 	
