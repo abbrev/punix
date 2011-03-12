@@ -819,7 +819,69 @@ softfloat fadd(softfloat, softfloat);
 unsigned long long sl64(unsigned long long, unsigned);
 unsigned long long sr64(unsigned long long, unsigned);
 
-#define BUFSIZE 512
+#define BUFSIZE 32
+
+static int fdtofd(int fromfd, int tofd)
+{
+	char buf[BUFSIZE];
+	ssize_t n, x;
+	char *bp;
+	n = read(fromfd, buf, BUFSIZE);
+	if (n < 0)
+		return n;
+	//printf("fdtofd: read %ld bytes from fd %d\n", n, fromfd);
+	x = n;
+	bp = buf;
+	while (x > 0) {
+		ssize_t y = write(tofd, bp, x);
+		//printf("fdtofd: wrote %ld bytes to fd %d\n", y, tofd);
+		if (y < 0 && errno != EINTR) return -1;
+		x -= y;
+		bp += y;
+	}
+	return n;
+}
+
+int uterm_main(int argc, char **argv, char **envp)
+{
+	int linkfd;
+	ssize_t recvcount, sendcount;
+	struct sigaction sa;
+	/* periodically interrupt read() calls */
+	struct itimerval it = {
+		{ 0, 100000 },
+		{ 0, 100000 }
+	};
+
+	linkfd = open("/dev/link", O_RDWR);
+	if (linkfd < 0) {
+		perror("/dev/link");
+		return 1;
+	}
+
+	sa.sa_handler = sigalrm;
+	sa.sa_flags = SA_RESTART;
+	sigaction(SIGALRM, &sa, NULL);
+	setitimer(ITIMER_REAL, &it, NULL);
+	
+	for (;;) {
+		ssize_t x, y;
+		do {
+			x = fdtofd(linkfd, 1);
+		} while (x == BUFSIZE);
+		do {
+			y = fdtofd(0, linkfd);
+		} while (y == BUFSIZE);
+		if ((x < 0 || y < 0) && errno != EINTR) {
+			printf("x=%ld y=%ld\n", x, y);
+			break;
+		}
+		if (x == 0) break;
+	}
+	close(linkfd);
+
+	return 0;
+}
 
 static int poweroff_main(int argc, char **argv, char **envp)
 {
@@ -1144,7 +1206,12 @@ static int exec_command(int ch)
 	return 0;
 }
 
-static void updatetop()
+struct topinfo {
+	struct timeval lasttime;
+	struct rusage lastrusage;
+};
+
+static void updatetop(struct topinfo *info)
 {
 	int getloadavg1(long loadavg[], int nelem);
 	struct timeval tv;
@@ -1168,10 +1235,10 @@ static void updatetop()
 	getrusage(RUSAGE_SELF, &rusage);
 	gettimeofday(&tv, NULL);
 	
-	if (G.user.lasttime.tv_sec != 0 || G.user.lasttime.tv_usec != 0) {
-		timersub(&tv, &G.user.lasttime, &difftime);
-		timersub(&rusage.ru_utime, &G.user.lastrusage.ru_utime, &diffutime);
-		timersub(&rusage.ru_stime, &G.user.lastrusage.ru_stime, &diffstime);
+	if (info->lasttime.tv_sec != 0 || info->lasttime.tv_usec != 0) {
+		timersub(&tv, &info->lasttime, &difftime);
+		timersub(&rusage.ru_utime, &info->lastrusage.ru_utime, &diffutime);
+		timersub(&rusage.ru_stime, &info->lastrusage.ru_stime, &diffstime);
 		timeradd(&rusage.ru_utime, &rusage.ru_stime, &ptime);
 		msec = difftime.tv_sec * 1000L + difftime.tv_usec / 1000;
 		if (msec == 0) return;
@@ -1235,8 +1302,8 @@ static void updatetop()
 		cleareol();
 		printf(ESC "[J" ESC "[5H");
 	}
-	G.user.lasttime = tv;
-	G.user.lastrusage = rusage;
+	info->lasttime = tv;
+	info->lastrusage = rusage;
 }
 
 #define TOPBUFSIZE 200
@@ -1248,6 +1315,7 @@ static int top_main(int argc, char *argv[], char **envp)
 	char buf[TOPBUFSIZE];
 	ssize_t n;
 	int quit = 0;
+	struct topinfo info;
 #define INITDELAY 1
 #define TOPDELAY 5
 	struct itimerval initit = {
@@ -1265,9 +1333,9 @@ static int top_main(int argc, char *argv[], char **envp)
 	sigaction(SIGALRM, &sa, NULL);
 	setitimer(ITIMER_REAL, &initit, NULL);
 	
-	G.user.lasttime.tv_sec = G.user.lasttime.tv_usec = 0;
+	info.lasttime.tv_sec = info.lasttime.tv_usec = 0;
 	while (!quit) {
-		updatetop();
+		updatetop(&info);
 		n = read(0, buf, TOPBUFSIZE);
 		if (n >= 0) {
 			size_t i;
@@ -1303,7 +1371,7 @@ static void showhelp(int shell)
 }
 
 const unsigned char _ctype[256] = {
-	_C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C,
+	_C, _C, _C, _C, _C, _C, _C, _C, _C,_C|_S,_C|_S,_C|_S,_C|_S,_C|_S,_C,_C,
 	_C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C, _C,
 	_S, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P, _P,
 	_N, _N, _N, _N, _N, _N, _N, _N, _N, _N, _P, _P, _P, _P, _P, _P,
@@ -1627,15 +1695,22 @@ int getty_main(int argc, char *argv[], char *envp[])
 	char *bp;
 	size_t count;
 	ssize_t n;
+	struct utsname uts;
+	char *dev = "/dev/vt";
 
-	fd = open("/dev/vt", O_RDWR); /* fd 0 */
+	if (argc == 2) dev = argv[1];
+
+	fd = open(dev, O_RDWR); /* fd 0 */
 	if (fd < 0) return -1;
 	dup(fd); /* fd 1 */
 	dup(fd); /* fd 2 */
 
+	uname(&uts);
+
+prompt:
 	bp = line;
 	count = GETTYBUFSIZE;
-	printf("\nlogin: ");
+	printf("\n%s login: ", uts.nodename);
 	for (;;) {
 		if (count == 0) return 1;
 		n = read(0, bp, count);
@@ -1645,6 +1720,8 @@ int getty_main(int argc, char *argv[], char *envp[])
 			continue;
 		}
 		bp[n-1] = '\0';
+		if (strlen(line) == 0)
+			goto prompt;
 		argv[0] = "login";
 		argv[1] = line;
 		argv[2] = NULL;
@@ -1663,7 +1740,7 @@ int login_main(int argc, char *argv[], char *envp[])
 	char *bp;
 	size_t count;
 	ssize_t n;
-	static const char password[] = "password";
+	static const char password[] = "";
 	struct sigaction sa;
 
 	count = LOGINBUFSIZE;
@@ -1697,11 +1774,28 @@ badpass:
 	return 1;
 }
 
+static int spawn_getty(const char *dev)
+{
+	char *argv[3];
+	char *envp[1] = { NULL };
+	int pid = vfork();
+	if (pid == 0) {
+		argv[0] = "getty";
+		argv[1] = dev;
+		argv[2] = NULL;
+		execve(argv[0], argv, envp);
+		_exit(127);
+	}
+	return pid;
+}
+
 int init_main(int argc, char *argv[], char *envp[])
 {
 	int fd;
 	int err;
 	int pid;
+	int linkpid = 0, vtpid = -1;
+	struct utsname uts;
 	
 	if (getpid() != 1) {
 		/*
@@ -1712,14 +1806,15 @@ int init_main(int argc, char *argv[], char *envp[])
 		return 0;
 	}
 
+	uname(&uts);
+	if (!strcmp(uts.nodename, "server"))
+		linkpid = -1;
+
 spawn:
-	pid = vfork();
-	if (pid == 0) {
-		argv[0] = "getty";
-		argv[1] = NULL;
-		err = execve(argv[0], argv, envp);
-		return 1;
-	} 
+	if (vtpid < 0)
+		vtpid = spawn_getty("/dev/vt");
+	if (linkpid < 0)
+		linkpid = spawn_getty("/dev/link");
 	
 #if 0
 	fd = open("/dev/vt", O_RDWR); /* 0 */
@@ -1745,6 +1840,9 @@ spawn:
 			}
 		} else {
 			//printf("init: reaped child (pid=%d status=%d)\n", pid, status);
+			if (pid == vtpid) vtpid = -1;
+			if (pid == linkpid) linkpid = -1;
+			goto spawn;
 		}
 	}
 }

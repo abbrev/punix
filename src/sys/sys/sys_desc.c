@@ -282,7 +282,7 @@ STARTUP(void sys_creat())
 
 /* Internal close routine. Decrement reference count on file structure
  * and call special file close routines on last close. */
-STARTUP(static void closef(struct file *fp))
+STARTUP(void closef(struct file *fp))
 {
         struct inode *inop;
         dev_t dev;

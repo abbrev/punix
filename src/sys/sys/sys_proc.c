@@ -177,7 +177,7 @@ void sys_execve()
 	
 	/* XXX */
 	void sh_start(), init_start(), bittybox_start(), time_start();
-	void getty_start(), login_start();
+	void getty_start(), login_start(), uterm_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
@@ -202,6 +202,8 @@ void sys_execve()
 		text = getty_start;
 	else if (!strcmp(pathname, "login"))
 		text = login_start;
+	else if (!strcmp(pathname, "uterm"))
+		text = uterm_start;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;
@@ -342,18 +344,20 @@ void doexit(int status)
 	struct proc *q;
 	size_t zombsize = sizeof(struct zombproc);
 	
+	spl7();
 	P.p_flag &= ~P_TRACED;
 	P.p_sigignore = ~0;
 	P.p_sig = 0;
 	
-#if 0
 	for (i = 0; i < NOFILE; ++i) {
 		struct file *f;
 		f = P.p_ofile[i];
+		if (!f) continue;
 		P.p_ofile[i] = NULL;
-		P.p_oflag[i] = 0;
-		closef(f); /* crash in closef() */
+		fdflags_to_oflag(i, 0L);
+		closef(f);
 	}
+#if 0
 	ilock(P.p_cdir);
 	i_unref(P.p_cdir);
 	if (P.p_rdir) {
@@ -393,7 +397,7 @@ void doexit(int status)
 	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
-			wakeup(G.proclist);
+			wakeup(&G.proclist);
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
 				psignal(q, SIGKILL);

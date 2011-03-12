@@ -54,10 +54,10 @@ STARTUP(static void endtsleep(void *vp))
 	s = spl7();
 	if (p->p_waitchan) {
 		if (p->p_status == P_SLEEPING) {
-			//kprintf("%s (%d)\n", __FILE__, __LINE__);
 			setrun(p);
-		} else
+		} else {
 			unsleep(p);
+		}
 		p->p_flag |= P_TIMEOUT;
 	}
 	splx(s);
@@ -171,11 +171,13 @@ STARTUP(void wakeup(void *chan))
 {
 	struct proc *p;
 	
+	int x = spl7();
 	list_for_each_entry(p, &G.proc_list, p_list) {
 		if (p->p_waitchan == chan) {
 			setrun(p);
 		}
 	}
+	splx(x);
 }
 
 /* allocate a process structure */
@@ -291,5 +293,6 @@ STARTUP(void procinit())
 	G.numrunning = 0;
 	G.cumulrunning = 0;
 	//kprintf("%s (%d)\n", __FILE__, __LINE__);
-	sched_run(current);
+	kprintf("procinit: sizeof(struct proc)=%ld\n", sizeof(struct proc));
+	setrun(current);
 }

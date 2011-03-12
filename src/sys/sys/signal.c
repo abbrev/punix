@@ -200,12 +200,15 @@ out:
 STARTUP(void gsignal(int pgrp, int sig))
 {
 	struct proc *p;
+	int x;
 	
 	if (pgrp == 0)
 		return;
+	x = spl7();
 	list_for_each_entry(p, &G.proc_list, p_list)
 		if (p->p_pgrp == pgrp)
 			psignal(p, sig);
+	splx(x);
 }
 
 /* see 2.11BSD */

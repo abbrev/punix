@@ -166,8 +166,6 @@ struct globals {
 	int whereami;
 	int spin;
 	struct {
-		struct timeval lasttime;
-		struct rusage lastrusage;
 		char charbuf[128];
 		int charbufsize;
 		int _errno;
