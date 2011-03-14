@@ -97,26 +97,28 @@ static void *stackalloc(size_t *size)
  */
 static void release_resources()
 {
+	int i;
 	if (P.p_flag & P_VFORK) {
 		endvfork();
-	} else {
-		/* free our resources */
-#if 1
-		memfree(NULL, P.p_pid); /* free all user allocations */
-		if (P.p_ustack) {
-			memfree(P.p_ustack, 0);
-			P.p_ustack = NULL;
-		}
-		/*
-		if (P.p_text)
-			memfree(P.p_text, 0);
-		*/
-		if (P.p_data) {
-			memfree(P.p_data, 0);
-			P.p_data = NULL;
-		}
-#endif
+		return;
 	}
+	
+	/* free our resources */
+#if 1
+	memfree(NULL, P.p_pid); /* free all user allocations */
+	if (P.p_ustack) {
+		memfree(P.p_ustack, 0);
+		P.p_ustack = NULL;
+	}
+	/*
+	if (P.p_text)
+		memfree(P.p_text, 0);
+	*/
+	if (P.p_data) {
+		memfree(P.p_data, 0);
+		P.p_data = NULL;
+	}
+#endif
 }
 
 /* push a long/word/byte onto a stack */
@@ -174,6 +176,7 @@ void sys_execve()
 	char **ap;
 	char *s, **v;
 	int argc, envc;
+	int i;
 	
 	/* XXX */
 	void sh_start(), init_start(), bittybox_start(), time_start();
@@ -253,6 +256,15 @@ void sys_execve()
 	strncpy(current->p_name, argp[0], P_NAMELEN - 1);
 	current->p_name[P_NAMELEN-1] = '\0';
 
+	/* increment reference counts on all open files */
+	if (P.p_flag & P_VFORK) {
+		for (i = 0; i < NOFILE; ++i) {
+			struct file *fp;
+			fp = P.p_ofile[i];
+			if (!fp) continue;
+			++fp->f_count;
+		}
+	}
 
 	size = (size + 1) & ~1; /* size must be even */
 	s = ustack - size; /* start of strings */
@@ -340,23 +352,14 @@ void ruadd(struct rusage *dest, struct rusage *src)
 
 void doexit(int status)
 {
-	int i;
 	struct proc *q;
 	size_t zombsize = sizeof(struct zombproc);
+	int i;
 	
 	spl7();
 	P.p_flag &= ~P_TRACED;
 	P.p_sigignore = ~0;
 	P.p_sig = 0;
-	
-	for (i = 0; i < NOFILE; ++i) {
-		struct file *f;
-		f = P.p_ofile[i];
-		if (!f) continue;
-		P.p_ofile[i] = NULL;
-		fdflags_to_oflag(i, 0L);
-		closef(f);
-	}
 #if 0
 	ilock(P.p_cdir);
 	i_unref(P.p_cdir);
@@ -408,6 +411,18 @@ void doexit(int status)
 		}
 	}
 	psignal(P.p_pptr, SIGCHLD);
+	
+	/* close all open files */
+	if (!(P.p_flag & P_VFORK)) {
+		for (i = 0; i < NOFILE; ++i) {
+			struct file *fp;
+			fp = P.p_ofile[i];
+			if (!fp) continue;
+			P.p_ofile[i] = NULL;
+			fdflags_to_oflag(i, 0L);
+			closef(fp);
+		}
+	}
 	release_resources();
 	memfree(P.p_stack, 0);
 	P.p_stack = NULL;
