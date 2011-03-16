@@ -77,15 +77,6 @@ STARTUP(void trace(union exception_info *eip))
 		panic("trace");
 }
 
-/* NB: user time is in ticks */
-#define BUMPUTIME(tv, ticks) do { \
-	(tv)->tv_usec += (ticks); \
-	if ((tv)->tv_usec >= HZ) { \
-		(tv)->tv_usec -= HZ; \
-		(tv)->tv_sec++; \
-	} \
-} while (0)
-
 #define BUMPNTIME(tv, nsec) do { \
 	(tv)->tv_nsec += (nsec); \
 	if ((tv)->tv_nsec >= SECOND) { \
@@ -183,16 +174,32 @@ STARTUP(void hardclock(unsigned short ps))
 		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
 			psignal(current, SIGPROF);
+		++current->p_cputime;
+	}
+
+#define CPUTICKS (HZ/2)
+#define DECAY_NUM 3
+#define DECAY_DEN 4
+#define DECAY DECAY_NUM / DECAY_DEN
+#define UNDECAY (DECAY_DEN-DECAY_NUM) / DECAY_DEN
+
+	/* once per second, calculate percent cpu for each process */
+	if ((G.ticks % CPUTICKS) == 0) {
+		struct proc *p;
+		list_for_each_entry(p, &G.proc_list, p_list) {
+			p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
+			p->p_cputime = p->p_cputime * DECAY;
+		}
 	}
 	
 	if (USERMODE(ps)) {
-		BUMPUTIME(&P.p_rusage.ru_utime, 1);
+		++current->p_kru.kru_utime;
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
 			psignal(current, SIGVTALRM);
 	} else {
 		if (current)
-			BUMPUTIME(&P.p_rusage.ru_stime, 1);
+			++current->p_kru.kru_stime;
 	}
 	
 	/* do call-outs */
