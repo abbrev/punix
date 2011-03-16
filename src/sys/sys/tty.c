@@ -38,6 +38,8 @@ void ttyopen(dev_t dev, struct tty *tp)
                         tp->t_pgrp = P.p_pid;
                 P.p_pgrp = tp->t_pgrp;
         }
+	qclear(&tp->t_rawq);
+	qclear(&tp->t_canq);
 }
 
 void ttychars(struct tty *tp)
