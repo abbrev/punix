@@ -110,6 +110,13 @@ struct stackframe {
 };
 #endif
 
+struct krusage {
+	clock_t kru_utime;
+	clock_t kru_stime;
+	long    kru_nvcsw;
+	long    kru_nsignals;
+};
+
 #define P_NAMELEN 16
 
 /*
@@ -122,8 +129,8 @@ struct proc {
 		struct list_head p_list;
 		char p_status;	/* stopped, ready, running, zombie, etc. */
 
-		/* NB: ru_utime. and ru_stime.tv_usec are in ticks */
-		struct rusage p_rusage;
+		/* our resource usage */
+		struct krusage p_kru;
 		pid_t p_pid;		/* process id */
 		pid_t p_pgrp;		/* process group */
 		struct proc *p_pptr;	/* parent proc */
@@ -133,7 +140,8 @@ struct proc {
 		char p_name[P_NAMELEN];	/* name of the process */
 	};
 
-	struct rusage p_crusage; /* children */
+	/* children cumulative resource usage */
+	struct krusage p_ckru;
 	struct rlimit p_rlimit[7]; /* CONSTANT */
 	
 	/* id */
@@ -153,7 +161,7 @@ struct proc {
 #if USPARGS
 	void *p_arg;	/* args to syscall on user stack */
 #else
-	int p_arg[8];	/* args to syscall (probably don't need 8 words) */
+	int p_arg[11];	/* args to syscall */
 #endif
 #else
 #error "USPARGS is not defined!"
@@ -163,7 +171,8 @@ struct proc {
 	int p_error;
 	
 	/* scheduling */
-	//int p_cputime;/* amount of cpu time we are using (decaying time) */
+	unsigned p_cputime;/* amount of cpu time we are using (decaying time) */
+	int p_pctcpu; /* percentage of cpu usage for top/ps (8:8 fixed point) */
 	//int p_pri;	/* run priority, calculated from cpuusage and nice */
 	/* the above might not be needed anymore with the new scheduler */
 	struct list_head p_runlist;

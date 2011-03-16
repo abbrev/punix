@@ -317,7 +317,7 @@ STARTUP(void postsig(int sig))
 			returnmask = P.p_sigmask;
 		P.p_sigmask |= P.p_sigmasks[sig] | mask;
 		splx(x);
-		++P.p_rusage.ru_nsignals;
+		++P.p_kru.kru_nsignals;
 		sendsig(action, sig, returnmask);
 		return;
 	}

@@ -323,31 +323,25 @@ error_ustack: ;
 error_noent: ;
 }
 
-/* convert kernel rusage to user rusage */
-static void ru_to_user_ru(struct rusage *dest, struct rusage *src)
+/* fill in the rusage structure from the proc */
+static void krusage_to_rusage(struct krusage *kp, struct rusage *rp)
 {
-	*dest = *src;
-	dest->ru_utime.tv_usec = src->ru_utime.tv_usec * 1000000L / HZ;
-	dest->ru_stime.tv_usec = src->ru_stime.tv_usec * 1000000L / HZ;
+	int x = spl7();
+	rp->ru_utime.tv_sec = kp->kru_utime / HZ;
+	rp->ru_utime.tv_usec = (kp->kru_utime % HZ) * 1000000L / HZ;
+	rp->ru_stime.tv_sec = kp->kru_stime / HZ;
+	rp->ru_stime.tv_usec = (kp->kru_stime % HZ) * 1000000L / HZ;
+	rp->ru_nvcsw = kp->kru_nvcsw;
+	rp->ru_nsignals = kp->kru_nsignals;
+	splx(x);
 }
 
-/* NB: rusage times are stored as seconds:ticks */
-void ruadd(struct rusage *dest, struct rusage *src)
+void kruadd(struct krusage *dest, struct krusage *src)
 {
-	dest->ru_utime.tv_sec += src->ru_utime.tv_sec;
-	dest->ru_utime.tv_usec += src->ru_utime.tv_usec;
-	if (dest->ru_utime.tv_usec >= HZ) {
-		dest->ru_utime.tv_usec -= HZ;
-		++dest->ru_utime.tv_sec;
-	}
-	dest->ru_stime.tv_sec += src->ru_stime.tv_sec;
-	dest->ru_stime.tv_usec += src->ru_stime.tv_usec;
-	if (dest->ru_stime.tv_usec >= HZ) {
-		dest->ru_stime.tv_usec -= HZ;
-		++dest->ru_stime.tv_sec;
-	}
-	dest->ru_nvcsw += src->ru_nvcsw;
-	dest->ru_nsignals += src->ru_nsignals;
+	dest->kru_utime += src->kru_utime;
+	dest->kru_stime += src->kru_stime;
+	dest->kru_nvcsw += src->kru_nvcsw;
+	dest->kru_nsignals += src->kru_nsignals;
 }
 
 void doexit(int status)
@@ -395,8 +389,8 @@ void doexit(int status)
 	}
 	
 	P.p_waitstat = status;
-	/* add our children's rusage to our own */
-	ruadd(&P.p_rusage, &P.p_crusage);
+	/* add our children's rusage to our own so our parent can retrieve it */
+	kruadd(&P.p_kru, &P.p_ckru);
 	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
@@ -410,7 +404,6 @@ void doexit(int status)
 			}
 		}
 	}
-	psignal(P.p_pptr, SIGCHLD);
 	
 	/* close all open files */
 	if (!(P.p_flag & P_VFORK)) {
@@ -438,6 +431,8 @@ void doexit(int status)
 	assert(zp == current);
 	
 	sched_exit(current);
+
+	psignal(P.p_pptr, SIGCHLD);
 	swtch();
 }
 
@@ -473,6 +468,11 @@ void sys_fork()
  * 	free kernel stack
  */
 
+static void clear_krusage(struct krusage *kp)
+{
+	kp->kru_utime = kp->kru_stime = 0;
+	kp->kru_nvcsw = kp->kru_nsignals = 0;
+}
 void sys_vfork()
 {
 #if 1
@@ -500,14 +500,8 @@ void sys_vfork()
 	P.p_retval = pid;
 	cp->p_pid = pid;
 	cp->p_pptr = current;
-	cp->p_rusage.ru_utime.tv_sec =
-	 cp->p_rusage.ru_utime.tv_usec =
-	 cp->p_rusage.ru_stime.tv_sec =
-	 cp->p_rusage.ru_stime.tv_usec = 0;
-	cp->p_crusage.ru_utime.tv_sec =
-	 cp->p_crusage.ru_utime.tv_usec =
-	 cp->p_crusage.ru_stime.tv_sec =
-	 cp->p_crusage.ru_stime.tv_usec = 0;
+	clear_krusage(&cp->p_kru);
+	clear_krusage(&cp->p_ckru);
 	
 	/* allocate a kernel stack for the child */
 	stack = stackalloc(&stacksize);
@@ -617,15 +611,14 @@ found:
 	}
 	
 	if (rusage) {
-		/* fill in rusage */
 		struct rusage r;
-		ru_to_user_ru(&r, &p->p_rusage);
+		krusage_to_rusage(&p->p_kru, &r);
 		if (copyout(rusage, &r, sizeof(*rusage)))
 			P.p_error = EFAULT;
 	}
 	
 	if (p->p_status == P_ZOMBIE) {
-		ruadd(&current->p_crusage, &p->p_rusage);
+		kruadd(&current->p_ckru, &p->p_kru);
 		list_del(&p->p_list);
 		pfree(p);
 	}
@@ -887,14 +880,15 @@ void sys_getrusage()
 	} *ap = (struct a *)P.p_arg;
 	
 	int x;
-	struct rusage ru, *rup;
+	struct rusage ru;
+	struct krusage *krup;
 	
 	switch (ap->who) {
 	case RUSAGE_SELF:
-		rup = &current->p_rusage;
+		krup = &current->p_kru;
 		break;
 	case RUSAGE_CHILDREN:
-		rup = &current->p_crusage;
+		krup = &current->p_ckru;
 		break;
 	default:
 		P.p_error = EINVAL;
@@ -902,10 +896,8 @@ void sys_getrusage()
 	}
 	
 	x = spl1();
-	memmove(&ru, rup, sizeof(ru));
+	krusage_to_rusage(krup, &ru);
 	splx(x);
-	ru.ru_utime.tv_usec = ru.ru_utime.tv_usec * 1000000L / HZ;
-	ru.ru_stime.tv_usec = ru.ru_stime.tv_usec * 1000000L / HZ;
 	if (copyout(ap->r_usage, &ru, sizeof(ru)))
 		P.p_error = EFAULT;
 error:	;
