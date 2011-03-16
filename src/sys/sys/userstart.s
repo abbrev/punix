@@ -29,6 +29,7 @@ SYS_getpid       = 20
 SYS_uname        = 23
 SYS_getuid       = 24
 SYS_getppid      = 27
+SYS_sysctl       = 30
 SYS_sigaction    = 31
 SYS_dup          = 41
 SYS_getgid       = 47
@@ -105,6 +106,7 @@ mksyscall	wait
 mksyscall	pause
 mksyscall	adjtime
 mksyscall	poweroff
+mksyscall	sysctl
 
 .global cerror, caerror
 /*

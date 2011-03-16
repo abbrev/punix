@@ -69,6 +69,8 @@ void sys_sigaction();
 
 void sys_poweroff();
 
+void sys_sysctl();
+
 #define sys_link	sys_NONE
 #define sys_unlink	sys_NONE
 #define sys_chdir	sys_NONE
@@ -135,7 +137,7 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_getppid, 0},
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},
-	{0, sys_NONE, 0},		/* 30 */
+	{11, sys_sysctl, 0},		/* 30 */
 	{5, sys_sigaction, 0},
 	{5, sys_sigprocmask, 0},
 	{3, sys_access, 0},

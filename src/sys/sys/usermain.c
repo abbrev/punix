@@ -37,6 +37,7 @@
 #include <sound.h>
 #include <sys/utsname.h>
 #include <setjmp.h>
+#include <sys/sysctl.h>
 //#include <sys/ioctl.h>
 
 
@@ -292,6 +293,12 @@ static clock_t timeval_to_clock_t(struct timeval *tv)
 	       tv->tv_usec * CLOCKS_PER_SEC / 1000000L;
 }
 
+static void clock_t_to_timeval(clock_t c, struct timeval *tv)
+{
+	tv->tv_sec = c / CLOCKS_PER_SEC;
+	tv->tv_usec = (c % CLOCKS_PER_SEC) * 1000000L / CLOCKS_PER_SEC;
+}
+
 clock_t times(struct tms *buf)
 {
 	struct rusage self, children;
@@ -341,23 +348,33 @@ static void testclock(int argc, char *argv[], char *envp[])
 	userpause();
 }
 
+#define RANDBUFSIZE 100
 static void testrandom(int argc, char *argv[], char *envp[])
 {
 	int i;
 	int randomfd;
-	int randombuf[100];
+	int *randombuf;
+	randombuf = malloc(RANDBUFSIZE*sizeof(int));
+	if (!randombuf) {
+		perror("testrandom");
+		return;
+	}
 	
 	randomfd = open("/dev/random", O_RDWR);
 	printf("randomfd = %d\n", randomfd);
 	
 	if (randomfd >= 0) {
-		read(randomfd, randombuf, sizeof(randombuf));
+		read(randomfd, randombuf, RANDBUFSIZE*sizeof(int));
 		for (i = 0; i < 100; ++i) {
 			printf("%5u ", randombuf[i]);
 		}
 		printf("\n");
 		close(randomfd);
+	} else {
+		perror("testrandom: /dev/random");
 	}
+
+	free(randombuf);
 	
 	userpause();
 }
@@ -371,6 +388,13 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	long *audioright = NULL;
 	long *audiocenter = NULL;
 	
+	audiofd = open("/dev/audio", O_RDWR);
+	printf("audiofd = %d\n", audiofd);
+	if (audiofd < 0) {
+		printf("could not open audio device!\n");
+		goto out;
+	}
+
 	audioleft = malloc(AUDIOBUFSIZE*sizeof(long));
 	audioright = malloc(AUDIOBUFSIZE*sizeof(long));
 	audiocenter = malloc(AUDIOBUFSIZE*sizeof(long));
@@ -378,8 +402,6 @@ static void testaudio(int argc, char *argv[], char *envp[])
 		printf("could not allocate audio buffers!\n");
 		goto free;
 	}
-	audiofd = open("/dev/audio", O_RDWR);
-	printf("audiofd = %d\n", audiofd);
 	
 	for (i = 0; i < AUDIOBUFSIZE; ++i) {
 		audioleft[i] = 0x00aaaa00;
@@ -404,11 +426,12 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	printf("closing audio...\n");
 	close(audiofd);
 	
-	userpause();
 free:
 	free(audioleft);
 	free(audioright);
 	free(audiocenter);
+out:
+	userpause();
 }
 
 static const char varpkt1[] = {
@@ -819,7 +842,54 @@ softfloat fadd(softfloat, softfloat);
 unsigned long long sl64(unsigned long long, unsigned);
 unsigned long long sr64(unsigned long long, unsigned);
 
-#define BUFSIZE 32
+#define BUFSIZE 512
+
+int sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp,
+           void *newp, size_t newlen);
+
+static int sysctltest_main(int argc, char **argv, char **envp)
+{
+	int mib[] = { CTL_KERN, KERN_NGROUPS };
+	unsigned miblen = sizeof(mib) / sizeof(mib[0]);
+	long value;
+	size_t valuelen = sizeof(long);
+	if (sysctl(mib, miblen, &value, &valuelen, NULL, 0)) {
+		perror("sysctltest");
+		return 1;
+	}
+	printf("sysctltest: %ld\n", value);
+	
+	return 0;
+}
+
+static int ps_main(int argc, char **argv, char **envp)
+{
+	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL };
+	unsigned miblen = sizeof(mib) / sizeof(mib[0]);
+	struct kinfo_proc *kp = NULL;
+	struct kinfo_proc *allproc = NULL;
+	size_t allproclen = 0;
+	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
+		perror("ps");
+		return 1;
+	}
+	allproc = malloc(allproclen);
+	if (!allproc) {
+		perror("ps");
+		return 1;
+	}
+	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
+		perror("ps");
+		return 1;
+	}
+	printf("%5s %4s %8s %s\n", "PID", "TTY", "TIME", "CMD");
+	allproclen /= sizeof(struct kinfo_proc);
+	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
+		printf("%5d %04x %8ld %s\n",
+		       kp->kp_pid, kp->kp_tty, kp->kp_ctime, kp->kp_cmd);
+	}
+	return 0;
+}
 
 static int fdtofd(int fromfd, int tofd)
 {
@@ -887,12 +957,6 @@ static int poweroff_main(int argc, char **argv, char **envp)
 {
 	poweroff();
 	return 0;
-}
-
-static void clock_t_to_timeval(clock_t c, struct timeval *tv)
-{
-	tv->tv_sec = c / CLOCKS_PER_SEC;
-	tv->tv_usec = c % CLOCKS_PER_SEC;
 }
 
 int time_main(int argc, char **argv, char **envp)
@@ -1211,6 +1275,7 @@ struct topinfo {
 	struct rusage lastrusage;
 };
 
+#if 0
 static void updatetop(struct topinfo *info)
 {
 	int getloadavg1(long loadavg[], int nelem);
@@ -1296,15 +1361,112 @@ static void updatetop(struct topinfo *info)
 		printf("\n%5d %-8s %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
 		       pid, "root", 0,
 		       getpriority(PRIO_PROCESS, pid), (long)0, (long)0, 'R',
-		       totalcpu / 10, totalcpu % 10,
+		       current->p_pctcpu / 256, (current->p_pctcpu % 256) * 10 / 256,
 		       (int)(ptime.tv_sec / 60), (int)(ptime.tv_sec % 60),
-		       "top");
+		       current->p_name);
 		cleareol();
 		printf(ESC "[J" ESC "[5H");
+	} else {
+		printf("reticulating splines...");
 	}
 	info->lasttime = tv;
 	info->lastrusage = rusage;
 }
+#else
+
+/* use sysctl() to get system and process information */
+static void updatetop(struct topinfo *info)
+{
+	long t;
+	int day, hour, minute, second;
+	time_t up = 0;
+	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL };
+	unsigned miblen = sizeof(mib) / sizeof(*mib);
+	struct kinfo_proc *allproc = NULL;
+	struct kinfo_proc *kp;
+	size_t allproclen;
+	struct timeval tv;
+	int i;
+	long la[3];
+	int getloadavg1(long loadavg[], int nelem);
+	static const char procstates[] = "RSDTZ";
+
+	gettimeofday(&tv, NULL);
+	getloadavg1(la, 3);
+	
+	/* line 1 */
+	t = tv.tv_sec - 25200; /* -7 hours */
+	second = t % 60; t /= 60;
+	minute = t % 60; t /= 60;
+	hour = t % 24;   t /= 24;
+	day = t;
+	printf(ESC "[H" "%02d:%02d:%02d up ",
+	       hour, minute, second);
+	t = up;
+	second = t % 60; t /= 60;
+	minute = t % 60; t /= 60;
+	hour = t % 24;   t /= 24;
+	day = t;
+	if (day) {
+		printf("%d+", day);
+	}
+	printf("%02d:%02d, %d user, load:", hour, minute, 1);
+	for (i = 0; i < 3; ++i) {
+		if (i > 0) putchar(',');
+		printf(" %ld.%02ld", la[i] >> 16,
+		       (100 * la[i] >> 16) % 100);
+	}
+	cleareol();
+	/* line 2 */
+	printf("\nTasks: %d total, %d run, %d slp, %d stop, %d zomb",
+	       1, 1, 0, 0, 0);
+	cleareol();
+	/* line 3 */
+	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", 0, 0, 0, 0, 0, 0, 0, 0);
+	cleareol();
+	/* line 4 */
+	printf("\nMem: %ldk total, %ldk used, %ldk free, %ldk buffers",
+	       0L, 0L, 0L, 0L);
+	cleareol();
+	/* line 5 */
+	putchar('\n');
+	cleareol();
+	/* line 6 */
+	printf("\n" ESC "[7m  PID USER      PR  NI  SHR  RES S  %%CPU   TIME COMMAND" ESC "[m");
+	cleareol();
+	/* line 7- */
+	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
+		perror("top: sysctl 1");
+		return;
+	}
+	allproc = malloc(allproclen);
+	if (!allproc) {
+		perror("top: malloc");
+		return;
+	}
+	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
+		perror("top: sysctl 2");
+		return;
+	}
+	
+	/* here we would sort the array of processes by some sort key */
+	allproclen /= sizeof(*allproc);
+	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
+	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
+		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
+		       kp->kp_pid, kp->kp_euid, 0,
+		       kp->kp_nice, 0L, 0L, procstates[kp->kp_state],
+		       kp->kp_pcpu / 256, (kp->kp_pcpu % 256) * 10 / 256,
+		       (int)((kp->kp_ctime / CLOCKS_PER_SEC) / 60),
+		       (int)((kp->kp_ctime / CLOCKS_PER_SEC) % 60),
+		       kp->kp_cmd);
+		cleareol();
+	}
+	free(allproc);
+	/* clear to the end of the screen */
+	printf(ESC "[J" ESC "[5H");
+}
+#endif
 
 #define TOPBUFSIZE 200
 static int top_main(int argc, char *argv[], char **envp)
@@ -1316,12 +1478,7 @@ static int top_main(int argc, char *argv[], char **envp)
 	ssize_t n;
 	int quit = 0;
 	struct topinfo info;
-#define INITDELAY 1
 #define TOPDELAY 5
-	struct itimerval initit = {
-		{ TOPDELAY, 0 },
-		{ INITDELAY, 0 }
-	};
 	struct itimerval it = {
 		{ TOPDELAY, 0 },
 		{ TOPDELAY, 0 }
@@ -1331,7 +1488,7 @@ static int top_main(int argc, char *argv[], char **envp)
 	sa.sa_handler = sigalrm;
 	sa.sa_flags = SA_RESTART;
 	sigaction(SIGALRM, &sa, NULL);
-	setitimer(ITIMER_REAL, &initit, NULL);
+	setitimer(ITIMER_REAL, &it, NULL);
 	
 	info.lasttime.tv_sec = info.lasttime.tv_usec = 0;
 	while (!quit) {
@@ -1600,6 +1757,8 @@ static struct applet applets[] = {
 	{ "pid", pid_main },
 	{ "poweroff", poweroff_main },
 	{ "times", times_main },
+	{ "sysctltest", sysctltest_main },
+	{ "ps", ps_main },
 	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
