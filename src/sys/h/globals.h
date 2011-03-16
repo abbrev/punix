@@ -118,7 +118,7 @@ struct globals {
 		unsigned char cursorvisible;
 		unsigned char tabstops[(60+7)/8];
 		struct state const *vtstate;
-		struct glyphset *glyphset, *charsets[2];
+		const struct glyphset *glyphset, *charsets[2];
 		unsigned char charset;
 		unsigned char margintop, marginbottom;
 		struct pos {
