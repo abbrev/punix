@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <limits.h>
+#include <sys/types.h>
 #include <sys/sysctl.h>
 #include <string.h>
 
@@ -68,9 +69,6 @@ struct kinfo_proc {
 		long    e_spare[4];
 	} kp_eproc;
 };
-#else
-struct kinfo_proc {
-};
 #endif
 
 struct sysctl_entry {
@@ -102,10 +100,74 @@ struct sysctl_table {
 	struct sysctl_entry entries[];
 };
 
-
 static void proc_to_kinfo_proc(struct proc *pp, struct kinfo_proc *kp)
 {
 	/* TODO */
+#if 0
+	pid_t kp_pid;
+
+	pid_t kp_pgid;
+	pid_t kp_ppid;
+
+	uid_t kp_uid;
+	uid_t kp_ruid;
+	uid_t kp_svuid;
+	gid_t kp_gid;
+	gid_t kp_rgid;
+	gid_t kp_svgid;
+
+	size_t kp_vsz;
+	int kp_pri;
+	int kp_nice;
+	int kp_state;
+	unsigned kp_pcpu;
+	clock_t kp_ctime; /* cumulative cpu time */
+	time_t kp_stime; /* start time */
+	dev_t kp_tty;
+#endif
+	kp->kp_pid = pp->p_pid;
+	kp->kp_pgid = pp->p_pgrp;
+	kp->kp_ppid = pp->p_pptr ? pp->p_pptr->p_pid : 0;
+	kp->kp_euid = pp->p_euid;
+	kp->kp_ruid = pp->p_ruid;
+	kp->kp_svuid = pp->p_svuid;
+	kp->kp_egid = pp->p_egid;
+	kp->kp_rgid = pp->p_rgid;
+	kp->kp_svgid = pp->p_svgid;
+	kp->kp_vsz = 0L; /* XXX */
+	kp->kp_pri = 0;
+	kp->kp_nice = pp->p_nice - NZERO;
+	kp->kp_state = pp->p_status;
+	kp->kp_pcpu = pp->p_pctcpu;
+	kp->kp_ctime = pp->p_kru.kru_utime + pp->p_kru.kru_stime;
+	kp->kp_cctime = pp->p_ckru.kru_utime + pp->p_ckru.kru_stime;
+	kp->kp_stime = 0L; /* XXX */
+	kp->kp_tty = pp->p_ttydev;
+	strncpy(kp->kp_cmd, pp->p_name, MAXCMDLEN);
+	kp->kp_cmd[MAXCMDLEN] = '\0';
+	switch (pp->p_status) {
+	case P_RUNNING:
+		kp->kp_state = PRUN;
+		break;
+	case P_SLEEPING:
+		if (pp->p_flag & P_SINTR)
+			kp->kp_state = PSLEEP;
+		else
+			kp->kp_state = PDSLEEP;
+		break;
+	case P_VFORKING: /* XXX: this should be P_SLEEPING */
+		kp->kp_state = PDSLEEP;
+		break;
+	case P_STOPPED:
+		kp->kp_state = PSTOPPED;
+		break;
+	case P_ZOMBIE:
+		kp->kp_state = PZOMBIE;
+		break;
+	default:
+		/* ??? */
+		;
+	}
 }
 
 typedef int proc_select(struct proc *, int);
@@ -122,7 +184,7 @@ static int do_kern_proc(proc_select *selector, int arg,
 {
 	struct proc *pp;
 	struct kinfo_proc k;
-	size_t len;
+	size_t len = 0;
 	/*
 	 * Loop through proc_list once to calculate the size of memory needed
 	 * to hold all of the kinfo_proc structures at *oldp.
@@ -133,7 +195,7 @@ static int do_kern_proc(proc_select *selector, int arg,
 	}
 	len *= sizeof(struct kinfo_proc);
 	if (oldp) {
-		struct kinfo_proc *p = oldp;
+		struct kinfo_proc *kp = oldp;
 		if (*oldlenp < len) return ENOMEM;
 		/*
 		 * Loop through proc_list a second time, this time converting
@@ -143,9 +205,9 @@ static int do_kern_proc(proc_select *selector, int arg,
 		list_for_each_entry(pp, &G.proc_list, p_list) {
 			if (!selector(pp, arg)) continue;
 			proc_to_kinfo_proc(pp, &k);
-			if (copyout(p, &k, sizeof(struct kinfo_proc)))
+			if (copyout(kp, &k, sizeof(struct kinfo_proc)))
 				return EFAULT;
-			++p;
+			++kp;
 		}
 	}
 	*oldlenp = len;
@@ -223,7 +285,7 @@ static const struct sysctl_table kern_proc = {
 };
 
 static const struct sysctl_table ctl_hw = {
-	1,
+	10,
 	{
 	{ "machine", CTL_STRING, { .string="" } },
 	{ "model", CTL_STRING, { .string="" } },
@@ -394,7 +456,7 @@ struct sysctla {
 void sys_sysctl()
 {
 	struct sysctla *ap = P.p_arg;
-	int err = 0, e;
+	int e;
 
 	if (ap->namelen < 2 || CTL_MAXNAME < ap->namelen) {
 		P.p_error = EINVAL;
@@ -402,11 +464,11 @@ void sys_sysctl()
 	}
 
 	e = getvalue(&ctl_root, ap->name, ap->namelen, ap->oldp, ap->oldlenp);
-	if (e) err = e;
+	if (e) P.p_error = e;
+	if (!ap->newp)
+		return;
 	e = setvalue(&ctl_root, ap->name, ap->namelen, ap->newp, ap->newlen);
-	if (e) err = e;
-	
-	P.p_error = err;
+	if (e) P.p_error = e;
 }
 
 /* FIXME: this probably doesn't handle sizep correctly */
