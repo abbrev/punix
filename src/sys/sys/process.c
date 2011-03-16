@@ -22,6 +22,7 @@
 /* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
 {
+	int x = spl7();
 	p->p_waitchan = NULL;
 #if 0
 	if (p->p_status == P_RUNNING) {
@@ -30,6 +31,7 @@ STARTUP(void setrun(struct proc *p))
 	}
 #endif
 	sched_run(p);
+	splx(x);
 }
 
 STARTUP(void unsleep(struct proc *p))
@@ -133,7 +135,6 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	}
 	/* p->p_status = P_SLEEPING; */
 	sched_sleep(p);
-	++P.p_rusage.ru_nvcsw;
 	swtch();
 resume:
 	splx(s);
