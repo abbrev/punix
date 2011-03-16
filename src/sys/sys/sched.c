@@ -20,7 +20,7 @@
 #define MS_TO_TICKS(t) (((long)(t) * HZ + 500) / 1000)
 
 /* RR_INTERVAL is the round-robin interval in milliseconds */
-#define RR_INTERVAL 500 //(1000L*16/HZ)
+#define RR_INTERVAL (1000L/32) //(1000L*16/HZ)
 /* TIME_SLICE is the same as RR_INTERVAL but measured in ticks */
 #define TIME_SLICE MS_TO_TICKS(RR_INTERVAL)
 
@@ -95,7 +95,7 @@ STARTUP(void swtch())
 	struct proc *p;
 	
 	//kprintf("swtch() ");
-	int x = spl1(); /* higher than 256Hz timer */
+	int x = spl7();
 	
 	/* XXX: this shows the number of times this function has been called.
  	 * It draws in the bottom-left corner of the screen.
