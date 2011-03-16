@@ -23,9 +23,7 @@ struct tm {
 	int tm_isdst; /* Daylight Savings flag */
 };
 
-/* [XSI] [x> */
-#define CLOCKS_PER_SEC	1000000L
-/* <x] */
+#define CLOCKS_PER_SEC	256L
 
 /* [TMR] [x> */
 struct timespec {
