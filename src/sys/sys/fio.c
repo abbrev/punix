@@ -367,7 +367,6 @@ STARTUP(int falloc())
 			return fd;
 		}
 	}
-	kprintf("no file\n");
 	P.p_error = ENFILE;
 	return -1;
 }
