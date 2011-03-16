@@ -145,7 +145,7 @@ static void transition(int ch, int newstate,
 #define GLYPHSET_SG    3
 #define GLYPHSET_ALTSG 4
 
-static struct glyphset glyphsets[] = {
+static const struct glyphset glyphsets[] = {
 #ifdef SMALLGLYPHS
 {
 #include "glyphsets/small-upper.inc"
@@ -602,7 +602,7 @@ static void clearrows(int top, int bottom)
 {
 	int n = bottom - top + 1;
 	if (n <= 0) return;
-	memset(LCD_MEM+180*top, 0, 180*n);
+	memset(LCD_MEM+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
 }
 
 static void csi_dispatch(int ch, struct tty *tp)
@@ -778,38 +778,18 @@ static void csi_dispatch(int ch, struct tty *tp)
 			 * screen, inclusive (default) */
 			for (c = G.vt.pos.column; c < WINWIDTH; ++c)
 				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
-#if 0
-			for (r = G.vt.pos.row + 1; r < WINHEIGHT; ++r)
-				for (c = 0; c < WINWIDTH; ++c)
-					drawgl(&SPACEGLYPH, r, c);
-#else
 			clearrows(G.vt.pos.row + 1, WINHEIGHT-1);
-#endif
 		} else if (n == 1) {
 			/* Erase from start of the screen to the active
 			 * position, inclusive */
-#if 0
-			for (r = 0; r < G.vt.pos.row; ++r)
-				for (c = 0; c < WINWIDTH; ++c)
-					drawgl(&SPACEGLYPH, r, c);
-#else
 			clearrows(0, G.vt.pos.row - 1);
-#endif
 			for (c = 0; c <= G.vt.pos.column; ++c)
 				drawgl(&SPACEGLYPH, G.vt.pos.row, c);
 		} else if (n == 2) {
-			/* XXX: we could just erase the entire display,
-			 * excluding the status line at the bottom */
 			/* Erase all of the display -- all lines are erased,
 			 * changed to single-width, and the cursor does not
 			 * move. */
-#if 0
-			for (r = 0; r < WINHEIGHT; ++r)
-				for (c = 0; c < WINWIDTH; ++c)
-					drawgl(&SPACEGLYPH, r, c);
-#else
 			clearrows(0, WINHEIGHT - 1);
-#endif
 		}
 		break;
 	case 'K':
@@ -1264,9 +1244,19 @@ static void dovtoutput(int ch, struct tty *tp)
 static void vtoutput(int ch, struct tty *tp)
 {
 	int c;
-	int x = splclock();
-	dovtoutput(ch, tp);
+	int x = spl7();
+	if (G.vt.lock) {
+		putc(ch, &tp->t_outq);
+		splx(x);
+		return;
+	}
+	++G.vt.lock;
 	splx(x);
+
+	dovtoutput(ch, tp);
+	while ((c = getc(&tp->t_outq)) != -1)
+		dovtoutput(c, tp);
+	G.vt.lock = 0;
 }
 
 /*
