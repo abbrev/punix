@@ -250,18 +250,20 @@ STARTUP(void sys_open())
 		P.p_error = ENOENT;
 		return;
 	}
+	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
+	if (P.p_error)
+		return;
+
+	ip->i_mode = IFCHR;
 	fd = falloc();
 	if (fd < 0)
 		return;
 	++G.nextinode;
-	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
-	ip->i_mode = IFCHR;
 	
 	fp = P.p_ofile[fd];
 	fp->f_flag = O_RDWR;
 	fp->f_type = DTYPE_INODE;
 	fp->f_inode = ip;
-	fp->f_count = 1;
 	
 	P.p_retval = fd;
 #else
