@@ -57,6 +57,15 @@ enum {
 	KERN_VNODE,
 };
 
+enum {
+	KERN_PROC_ALL,
+	KERN_PROC_PID,
+	KERN_PROC_PGRP,
+	KERN_PROC_TTY,
+	KERN_PROC_UID,
+	KERN_PROC_RUID,
+};
+
 /*
 enum {
 	MACHDEP_???;
@@ -87,5 +96,77 @@ enum {
 };
 
 #define CTL_MAXNAME 5 /* ? */
+
+/*
+ * top/ps/etc need at least the following fields:
+ * priority
+ * virtual mem?
+ * resident mem
+ * shared mem
+ * state (sleep, run, etc)
+ * code size
+ * data size
+ * wchan (wait channel)
+ *
+ * according to POSIX.1 page on ps command:
+ * ruser        real uid
+ * user         effective uid
+ * rgroup       real group id
+ * group        effective group id
+ * pid          process id
+ * ppid         parent process id
+ * pgid         process group id
+ * pcpu         %CPU
+ * vsz          size of process in 1024 byte units
+ * nice         nice value
+ * etime        elapsed time since the process was started
+ * time         cumulative CPU time
+ * tty          controlling tty
+ * comm         argv[0]
+ * args         argv[1..n]
+ *
+ */
+struct kinfo_proc {
+	pid_t kp_pid;
+
+	pid_t kp_pgid;
+	pid_t kp_ppid;
+
+	uid_t kp_euid;
+	uid_t kp_ruid;
+	uid_t kp_svuid;
+	
+	gid_t kp_egid;
+	gid_t kp_rgid;
+	gid_t kp_svgid;
+
+	size_t kp_vsz;
+	int kp_pri;
+	int kp_nice;
+	int kp_state;
+	unsigned kp_pcpu;
+	clock_t kp_ctime; /* cumulative cpu time */
+	clock_t kp_cctime; /* cumulative children cpu time */
+	time_t kp_stime; /* start time */
+	dev_t kp_tty;
+#define MAXCMDLEN 15
+	char kp_cmd[MAXCMDLEN+1];
+};
+
+#define PRUN     0
+#define PSLEEP   1
+#define PDSLEEP  2
+#define PSTOPPED 3
+#define PZOMBIE  4
+
+/*
+ * 'R' = running
+ * 'S' = sleeping
+ * 'D' = uninterruptible sleep
+ * 'T' = traced or stopped
+ * 'Z' = zombie
+ */
+
+
 
 #endif
