@@ -108,14 +108,20 @@ STARTUP(int kprintf(const char *fmt, ...))
 		
 			/* pointer */
 		case 'p':
-			intsize = LONG;
-			/* leading zeroes */
-			fill = '0';
-			/* print at least six digits */
-			width = width < 6 ? 6 : width;
-			/* hexadecimal */
-			base = 0x10;
-			goto getint;
+			u = va_arg(argp, unsigned long);
+			if (u) {
+				/* leading zeroes */
+				fill = '0';
+				/* print at least six digits */
+				width = width < 6 ? 6 : width;
+				/* hexadecimal */
+				base = 0x10;
+				goto int2ascii;
+			}
+			/* our pointer is NULL. print "(nil)" as a string */
+			p = "(nil)";
+			len = 5;
+			goto string_print;
 			
 			/* Octal. */
 		case 'o':
