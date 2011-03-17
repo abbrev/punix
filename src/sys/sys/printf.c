@@ -1,6 +1,7 @@
 /*	printf() - printf() for user program		Author: Kees J. Bot
  *								15 Jan 1994
  */
+#include <stdio.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <sys/types.h>
@@ -14,7 +15,7 @@
 #undef fflush
 
 /* el-cheapo buffered output */
-int fflush(void *stream)
+int fflush(FILE *stream)
 {
 	char *b = G.user.charbuf;
 	ssize_t s = G.user.charbufsize;
@@ -29,6 +30,11 @@ int fflush(void *stream)
 	return 0;
 }
 
+STARTUP(int fputc(int c, FILE *stream))
+{
+	return -1; /* not implemented yet! */
+}
+
 STARTUP(int putchar(int c))
 {
 	G.user.charbuf[G.user.charbufsize++] = c;
@@ -37,7 +43,7 @@ STARTUP(int putchar(int c))
 	return (unsigned char)c;
 }
 
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, void *stream)
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
 	size_t count = size * nmemb;
 	while (count > 0) {
@@ -47,7 +53,31 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, void *stream)
 	return size * nmemb;
 }
 
-STARTUP(void printf(const char *fmt, ...))
+typedef int (*vcbnprintf_callback_t)(int c, void *arg);
+typedef int (*vcbscanf_get_callback_t)(void *arg);
+typedef int (*vcbscanf_unget_callback_t)(int c, void *arg);
+
+/*
+ * vcbnprintf() is the heart of all *printf() routines
+ * This takes a callback routine that is called once for every character that
+ * is printed, up to 'size' characters. If 'size' is (size_t)-1, this is taken
+ * as infinite. This routine returns the number of characters that would be
+ * printed, regardless of the size.
+ */
+static int vcbnprintf(vcbnprintf_callback_t cb, void *arg,
+                      size_t size, const char *fmt, va_list argp);
+
+static int vcbscanf(vcbscanf_get_callback_t get, void *getarg,
+                    vcbscanf_unget_callback_t unget, void *ungetarg,
+	            const char *fmt, va_list argp);
+
+#define PUT(c) do { \
+	if (count++ < size || size == (size_t)-1) \
+		put(c, cbarg); \
+} while (0)
+
+STARTUP(static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
+                              size_t size, const char *fmt, va_list argp))
 {
 	int c;
 	enum { LEFT, RIGHT } adjust;
@@ -62,15 +92,12 @@ STARTUP(void printf(const char *fmt, ...))
 	long i;
 	unsigned long u;
 	char temp[8 * sizeof(long) / 3 + 2];
-	
-	va_list argp;
-	
-	va_start(argp, fmt);
+	size_t count = 0;
 	
 	while ((c = *fmt++) != '\0') {
 		if (c != '%') {
 			/* Ordinary character. */
-			putchar(c);
+			PUT(c);
 			continue;
 		}
 		
@@ -122,27 +149,42 @@ STARTUP(void printf(const char *fmt, ...))
 		i = 0;
 		base = 10;
 		intsize = INT;
-		if (c == 'l' || c == 'L') {
+		if (c == 'l' || c == 'j' || c == 't' || c == 'z') {
 			/* "Long" key, e.g. %ld. */
 			intsize = LONG;
+			c = *fmt++;
+		} else if (c == 'h') {
 			c = *fmt++;
 		}
 		if (c == '\0') break;
 		
 		switch (c) {
-			/* Decimal.  Note that %D is treated as %ld. */
-		case 'D':
-			intsize= LONG;
 		case 'd':
+		case 'i':
 			i = intsize == LONG
 				? va_arg(argp, long)
 				: va_arg(argp, int);
 			u = i < 0 ? -i : i;
 			goto int2ascii;
+		
+			/* pointer */
+		case 'p':
+			u = va_arg(argp, unsigned long);
+			if (u) {
+				/* leading zeroes */
+				fill = '0';
+				/* print at least six digits */
+				width = width < 6 ? 6 : width;
+				/* hexadecimal */
+				base = 0x10;
+				goto int2ascii;
+			}
+			/* our pointer is NULL. print "(nil)" as a string */
+			p = "(nil)";
+			len = 5;
+			goto string_print;
 			
 			/* Octal. */
-		case 'O':
-			intsize = LONG;
 		case 'o':
 			base = 010;
 			goto getint;
@@ -155,8 +197,6 @@ STARTUP(void printf(const char *fmt, ...))
 			goto getint;
 			
 			/* Unsigned decimal. */
-		case 'U':
-			intsize = LONG;
 		case 'u':
 		getint:
 			u = intsize == LONG
@@ -193,34 +233,111 @@ STARTUP(void printf(const char *fmt, ...))
 				;
 			
 		string_print:
+			if (c == 's' || adjust == LEFT) fill = ' ';
 			width -= len;
 			if (i < 0) --width;
-			if (fill == '0' && i < 0) putchar('-');
+			if (fill == '0' && i < 0) PUT('-');
 			if (adjust == RIGHT) {
-				for (; width > 0; --width) putchar(fill);
+				for (; width > 0; --width) PUT(fill);
 			}
-			if (fill == ' ' && i < 0) putchar('-');
-			if (len > 0) {
-				fwrite(p, 1, len, NULL);
-				//write(2, p, len);
-				p += len;
-				len = 0;
-			}
+			if (fill == ' ' && i < 0) PUT('-');
+			for (; len > 0; --len)
+				PUT((unsigned char) *p++);
 			for (; width > 0; --width)
-				putchar(fill);
+				PUT(fill);
 			break;
 			
 			/* Unrecognized format key, echo it back. */
 		default:
-			putchar('%');
-			putchar(c);
+			PUT('%');
+			PUT(c);
 		}
 	}
+	return count;
+}
+
+STARTUP(int fprintf(FILE *stream, const char *fmt, ...))
+{
+	int n;
+	va_list argp;
+	va_start(argp, fmt);
 	
-	/* Mark the end with a null (should be something else, like -1). */
-	/*putchar('\0');*/
-	fflush(NULL);
+	n = vcbnprintf((vcbnprintf_callback_t)fputc, stream,
+	               (size_t)-1, fmt, argp);
 	va_end(argp);
+	return n;
+}
+
+STARTUP(int printf(const char *fmt, ...))
+{
+	int n;
+	va_list argp;
+	va_start(argp, fmt);
+	
+	n = vcbnprintf((vcbnprintf_callback_t)putchar, NULL,
+	               (size_t)-1, fmt, argp);
+	fflush(NULL); // only needed because we lack a proper stdio
+	va_end(argp);
+	return n;
+}
+
+STARTUP(int sputc(int c, void *a))
+{
+	char **s = (char **)a;
+	*(*s++) = c;
+	return (unsigned char)c;
+}
+
+STARTUP(int snprintf(char *s, size_t size, const char *fmt, ...))
+{
+	int n;
+	va_list argp;
+	va_start(argp, fmt);
+
+	n = vcbnprintf(sputc, &s, size - 1, fmt, argp);
+	*s = '\0';
+	va_end(argp);
+	return n;
+}
+
+STARTUP(int sprintf(char *s, const char *fmt, ...))
+{
+	int n;
+	va_list argp;
+	va_start(argp, fmt);
+
+	n = vcbnprintf(sputc, &s, (size_t)-1, fmt, argp);
+	*s = '\0';
+	va_end(argp);
+	return n;
+}
+
+STARTUP(int vfprintf(FILE *stream, const char *fmt, va_list argp))
+{
+	return vcbnprintf((vcbnprintf_callback_t)fputc, stream,
+	                  (size_t)-1, fmt, argp);
+}
+
+STARTUP(int vprintf(const char *fmt, va_list argp))
+{
+	return vcbnprintf((vcbnprintf_callback_t)putchar, NULL,
+	                  (size_t)-1, fmt, argp);
+}
+
+STARTUP(int vsnprintf(char *s, size_t size, const char *fmt, va_list argp))
+{
+	int n;
+	n = vcbnprintf(sputc, s, size - 1, fmt, argp);
+	*s = '\0';
+	return n;
+}
+
+STARTUP(int vsprintf(char *s, const char *fmt, va_list argp))
+{
+	int n;
+	n = vcbnprintf(sputc, s, (size_t)-1, fmt, argp);
+	*s = '\0';
+	return n;
 }
 
 /*
