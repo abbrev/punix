@@ -100,6 +100,17 @@ struct sysctl_table {
 	struct sysctl_entry entries[];
 };
 
+static int putvalue(void *oldp, size_t *oldlenp, void *value, size_t valuelen)
+{
+	if (oldp) {
+		if (*oldlenp < valuelen) return ENOMEM;
+		if (copyout(oldp, value, valuelen))
+			return EFAULT;
+	}
+	*oldlenp = valuelen;
+	return 0;
+}
+
 static void proc_to_kinfo_proc(struct proc *pp, struct kinfo_proc *kp)
 {
 	/* TODO */
@@ -262,6 +273,14 @@ static int kern_proc_ruid(int *name, unsigned namelen,
 	return do_kern_proc(select_ruid, name[1], oldp, oldlenp);
 }
 
+static int kern_uptime(int *name, unsigned namelen,
+                       void *oldp, size_t *oldlenp)
+{
+	if (namelen < 0) return ENOTDIR;
+	if (namelen > 0) return ENOENT;
+	return putvalue(oldp, oldlenp, &uptime.tv_sec, sizeof(long));
+}
+
 static int vm_loadavg(int *name, unsigned namelen, void *oldp, size_t *oldlenp)
 {
 	return ENOENT;
@@ -330,6 +349,7 @@ static const struct sysctl_table ctl_kern = {
 	{ "saved_ids", CTL_INTEGER, { .integer=1 } },
 	{ "securelvl", CTL_INTEGER, { .integer=0 } },
 	{ "updateinterval", CTL_INTEGER, { .integer=0 } },
+	{ "uptime", CTL_INTEGERP, { .integerp=&uptime.tv_sec } },
 	{ "version", CTL_INTEGER, { .integer=0 } },
 	{ "vnode", CTL_UNSUPPORTED, { NULL } },
 	}
