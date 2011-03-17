@@ -135,6 +135,10 @@ STARTUP(int kprintf(const char *fmt, ...))
 			base = 0x10;
 			goto getint;
 			
+		case 'z':
+			intsize = LONG;
+			/* fall through */
+		
 			/* Unsigned decimal. */
 		case 'u':
 		getint:
