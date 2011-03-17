@@ -74,7 +74,7 @@ STARTUP(void audiointr())
 			G.audio.lowat = -1;
 			wakeup(&G.audio.q);
 		}
-		if ((c = getc(&G.audio.q)) < 0)
+		if ((c = qgetc(&G.audio.q)) < 0)
 			return;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
@@ -166,7 +166,7 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 #if 0
 	case SNDCTL_DSP_SILENCE:
 		qclear(&G.audio.q);
-		putc(0, &G.audio.q); /* make sure the output is 0 */
+		qputc(0, &G.audio.q); /* make sure the output is 0 */
 		break;
 	case SNDCTL_DSP_SKIP:
 		qclear(&G.audio.q);

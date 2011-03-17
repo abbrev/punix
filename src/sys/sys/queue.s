@@ -15,9 +15,9 @@ qclear:
 	clr	(%a0)+
 	rts
 
-/* int putc(int ch, struct queue *qp); */
-	.global	putc
-putc:
+/* int qputc(int ch, struct queue *qp); */
+	.global	qputc
+qputc:
 	move	%sr,-(%sp)
 	move	#0x2500,%sr
 	
@@ -40,9 +40,9 @@ putc:
 8:	moveq	#-1,%d0
 	bra	9b
 
-/* int unputc(struct queue *qp); */
-	.global	unputc
-unputc:
+/* int qunputc(struct queue *qp); */
+	.global	qunputc
+qunputc:
 	move	%sr,-(%sp)
 	move	#0x2500,%sr
 	
@@ -65,9 +65,9 @@ unputc:
 8:	moveq	#-1,%d0
 	bra	9b
 
-/* int getc(struct queue *qp); */
-	.global	getc
-getc:
+/* int qgetc(struct queue *qp); */
+	.global	qgetc
+qgetc:
 	move	%sr,-(%sp)
 	move	#0x2500,%sr
 	
@@ -90,9 +90,9 @@ getc:
 8:	moveq	#-1,%d0
 	bra	9b
 
-/* int ungetc(int ch, struct queue *qp); */
-	.global	ungetc
-ungetc:
+/* int qungetc(int ch, struct queue *qp); */
+	.global	qungetc
+qungetc:
 	move	%sr,-(%sp)
 	move	#0x2500,%sr
 	

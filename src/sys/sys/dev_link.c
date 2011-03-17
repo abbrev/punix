@@ -61,7 +61,7 @@ STARTUP(static void recvbyte())
 {
 	int ch;
 	ch = LINK_BUFFER;
-	putc(ch, &G.link.readq);
+	qputc(ch, &G.link.readq);
 	//kprintf("<0x%02x ", ch);
 }
 
@@ -127,7 +127,7 @@ STARTUP(void linkintr())
 #endif
 		/* send the next byte from the send queue */
 		
-		if ((ch = getc(&G.link.writeq)) < 0) { /* nothing to send */
+		if ((ch = qgetc(&G.link.writeq)) < 0) { /* nothing to send */
 			//kprintf(">.. ");
 			txoff();
 		} else {
@@ -175,7 +175,7 @@ STARTUP(void linkread(dev_t dev))
 	
 	while (P.p_count) {
 		x = spl5();
-		while ((ch = getc(&G.link.readq)) < 0) {
+		while ((ch = qgetc(&G.link.readq)) < 0) {
 			rxon();
 			if (G.link.readoverflow) {
 				G.link.readoverflow = 0;
@@ -203,7 +203,7 @@ STARTUP(void linkwrite(dev_t dev))
 		ch = *P.p_base++;
 		x = spl5();
 		txon();
-		while (putc(ch, &G.link.writeq) < 0) {
+		while (qputc(ch, &G.link.writeq) < 0) {
 			txon();
 			G.link.lowat = QSIZE - 32; /* XXX constant */
 			slp(&G.link.writeq, 1);

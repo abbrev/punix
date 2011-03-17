@@ -30,10 +30,10 @@ int qisempty(struct queue *qp);
 #define qisempty(qp) ((qp)->q_count == 0)
 void qclear(struct queue *qp);
 
-int putc(int ch, struct queue *qp);
-int unputc(struct queue *qp);
-int getc(struct queue *qp);
-int ungetc(int ch, struct queue *qp);
+int qputc(int ch, struct queue *qp);
+int qunputc(struct queue *qp);
+int qgetc(struct queue *qp);
+int qungetc(int ch, struct queue *qp);
 
 /* copy buffer to queue. return number of bytes copied */
 int b_to_q(char *bp, int count, struct queue *qp);

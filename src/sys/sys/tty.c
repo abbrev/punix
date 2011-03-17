@@ -94,7 +94,7 @@ loop:
 		slp(&tp->t_rawq, 1);
 	}
 	
-	while ((ch = getc(qp)) >= 0) {
+	while ((ch = qgetc(qp)) >= 0) {
 		if ((lflag & ICANON)) {
 			int numc = tp->t_numc;
 			tp->t_numc = !TTBREAKC(ch);
@@ -190,7 +190,7 @@ int b_to_q(char *bp, int count, struct queue *qp)
 {
 	int n = count;
 	
-	while (n && putc(*bp++, qp) >= 0)
+	while (n && qputc(*bp++, qp) >= 0)
 		--n;
 	
 	return count - n;
@@ -235,7 +235,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 	int n = 0;
 	int ch;
 	
-	while (n < count && (ch = getc(qp)) >= 0) {
+	while (n < count && (ch = qgetc(qp)) >= 0) {
 		*bp++ = ch;
 		++n;
 	}
@@ -249,9 +249,9 @@ int q_to_b(struct queue *qp, char *bp, int count)
 void catq(struct queue *from, struct queue *to)
 {
 	int ch;
-	while ((ch = getc(from)) >= 0) {
-		if (putc(ch, to) < 0) {
-			ungetc(ch, from);
+	while ((ch = qgetc(from)) >= 0) {
+		if (qputc(ch, to) < 0) {
+			qungetc(ch, from);
 			break;
 		}
 	}

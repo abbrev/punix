@@ -1246,7 +1246,7 @@ static void vtoutput(int ch, struct tty *tp)
 	int c;
 	int x = spl7();
 	if (G.vt.lock) {
-		putc(ch, &tp->t_outq);
+		qputc(ch, &tp->t_outq);
 		splx(x);
 		return;
 	}
@@ -1254,7 +1254,7 @@ static void vtoutput(int ch, struct tty *tp)
 	splx(x);
 
 	dovtoutput(ch, tp);
-	while ((c = getc(&tp->t_outq)) != -1)
+	while ((c = qgetc(&tp->t_outq)) != -1)
 		dovtoutput(c, tp);
 	G.vt.lock = 0;
 }
@@ -1417,14 +1417,14 @@ static void ttyinput(int ch, struct tty *tp)
 	if (lflag & ICANON) {
 		if (ch == cc[VERASE]) {
 			if (!qisempty(&tp->t_rawq))
-				ttyrub(unputc(&tp->t_rawq), tp);
+				ttyrub(qunputc(&tp->t_rawq), tp);
 			goto endcase;
 		}
 		if (ch == cc[VKILL]) {
 #if 1
 			if ((lflag & ECHOKE) /* && ... */)
 				while (!qisempty(&tp->t_rawq))
-					ttyrub(unputc(&tp->t_rawq), tp);
+					ttyrub(qunputc(&tp->t_rawq), tp);
 			else {
 #endif
 				ttyecho(ch, tp);
@@ -1437,14 +1437,14 @@ static void ttyinput(int ch, struct tty *tp)
 		}
 		if (ch == cc[VWERASE]) {
 			/* first erase whitespace */
-			while ((ch = unputc(&tp->t_rawq)) == ' ' || ch == '\t')
+			while ((ch = qunputc(&tp->t_rawq)) == ' ' || ch == '\t')
 				ttyrub(ch, tp);
 			while (ch != -1 && ch != ' ' && ch != '\t') {
 				ttyrub(ch, tp);
-				ch = unputc(&tp->t_rawq);
+				ch = qunputc(&tp->t_rawq);
 			}
 			if (ch != -1)
-				putc(ch, &tp->t_rawq);
+				qputc(ch, &tp->t_rawq);
 			goto endcase;
 		}
 #if 0
@@ -1488,12 +1488,12 @@ static void ttyinput(int ch, struct tty *tp)
 #endif
 
 
-	if (putc(ch, &tp->t_rawq) < 0) {
+	if (qputc(ch, &tp->t_rawq) < 0) {
 		flushtty(tp);
 		return;
 	}
 #if 0 /* from 4.4BSD-Lite (clean) */
-        if (putc(c, &tp->t_rawq) >= 0) {
+        if (qputc(c, &tp->t_rawq) >= 0) {
                 if (!ISSET(lflag, ICANON)) {
                         ttywakeup(tp);
                         ttyecho(c, tp);
