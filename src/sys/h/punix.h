@@ -104,7 +104,7 @@ int copyout(void *dest, const void *src, size_t count);
 int passc(int ch);
 int cpass();
 
-void kprintf(const char *, ...);
+int kprintf(const char *, ...);
 
 int inferior(struct proc *);
 struct proc *pfind(int pid);
