@@ -502,6 +502,7 @@ void sys_vfork()
 	cp->p_pptr = current;
 	clear_krusage(&cp->p_kru);
 	clear_krusage(&cp->p_ckru);
+	cp->p_pctcpu = 0;
 	
 	/* allocate a kernel stack for the child */
 	stack = stackalloc(&stacksize);
