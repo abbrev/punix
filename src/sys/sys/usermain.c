@@ -1381,6 +1381,12 @@ static void updatetop(struct topinfo *info)
 }
 #else
 
+static int topcompare(const void *a, const void *b)
+{
+	struct kinfo_proc *proca = a, *procb = b;
+	return procb->kp_pcpu - proca->kp_pcpu; /* sort in descending order */
+}
+
 /* use sysctl() to get system and process information */
 static void updatetop(struct topinfo *info)
 {
@@ -1421,8 +1427,11 @@ static void updatetop(struct topinfo *info)
 		return;
 	}
 	
-	/* here we would sort the array of processes by some sort key */
 	allproclen /= sizeof(*allproc);
+	
+	/* sort the array */
+	qsort(allproc, allproclen, sizeof(*allproc), topcompare);
+	
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
 		++nprocs;
 		switch (kp->kp_state) {
