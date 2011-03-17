@@ -172,6 +172,7 @@ STARTUP(int kprintf(const char *fmt, ...))
 				;
 			
 		string_print:
+			if (c == 's' || adjust == LEFT) fill = ' ';
 			width -= len;
 			if (i < 0) --width;
 			if (fill == '0' && i < 0) PUT('-');
