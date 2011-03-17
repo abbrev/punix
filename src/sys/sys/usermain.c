@@ -1400,11 +1400,39 @@ static void updatetop(struct topinfo *info)
 	long la[3];
 	int getloadavg1(long loadavg[], int nelem);
 	static const char procstates[] = "RSDTZ";
+	int nprocs, nrun, nslp, nstop, nzomb;
+	nprocs = nrun = nslp = nstop = nzomb = 0;
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
 	gettimeofday(&tv, NULL);
 	getloadavg1(la, 3);
 	
+	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
+		perror("top: sysctl 1");
+		return;
+	}
+	allproc = malloc(allproclen);
+	if (!allproc) {
+		perror("top: malloc");
+		return;
+	}
+	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
+		perror("top: sysctl 2");
+		return;
+	}
+	
+	/* here we would sort the array of processes by some sort key */
+	allproclen /= sizeof(*allproc);
+	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
+		++nprocs;
+		switch (kp->kp_state) {
+		case PRUN: ++nrun; break;
+		case PSLEEP: case PDSLEEP: ++nslp; break;
+		case PSTOPPED: ++nstop; break;
+		case PZOMBIE: ++nzomb; break;
+		}
+	}
+
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;
@@ -1430,7 +1458,7 @@ static void updatetop(struct topinfo *info)
 	cleareol();
 	/* line 2 */
 	printf("\nTasks: %d total, %d run, %d slp, %d stop, %d zomb",
-	       -1, -1, -1, -1, -1);
+	       nprocs, nrun, nslp, nstop, nzomb);
 	cleareol();
 	/* line 3 */
 	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -1, -1, -1, -1, -1, -1, -1);
@@ -1446,22 +1474,6 @@ static void updatetop(struct topinfo *info)
 	printf("\n" ESC "[7m  PID USER      PR  NI  SHR  RES S  %%CPU   TIME COMMAND" ESC "[m");
 	cleareol();
 	/* line 7- */
-	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
-		perror("top: sysctl 1");
-		return;
-	}
-	allproc = malloc(allproclen);
-	if (!allproc) {
-		perror("top: malloc");
-		return;
-	}
-	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
-		perror("top: sysctl 2");
-		return;
-	}
-	
-	/* here we would sort the array of processes by some sort key */
-	allproclen /= sizeof(*allproc);
 	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
 		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
