@@ -1,17 +1,18 @@
 /*	kprintf() - kernel printf()			Author: Kees J. Bot
  *								15 Jan 1994
  */
+#include <ctype.h>
 #include <stdarg.h>
 #include <limits.h>
 
 #include "punix.h"
 
-#define isdigit(c)	((unsigned) ((c) - '0') <  (unsigned) 10)
-
 /* kprintf() uses kputchar() to print characters. */
 int kputchar(int c);
 
-STARTUP(void kprintf(const char *fmt, ...))
+#define PUT(c) do { kputchar(c); ++count; } while (0)
+
+STARTUP(int kprintf(const char *fmt, ...))
 {
 	int c;
 	enum { LEFT, RIGHT } adjust;
@@ -26,6 +27,7 @@ STARTUP(void kprintf(const char *fmt, ...))
 	long i;
 	unsigned long u;
 	char temp[8 * sizeof(long) / 3 + 2];
+	size_t count = 0;
 	
 	va_list argp;
 	
@@ -34,7 +36,7 @@ STARTUP(void kprintf(const char *fmt, ...))
 	while ((c = *fmt++) != '\0') {
 		if (c != '%') {
 			/* Ordinary character. */
-			kputchar(c);
+			PUT(c);
 			continue;
 		}
 		
@@ -86,27 +88,36 @@ STARTUP(void kprintf(const char *fmt, ...))
 		i = 0;
 		base = 10;
 		intsize = INT;
-		if (c == 'l' || c == 'L') {
+		if (c == 'l' || c == 'j' || c == 't' || c == 'z') {
 			/* "Long" key, e.g. %ld. */
 			intsize = LONG;
+			c = *fmt++;
+		} else if (c == 'h') {
 			c = *fmt++;
 		}
 		if (c == '\0') break;
 		
 		switch (c) {
-			/* Decimal.  Note that %D is treated as %ld. */
-		case 'D':
-			intsize= LONG;
 		case 'd':
+		case 'i':
 			i = intsize == LONG
 				? va_arg(argp, long)
 				: va_arg(argp, int);
 			u = i < 0 ? -i : i;
 			goto int2ascii;
+		
+			/* pointer */
+		case 'p':
+			intsize = LONG;
+			/* leading zeroes */
+			fill = '0';
+			/* print at least six digits */
+			width = width < 6 ? 6 : width;
+			/* hexadecimal */
+			base = 0x10;
+			goto getint;
 			
 			/* Octal. */
-		case 'O':
-			intsize = LONG;
 		case 'o':
 			base = 010;
 			goto getint;
@@ -119,8 +130,6 @@ STARTUP(void kprintf(const char *fmt, ...))
 			goto getint;
 			
 			/* Unsigned decimal. */
-		case 'U':
-			intsize = LONG;
 		case 'u':
 		getint:
 			u = intsize == LONG
@@ -159,27 +168,26 @@ STARTUP(void kprintf(const char *fmt, ...))
 		string_print:
 			width -= len;
 			if (i < 0) --width;
-			if (fill == '0' && i < 0) kputchar('-');
+			if (fill == '0' && i < 0) PUT('-');
 			if (adjust == RIGHT) {
-				for (; width > 0; --width) kputchar(fill);
+				for (; width > 0; --width) PUT(fill);
 			}
-			if (fill == ' ' && i < 0) kputchar('-');
+			if (fill == ' ' && i < 0) PUT('-');
 			for (; len > 0; --len)
-				kputchar((unsigned char) *p++);
+				PUT((unsigned char) *p++);
 			for (; width > 0; --width)
-				kputchar(fill);
+				PUT(fill);
 			break;
 			
 			/* Unrecognized format key, echo it back. */
 		default:
-			kputchar('%');
-			kputchar(c);
+			PUT('%');
+			PUT(c);
 		}
 	}
 	
-	/* Mark the end with a null (should be something else, like -1). */
-	/*kputchar('\0');*/
 	va_end(argp);
+	return count;
 }
 
 /*
