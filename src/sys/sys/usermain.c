@@ -882,7 +882,7 @@ static int ps_main(int argc, char **argv, char **envp)
 		perror("ps");
 		return 1;
 	}
-	printf("%5s %4s %9s %s\n", "PID", "TTY", "TIME", "CMD");
+	printf("%5s %4s %8s %s\n", "PID", "TTY", "TIME", "CMD");
 	allproclen /= sizeof(struct kinfo_proc);
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
 		long s;
@@ -892,7 +892,7 @@ static int ps_main(int argc, char **argv, char **envp)
 		s %= 3600;
 		m = s / 60;
 		s %= 60;
-		printf("%5d %04x %02.3d:%02d:%02ld %s\n",
+		printf("%5d %04x %02d:%02d:%02ld %s\n",
 		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd);
 	}
 	return 0;
