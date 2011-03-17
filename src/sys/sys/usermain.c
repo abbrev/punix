@@ -882,11 +882,18 @@ static int ps_main(int argc, char **argv, char **envp)
 		perror("ps");
 		return 1;
 	}
-	printf("%5s %4s %8s %s\n", "PID", "TTY", "TIME", "CMD");
+	printf("%5s %4s %9s %s\n", "PID", "TTY", "TIME", "CMD");
 	allproclen /= sizeof(struct kinfo_proc);
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
-		printf("%5d %04x %8ld %s\n",
-		       kp->kp_pid, kp->kp_tty, kp->kp_ctime, kp->kp_cmd);
+		long s;
+		int h, m;
+		s = kp->kp_ctime;
+		h = s / 3600;
+		s %= 3600;
+		m = s / 60;
+		s %= 60;
+		printf("%5d %04x %02.3d:%02d:%02ld %s\n",
+		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd);
 	}
 	return 0;
 }
@@ -1379,18 +1386,22 @@ static void updatetop(struct topinfo *info)
 {
 	long t;
 	int day, hour, minute, second;
-	time_t up = 0;
 	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL };
 	unsigned miblen = sizeof(mib) / sizeof(*mib);
 	struct kinfo_proc *allproc = NULL;
 	struct kinfo_proc *kp;
 	size_t allproclen;
+	int upmib[] = { CTL_KERN, KERN_UPTIME };
+	unsigned upmiblen = sizeof(upmib) / sizeof(*upmib);
+	time_t up = 0;
+	size_t uplen = sizeof(long);
 	struct timeval tv;
 	int i;
 	long la[3];
 	int getloadavg1(long loadavg[], int nelem);
 	static const char procstates[] = "RSDTZ";
 
+	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
 	gettimeofday(&tv, NULL);
 	getloadavg1(la, 3);
 	
@@ -1410,7 +1421,7 @@ static void updatetop(struct topinfo *info)
 	if (day) {
 		printf("%d+", day);
 	}
-	printf("%02d:%02d, %d user, load:", hour, minute, 1);
+	printf("%02d:%02d, %d user, load:", hour, minute, -1);
 	for (i = 0; i < 3; ++i) {
 		if (i > 0) putchar(',');
 		printf(" %ld.%02ld", la[i] >> 16,
@@ -1419,14 +1430,14 @@ static void updatetop(struct topinfo *info)
 	cleareol();
 	/* line 2 */
 	printf("\nTasks: %d total, %d run, %d slp, %d stop, %d zomb",
-	       1, 1, 0, 0, 0);
+	       -1, -1, -1, -1, -1);
 	cleareol();
 	/* line 3 */
-	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", 0, 0, 0, 0, 0, 0, 0, 0);
+	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -1, -1, -1, -1, -1, -1, -1);
 	cleareol();
 	/* line 4 */
 	printf("\nMem: %ldk total, %ldk used, %ldk free, %ldk buffers",
-	       0L, 0L, 0L, 0L);
+	       -1L, -1L, -1L, -1L);
 	cleareol();
 	/* line 5 */
 	putchar('\n');
