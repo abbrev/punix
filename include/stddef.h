@@ -12,6 +12,6 @@
 #define offsetof(type, member)	((size_t)(&((type *)0)->member))
 
 typedef long	ptrdiff_t;
-typedef char	wchar_t;	/* XXX */
+typedef long	wchar_t;
 
 #endif /* _STDDEF_H_ */
