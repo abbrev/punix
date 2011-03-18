@@ -196,10 +196,6 @@ STARTUP(static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
 			base = 0x10;
 			goto getint;
 			
-		case 'z':
-			intsize = LONG;
-			/* fall through */
-		
 			/* Unsigned decimal. */
 		case 'u':
 		getint:
