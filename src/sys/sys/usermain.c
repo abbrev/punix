@@ -1381,10 +1381,16 @@ static void updatetop(struct topinfo *info)
 }
 #else
 
-static int topcompare(const void *a, const void *b)
+static int topcompare_tty(const void *a, const void *b)
 {
-	struct kinfo_proc *proca = a, *procb = b;
-	return procb->kp_pcpu - proca->kp_pcpu; /* sort in descending order */
+	struct kinfo_proc *const *proca = a, *const *procb = b;
+	return (*proca)->kp_tty - (*procb)->kp_tty;
+}
+
+static int topcompare_pcpu(const void *a, const void *b)
+{
+	struct kinfo_proc *const *proca = a, *const *procb = b;
+	return (*procb)->kp_pcpu - (*proca)->kp_pcpu; /* sort in descending order */
 }
 
 /* use sysctl() to get system and process information */
@@ -1395,8 +1401,10 @@ static void updatetop(struct topinfo *info)
 	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL };
 	unsigned miblen = sizeof(mib) / sizeof(*mib);
 	struct kinfo_proc *allproc = NULL;
-	struct kinfo_proc *kp;
 	size_t allproclen;
+	struct kinfo_proc **allprocp = NULL;
+	struct kinfo_proc *kp;
+	struct kinfo_proc **kpp;
 	int upmib[] = { CTL_KERN, KERN_UPTIME };
 	unsigned upmiblen = sizeof(upmib) / sizeof(*upmib);
 	time_t up = 0;
@@ -1407,7 +1415,9 @@ static void updatetop(struct topinfo *info)
 	int getloadavg1(long loadavg[], int nelem);
 	static const char procstates[] = "RSDTZ";
 	int nprocs, nrun, nslp, nstop, nzomb;
-	nprocs = nrun = nslp = nstop = nzomb = 0;
+	int nusers;
+	dev_t lasttty = 0;
+	nprocs = nrun = nslp = nstop = nzomb = nusers = 0;
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
 	gettimeofday(&tv, NULL);
@@ -1424,24 +1434,40 @@ static void updatetop(struct topinfo *info)
 	}
 	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
 		perror("top: sysctl 2");
-		return;
+		goto free;
+	}
+	allproclen /= sizeof(*allproc);
+
+	allprocp = malloc(allproclen * sizeof(void *));
+	if (!allprocp) {
+		perror("top: allprocp");
+		goto free;
+	}
+	/* use pointers to procs in allproc array for sorting etc */
+	for (kpp = &allprocp[0], kp = &allproc[0];
+	     kpp < &allprocp[allproclen]; ++kpp, ++kp) {
+		*kpp = kp;
 	}
 	
-	allproclen /= sizeof(*allproc);
+	/* sort the array by tty */
+	qsort(allprocp, allproclen, sizeof(void *), topcompare_tty);
 	
-	/* sort the array */
-	qsort(allproc, allproclen, sizeof(*allproc), topcompare);
-	
-	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
+	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
 		++nprocs;
-		switch (kp->kp_state) {
+		switch ((*kpp)->kp_state) {
 		case PRUN: ++nrun; break;
 		case PSLEEP: case PDSLEEP: ++nslp; break;
 		case PSTOPPED: ++nstop; break;
 		case PZOMBIE: ++nzomb; break;
 		}
+		/* count users by tty, excluding tty 0 (= no tty) */
+		if ((*kpp)->kp_tty != lasttty) ++nusers;
+		lasttty = (*kpp)->kp_tty;
 	}
 
+	/* sort the array by cpu usage */
+	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
+	
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;
@@ -1458,7 +1484,8 @@ static void updatetop(struct topinfo *info)
 	if (day) {
 		printf("%d+", day);
 	}
-	printf("%02d:%02d, %d user, load:", hour, minute, -1);
+	printf("%02d:%02d, %d user%s, load:",
+	       hour, minute, nusers, nusers == 1 ? "" : "s");
 	for (i = 0; i < 3; ++i) {
 		if (i > 0) putchar(',');
 		printf(" %ld.%02ld", la[i] >> 16,
@@ -1484,19 +1511,21 @@ static void updatetop(struct topinfo *info)
 	cleareol();
 	/* line 7- */
 	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
-	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
+	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
 		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
-		       kp->kp_pid, kp->kp_euid, 0,
-		       kp->kp_nice, 0L, 0L, procstates[kp->kp_state],
-		       kp->kp_pcpu / 256, (kp->kp_pcpu % 256) * 10 / 256,
-		       (int)((kp->kp_ctime / CLOCKS_PER_SEC) / 60),
-		       (int)((kp->kp_ctime / CLOCKS_PER_SEC) % 60),
-		       kp->kp_cmd);
+		       (*kpp)->kp_pid, (*kpp)->kp_euid, 0,
+		       (*kpp)->kp_nice, 0L, 0L, procstates[(*kpp)->kp_state],
+		       (*kpp)->kp_pcpu / 256, ((*kpp)->kp_pcpu % 256) * 10 / 256,
+		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) / 60),
+		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) % 60),
+		       (*kpp)->kp_cmd);
 		cleareol();
 	}
-	free(allproc);
 	/* clear to the end of the screen */
 	printf(ESC "[J" ESC "[5H");
+free:
+	free(allproc);
+	free(allprocp);
 }
 #endif
 
@@ -1972,7 +2001,7 @@ static int spawn_getty(const char *dev)
 	int pid = vfork();
 	if (pid == 0) {
 		argv[0] = "getty";
-		argv[1] = dev;
+		argv[1] = (char *)dev;
 		argv[2] = NULL;
 		execve(argv[0], argv, envp);
 		_exit(127);
