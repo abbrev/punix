@@ -4,7 +4,7 @@
 struct flashblock {
 	long blockno;
 	char data[BLOCKSIZE];
-} __attribute__((packed));
+};
 
 struct flash_cache_entry {
 	long blkno;
