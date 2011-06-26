@@ -1424,7 +1424,7 @@ static int updatetop(struct topinfo *info)
 	int nprocs, nrun, nslp, nstop, nzomb;
 	int nusers;
 	dev_t lasttty = 0;
-	int status;
+	int status = 0;
 	nprocs = nrun = nslp = nstop = nzomb = nusers = 0;
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
