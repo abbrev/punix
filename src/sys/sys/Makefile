@@ -48,7 +48,7 @@ OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o bogomips.o
 OBJ	+= fpuemu.o sysctl.o
-OBJ	+= userstart.o usermain.o qsort.o
+OBJ	+= userstart.o usermain.o qsort.o fs.o
 
 #OBJ = testvectors.o
 

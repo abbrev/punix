@@ -102,6 +102,15 @@ static void iomove(void *cp, int n, int flag)
         return;
 }
 
+/*
+ * FIXME: This whole routine needs to be gone. The filesystem code is
+ * responsible for reading/writing data in an inode given a starting position,
+ * buffer, and byte count. All we need to do here is call the routine that the
+ * filesystem gave us for this inode:
+ *   inop->iops->read(inop, pos, buf, count);
+ * or:
+ *   inop->iops->write(inop, pos, buf, count);
+ */
 void rdwr_inode(struct inode *inop, int mode)
 {
 	struct buf *bufp;
@@ -111,6 +120,7 @@ void rdwr_inode(struct inode *inop, int mode)
 	int on, n;
 	int type;
 	int bmode = mode == FREAD ? B_READ : B_WRITE;
+	ssize_t x;
 	
 	if (mode == FREAD && P.p_count == 0) return;
 	if (P.p_offset < 0) {
@@ -132,54 +142,16 @@ void rdwr_inode(struct inode *inop, int mode)
         }
 	if (mode == FWRITE && P.p_count == 0) return;
 	
-	do {
-		lbn = bn = P.p_offset >> BLOCKSHIFT;
-		on = P.p_offset & BLOCKMASK;
-		n = MIN((unsigned)(BLOCKSIZE-on), P.p_count);
-                if (type != IFBLK) {
-			if (mode == FREAD) {
-				diff = inop->i_size - P.p_offset;
-				if (diff <= 0)
-					return;
-				if (diff < n)
-					n = diff;
-				bn = pfs_bmap(inop, bn, bmode);
-				if (P.p_error)
-					return;
-			} else {
-				bn = pfs_bmap(inop, bn, bmode);
-				if ((long)bn < 0)
-					return;
-			}
-			dev = inop->i_dev;
-                }
-		if (mode == FREAD) {
-			if ((long)bn < 0) {
-				bufp = blk_get(NODEV, 0);
-				blk_clear(bufp);
-			} else
-				bufp = blk_read(dev, bn);
-			n = MIN((unsigned)n, BLOCKSIZE-bufp->b_resid);
-			if (mode == FWRITE || n)
-				iomove(bufp->b_addr + on, n, bmode);
-			blk_release(bufp);
-			if (n <= 0) break;
-		} else {
-			if (n == BLOCKSIZE)
-				bufp = blk_get(dev, bn);
-			else
-				bufp = blk_read(dev, bn);
-			if (mode == FWRITE || n)
-				iomove(bufp->b_addr + on, n, bmode);
-			if (P.p_error)
-				blk_release(bufp);
-			else
-				blk_write_delay(bufp);
-			if (P.p_offset > inop->i_size && (type == IFDIR || type == IFREG))
-				inop->i_size = P.p_offset;
-			inop->i_flag |= IUPD|ICHG;
-		}
-	} while (!P.p_error && P.p_count != 0);
+	if (mode == FREAD)
+		x = inop->iops->read(inop, P.p_offset, P.p_base, P.p_count);
+	else
+		x = inop->iops->write(inop, P.p_offset, P.p_base, P.p_count);
+	
+	if (x >= 0) {
+		P.p_base += x;
+		P.p_offset += x;
+		P.p_count -= x;
+	}
 }
 
 void read_inode(struct inode *inop)
