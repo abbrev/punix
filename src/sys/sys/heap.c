@@ -310,7 +310,6 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 		return NULL;
 	}
 	
-	//kprintf("memrealloc: hp=%p\n", hp);
 	oldsize = hp->end - hp->start;
 	ptr = &G.heap.heap[hp->start];
 	
@@ -371,8 +370,6 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 	}
 		
 done:
-	//kprintf("memrealloc: ptr=   %p oldsize=%d\n", ptr, oldsize);
-	//kprintf("            newptr=%p newsize=%d\n", &G.heap.heap[hp->start], size);
 	*newsizep = (size_t)HEAPBLOCKSIZE * size;
 	return &G.heap.heap[hp->start];
 }
