@@ -334,11 +334,11 @@ void sys_chmod()
 	ip->i_mode &= ~07777;
 	mode = ap->mode;
 	if (P.p_euid)
-		mode &= ~ISVTX;
+		mode &= ~S_ISVTX;
 	ip->i_mode |= mode & 07777;
 	ip->i_flag |= ICHG;
 #if 0
-	if (ip->i_flag&ITEXT && !(ip->i_mode&ISVTX))
+	if (ip->i_flag&ITEXT && !(ip->i_mode&S_ISVTX))
 		xrele(ip);
 #endif
 	i_unref(ip);

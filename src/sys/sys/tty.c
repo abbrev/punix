@@ -1,6 +1,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <termios.h>
+#include <errno.h>
 
 #include "punix.h"
 #include "buf.h"
@@ -76,6 +77,55 @@ void ttyclose(struct tty *tp)
 void ttyioctl(dev_t dev, int cmd, void *cmarg)
 {
 	/* FIXME */
+}
+
+ssize_t tty_read(struct tty *tp, void *buf, size_t count)
+{
+	char ch;
+	int lflag = tp->t_lflag;
+	cc_t *cc = tp->t_termios.c_cc;
+	struct queue *qp;
+	int havec = 0;
+	size_t n = 0;
+
+	if (count == 0) return 0;
+
+	qp = (lflag & ICANON) ? &tp->t_canq : &tp->t_rawq;
+
+loop:
+	/* TODO: also check for the tty closing */
+	while (qisempty(qp)) {
+		slp(&tp->t_rawq, 1);
+	}
+
+	while ((ch = qgetc(qp)) >= 0 && count > 0) {
+		if ((lflag & ICANON)) {
+			int numc = tp->t_numc;
+			tp->t_numc = !TTBREAKC(ch);
+			if (ch == cc[VEOF]) {
+				if (numc && !havec) {
+					goto loop;
+				} else {
+					break;
+				}
+			}
+		}
+		havec = 1;
+		if (copyout(buf, &ch, 1)) {
+			if (n == 0) {
+				P.p_error = EFAULT;
+				return -1;
+			} else {
+				return n;
+			}
+		}
+		++buf;
+		++n;
+		--count;
+		if ((lflag & ICANON) && TTBREAKC(ch))
+			break;
+	}
+	return n;
 }
 
 void ttyread(struct tty *tp)

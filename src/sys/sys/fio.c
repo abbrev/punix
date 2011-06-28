@@ -111,6 +111,7 @@ static void iomove(void *cp, int n, int flag)
  * or:
  *   inop->iops->write(inop, pos, buf, count);
  */
+#if 0
 void rdwr_inode(struct inode *inop, int mode)
 {
 	struct buf *bufp;
@@ -143,9 +144,9 @@ void rdwr_inode(struct inode *inop, int mode)
 	if (mode == FWRITE && P.p_count == 0) return;
 	
 	if (mode == FREAD)
-		x = inop->iops->read(inop, P.p_offset, P.p_base, P.p_count);
+		x = inop->i_ops->read(inop, P.p_offset, P.p_base, P.p_count);
 	else
-		x = inop->iops->write(inop, P.p_offset, P.p_base, P.p_count);
+		x = inop->i_ops->write(inop, P.p_offset, P.p_base, P.p_count);
 	
 	if (x >= 0) {
 		P.p_base += x;
@@ -163,6 +164,7 @@ void write_inode(struct inode *inop)
 {
 	rdwr_inode(inop, FWRITE);
 }
+#endif
 
 #if 0 /* TAINTED */
 STARTUP(struct file *getf(int fd))

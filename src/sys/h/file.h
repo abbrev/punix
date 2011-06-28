@@ -27,6 +27,16 @@
 #define FREAD  O_RDONLY
 #define FWRITE O_WRONLY
 
+struct file;
+struct inode;
+
+struct fileops {
+	int (*open)(struct file *, struct inode *);
+	ssize_t (*read)(struct file *, void *, size_t);
+	ssize_t (*write)(struct file *, void *, size_t);
+	off_t (*lseek)(struct file *, off_t, int);
+};
+
 /*
  * Descriptor table entry.
  * One for each kernel object.
@@ -37,27 +47,19 @@ struct file {
 	unsigned char	f_type;		/* descriptor type */
 	unsigned short	f_count;	/* reference count */
 	struct inode *	f_inode;	/* pointer to inode structure */
+	struct fileops *f_ops;
 #if 0
 	short		f_msgcount;	/* references from message queue */
 #endif
 	off_t		f_offset;
 };
 
-extern struct file file[NFILE];
+//extern struct file file[NFILE];
 
 /* values for file.f_type */
 #define	DTYPE_INODE	1	/* file */
 #define	DTYPE_SOCKET	2	/* not used in Punix */
 #define	DTYPE_PIPE	3	/* */
-
-/*
-struct fileops {
-	int	(*fo_rw)();
-	int	(*fo_ioctl)();
-	int	(*fo_select)();
-	int	(*fo_close)();
-};
-*/
 
 struct file *getf(int fd);
 int ufalloc(int);

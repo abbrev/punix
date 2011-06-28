@@ -934,7 +934,7 @@ void sys_chdir()
 #endif
 	if (!ip)
 		return;
-	if (!(ip->i_mode & IFDIR)) {
+	if (!(ip->i_mode & S_IFDIR)) {
 		P.p_error = ENOTDIR;
 		return;
 	}

@@ -51,18 +51,20 @@ void miscopen(dev_t, int), miscclose(dev_t, int);
 void miscread(dev_t), miscwrite(dev_t);
 void miscioctl(dev_t, int, ...);
 
+extern struct fileops vt_fileops;
+
 /* eventually put the following devices into cdevsw:
  * USB port (for HW3)
  */
 const struct cdevsw cdevsw[] = {
-{ miscopen,   nulldev,     miscread,   miscwrite,   miscioctl   }, /* misc */
+{ NULL, miscopen,   nulldev,     miscread,   miscwrite,   miscioctl   }, /* misc */
 #if 1
-{ vtopen,     vtclose,     vtread,     vtwrite,     vtioctl     }, /* vt */
+{ &vt_fileops, vtopen,     vtclose,     vtread,     vtwrite,     vtioctl     }, /* vt */
 #endif
-{ devttyopen, devttyclose, devttyread, devttywrite, devttyioctl }, /* tty */
-{ linkopen,   linkclose,   linkread,   linkwrite,   linkioctl   }, /* link */
-{ audioopen,  audioclose,  audioread,  audiowrite,  audioioctl  }, /* audio */
-{ 0, 0, 0, 0, 0 }
+{ NULL, devttyopen, devttyclose, devttyread, devttywrite, devttyioctl }, /* tty */
+{ NULL, linkopen,   linkclose,   linkread,   linkwrite,   linkioctl   }, /* link */
+{ NULL, audioopen,  audioclose,  audioread,  audiowrite,  audioioctl  }, /* audio */
+{ NULL, 0, 0, 0, 0, 0 }
 };
 
 const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;

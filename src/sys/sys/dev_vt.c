@@ -1621,13 +1621,58 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 	ttyopen(dev, tp);
 }
 
+int vt_open(struct file *fp, struct inode *ip)
+{
+	// XXX
+	vtopen(ip->i_rdev, 0); // XXX: rw
+	return 0;
+}
+
 void vtclose(dev_t dev, int rw)
 {
+}
+
+ssize_t tty_read(struct tty *tp, void *buf, size_t count);
+ssize_t vt_read(struct file *fp, void *buf, size_t count)
+{
+	dev_t dev = fp->f_inode->i_rdev;
+	return tty_read(&G.vt.vt[MINOR(dev)], buf, count);
 }
 
 void vtread(dev_t dev)
 {
 	ttyread(&G.vt.vt[MINOR(dev)]);
+}
+
+size_t vt_write(struct file *fp, void *buf, size_t count)
+{
+	size_t n = 0;
+	char ch;
+	dev_t dev = fp->f_inode->i_rdev;
+	struct tty *tp = &G.vt.vt[MINOR(dev)];
+
+#if 0
+	/* we do need to be sure the tty device is open, but we'll ignore this
+	 * for now */
+	if (!(tp->t_state & ISOPEN)) {
+		P.p_error = ENXIO; // ???
+		return -1;
+	}
+#endif
+
+	while (count > 0) {
+		if (copyin(&ch, buf, 1)) {
+			if (n) return n;
+			P.p_error = EFAULT;
+			return -1;
+		}
+		ttyoutput(ch, tp);
+		++buf;
+		++n;
+		--count;
+	}
+
+	return n;
 }
 
 void vtwrite(dev_t dev)
@@ -1648,3 +1693,9 @@ void vtwrite(dev_t dev)
 void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
 {
 }
+
+const struct fileops vt_fileops = {
+	.open = vt_open,
+	.read = vt_read,
+	.write = vt_write,
+};

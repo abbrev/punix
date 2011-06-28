@@ -44,11 +44,11 @@ OBJ	+= kputs.o scroll.o
 OBJ	+= copy.o fio.o
 OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
 OBJ	+= context.o
-OBJ	+= long.o subr.o tty.o inode.o process.o pfs_alloc.o pfs_bmap.o
+OBJ	+= long.o subr.o tty.o inode.o process.o #pfs_alloc.o pfs_bmap.o
 OBJ	+= panic.o abort.o assert.o kprintf.o printf.o clock.o #globals.o
 OBJ	+= ffs.o loadav.o drawglyph.o heap.o sched.o bogomips.o
 OBJ	+= fpuemu.o sysctl.o
-OBJ	+= userstart.o usermain.o qsort.o fs.o
+OBJ	+= userstart.o usermain.o qsort.o file.o fs.o fs_tmpfs.o
 
 #OBJ = testvectors.o
 

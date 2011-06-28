@@ -61,6 +61,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <assert.h>
 
 #include "proc.h"
 #include "file.h"
@@ -99,39 +100,39 @@ STARTUP(static void rdwr(int mode))
 	}
 	P.p_base = ap->buf;
 	P.p_count = ap->count;
+	ssize_t n;
 	
 	/* if we were interrupted by a signal, just return the byte count if
 	 * it's not zero, else return an error */
 	if (setjmp(P.p_sigjmp)) {
-		if (P.p_count == ap->count) {
+		n = ap->count - P.p_count;
+		if (n == 0) {
 			P.p_error = EINTR;
-			return;
 		} else {
-			goto out;
+			P.p_retval = n;
 		}
+		return;
 	}
 	
-	if (fp->f_type == DTYPE_PIPE) {
-		if (mode == FREAD)
-			readp(fp);
-		else
-			writep(fp);
+	assert(fp->f_ops);
+	if (mode == FREAD) {
+		assert(fp->f_ops->read);
+		n = fp->f_ops->read(fp, ap->buf, ap->count);
 	} else {
-		struct inode *ip = fp->f_inode;
-		P.p_offset = fp->f_offset;
-		
-		if (!(ip->i_mode & IFCHR))
-			i_lock(ip);
-		
-		rdwr_inode(ip, mode);
-		
-		if (!(ip->i_mode & IFCHR))
-			i_unlock(ip);
-		
-		fp->f_offset += ap->count - P.p_count;
+		assert(fp->f_ops->write);
+#if 0
+		kprintf("%s (%d): fp->f_ops->write=%p\n",
+		        __FILE__, __LINE__, fp->f_ops->write);
+#endif
+		n = fp->f_ops->write(fp, ap->buf, ap->count);
 	}
-out:
-	P.p_retval = ap->count - P.p_count;
+
+	// n is -1 if one of the above routines catches a signal
+	// otherwise the signal will take us to the setjmp() above
+	if (n == -1)
+		return;
+
+	P.p_retval = n;
 }
 
 STARTUP(void sys_read(void))
@@ -198,13 +199,14 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	int i;
 	int inomode;
 	
+#if 0
 	fd = falloc();
 	if (fd < 0)
 		return;
 	fp = P.p_ofile[fd];
 	fp->f_flag = flags & O_RDWR;
 	fp->f_type = DTYPE_INODE;
-	mode = mode & 077777 & ~ISVTX;
+	mode = mode & 077777 & ~S_ISVTX;
 	
 	/* eliminate invalid flag combinations */
 	
@@ -213,8 +215,21 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 		inomode = INO_CREATE;
 	
 	/* ... */
+#endif
 	P.p_error = EMFILE;
 }
+
+int cdev_open(struct file *fp, struct inode *ip)
+{
+	fp->f_ops = cdevsw[MAJOR(ip->i_rdev)].fileops;
+	assert(fp->f_ops);
+	assert(fp->f_ops->open);
+	return fp->f_ops->open(fp, ip);
+}
+
+const struct fileops cdev_fileops = {
+	.open = cdev_open
+};
 
 /* open system call */
 /* FIXME: open is currently just a hack to produce results */
@@ -231,6 +246,7 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
+	kprintf("sys_open: path=\"%s\"\n", ap->pathname);
 	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
 	if (!strcmp(ap->pathname, "/dev/vt"))
 		ip->i_rdev = DEV_VT;
@@ -250,20 +266,25 @@ STARTUP(void sys_open())
 		P.p_error = ENOENT;
 		return;
 	}
-	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
-	if (P.p_error)
-		return;
+	ip->i_fops = &cdev_fileops;
+	//cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
+	//if (P.p_error)
+		//return;
 
-	ip->i_mode = IFCHR;
+	ip->i_mode = S_IFCHR;
 	fd = falloc();
 	if (fd < 0)
 		return;
+	ip->i_num = G.nextinode;
 	++G.nextinode;
 	
 	fp = P.p_ofile[fd];
 	fp->f_flag = O_RDWR;
 	fp->f_type = DTYPE_INODE;
 	fp->f_inode = ip;
+	ip->i_fops->open(fp, ip);
+	assert(fp->f_ops);
+	assert(fp->f_ops->read);
 	
 	P.p_retval = fd;
 #else
@@ -298,16 +319,17 @@ STARTUP(void closef(struct file *fp))
 	
 	i_lock(inop);
 	if (fp->f_type == DTYPE_PIPE) {
-		inop->i_mode &= ~(IREAD | IWRITE);
+		//inop->i_mode &= ~(IREAD | IWRITE);
+		#warning what do IREAD and IWRITE mean??
 		wakeup(inop); /* XXX */
 	}
 	i_unref(inop);
 	
-	switch (inop->i_mode & IFMT) {
-	case IFCHR:
+	switch (inop->i_mode & S_IFMT) {
+	case S_IFCHR:
 		cdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
 		break;
-	case IFBLK:
+	case S_IFBLK:
 		bdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
 	}
 }

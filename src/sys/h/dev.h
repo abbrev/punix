@@ -35,6 +35,8 @@ extern const int nblkdev;
  */
 struct	cdevsw
 {
+	struct fileops *fileops;
+	/* TODO: eventually remove the fields below (they are redundant */
 	void	(*d_open)(dev_t dev, int rw);
 	void	(*d_close)(dev_t dev, int rw);
 	void	(*d_read)(dev_t dev);

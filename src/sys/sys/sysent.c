@@ -71,6 +71,7 @@ void sys_poweroff();
 
 void sys_sysctl();
 
+#define sys_pipe	sys_NONE
 #define sys_link	sys_NONE
 #define sys_unlink	sys_NONE
 #define sys_chdir	sys_NONE
