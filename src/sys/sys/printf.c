@@ -45,12 +45,21 @@ STARTUP(int putchar(int c))
 
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-	size_t count = size * nmemb;
-	while (count > 0) {
-		putchar(*(char *)ptr++);
-		--count;
+	size_t m = nmemb;
+	while (m) {
+		ssize_t n;
+		size_t s = size;
+
+		while (s) {
+			n = write(1, ptr, s);
+			if (n < 0) goto out;
+			ptr += n;
+			s -= n;
+		}
+		--m;
 	}
-	return size * nmemb;
+out:
+	return nmemb - m;
 }
 
 typedef int (*vcbnprintf_callback_t)(int c, void *arg);
