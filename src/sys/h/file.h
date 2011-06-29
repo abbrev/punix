@@ -23,7 +23,7 @@
 #include <limits.h>
 #include "list.h"
 
-/* FREAD and FWRITE are for file.f_flag member */
+/* FREAD and FWRITE are for file.f_flags member */
 #define FREAD  O_RDONLY
 #define FWRITE O_WRONLY
 
@@ -32,9 +32,11 @@ struct inode;
 
 struct fileops {
 	int (*open)(struct file *, struct inode *);
+	int (*close)(struct file *);
 	ssize_t (*read)(struct file *, void *, size_t);
 	ssize_t (*write)(struct file *, void *, size_t);
 	off_t (*lseek)(struct file *, off_t, int);
+	int (*ioctl)(struct file *, int, void *);
 };
 
 /*
@@ -43,7 +45,7 @@ struct fileops {
  */
 struct file {
 	struct list_head f_list;
-	unsigned char	f_flag;		/* see below */
+	unsigned char	f_flags;
 	unsigned char	f_type;		/* descriptor type */
 	unsigned short	f_count;	/* reference count */
 	struct inode *	f_inode;	/* pointer to inode structure */

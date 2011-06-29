@@ -2,6 +2,7 @@
 #define _INODE_H_
 
 struct inodeops;
+struct filesystem;
 
 struct inode {
 	unsigned short i_flag;
@@ -12,7 +13,7 @@ struct inode {
 	//unsigned short	flag;
 	//dev_t	i_dev; // is this needed?
 	ino_t	i_num;
-	struct	fs *i_fs;
+	struct	filesystem *i_fs;
 	
 	/* following fields are stored on the device */
 	unsigned short	i_mode;	/* mode and type of file */
@@ -31,7 +32,7 @@ struct inode {
 };
 
 struct inodeops {
-	struct inode *(*lookup)(struct inode *dirinode, const char *name, int follow);
+	struct inode *(*lookup)(struct inode *dirinode, const char *path, int follow);
 	/* other operations */
 };
 

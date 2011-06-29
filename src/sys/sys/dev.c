@@ -25,8 +25,8 @@ extern void flstrategy(struct buf *);
 extern const struct devtab fltab;
 
 const struct bdevsw bdevsw[] = {
-	{ flopen, flclose, flstrategy, &fltab }, /* flash */
-	{ 0, 0, 0, 0 }
+	{ NULL, flopen, flclose, flstrategy, &fltab }, /* flash */
+	{ NULL, 0, 0, 0, 0 }
 };
 
 const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
@@ -51,13 +51,13 @@ void miscopen(dev_t, int), miscclose(dev_t, int);
 void miscread(dev_t), miscwrite(dev_t);
 void miscioctl(dev_t, int, ...);
 
-extern struct fileops vt_fileops;
+extern const struct fileops vt_fileops, misc_fileops;
 
 /* eventually put the following devices into cdevsw:
  * USB port (for HW3)
  */
 const struct cdevsw cdevsw[] = {
-{ NULL, miscopen,   nulldev,     miscread,   miscwrite,   miscioctl   }, /* misc */
+{ &misc_fileops, miscopen,   nulldev,     miscread,   miscwrite,   miscioctl   }, /* misc */
 #if 1
 { &vt_fileops, vtopen,     vtclose,     vtread,     vtwrite,     vtioctl     }, /* vt */
 #endif

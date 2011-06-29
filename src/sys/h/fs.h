@@ -18,8 +18,8 @@ struct fsops {
 	struct inode *(*alloc_inode)(struct filesystem *);
 	void (*free_inode)(struct inode *);
 
-	int (*read_inode)(struct filesystem *fs, struct inode *);
-	void (*write_inode)(struct filesystem *fs, struct inode *inode);
+	int (*read_inode)(struct inode *);
+	void (*write_inode)(struct inode *inode);
 	/* other operations, eg, get info about the fs */
 };
 

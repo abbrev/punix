@@ -13,6 +13,13 @@
 
 extern void slp(void *, int);
 
+
+off_t pipe_lseek(struct file *fp, off_t offset, int whence)
+{
+	P.p_error = ESPIPE;
+	return -1;
+}
+
 #if 0
 /* TODO: rewrite pipes */
 

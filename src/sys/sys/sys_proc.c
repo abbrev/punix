@@ -413,7 +413,7 @@ void doexit(int status)
 			if (!fp) continue;
 			P.p_ofile[i] = NULL;
 			fdflags_to_oflag(i, 0L);
-			closef(fp);
+			fp->f_ops->close(fp);
 		}
 	}
 	release_resources();

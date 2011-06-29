@@ -48,7 +48,7 @@ void sys_mount()
 	}
 	return;
 found:
-	root_inode = fs->fsops->read_inode(fs, fs->root_inum);
+	//root_inode = fs->fsops->read_inode(fs->root_inum);
 	/* TODO: mount this filesystem */
 }
 

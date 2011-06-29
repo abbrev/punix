@@ -1675,6 +1675,11 @@ size_t vt_write(struct file *fp, void *buf, size_t count)
 	return n;
 }
 
+int vt_close(struct file *fp)
+{
+	return 0;
+}
+
 void vtwrite(dev_t dev)
 {
 	struct tty *tp = &G.vt.vt[MINOR(dev)];
@@ -1694,8 +1699,20 @@ void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
 {
 }
 
+int vt_ioctl(struct file *fp, int request, void *arg)
+{
+	// TODO: support tty ioctl's
+	P.p_error = EINVAL;
+	return -1;
+}
+
+off_t pipe_lseek(struct file *, off_t, int);
+
 const struct fileops vt_fileops = {
 	.open = vt_open,
+	.close = vt_close,
 	.read = vt_read,
 	.write = vt_write,
+	.lseek = pipe_lseek,
+	.ioctl = vt_ioctl,
 };

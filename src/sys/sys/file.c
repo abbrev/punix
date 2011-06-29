@@ -24,9 +24,11 @@
 #include <limits.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <assert.h>
 
 #include "proc.h"
 #include "file.h"
@@ -40,6 +42,28 @@
 #include "inode.h"
 #include "queue.h"
 #include "globals.h"
+
+int generic_file_open(struct file *fp, struct inode *ip)
+{
+	P.p_error = ENOSYS;
+	return -1;
+}
+
+int generic_file_close(struct file *fp)
+{
+	P.p_error = ENOSYS;
+	return -1;
+}
+
+ssize_t generic_file_read(struct file *fp, void *buf, size_t count)
+{
+	return 0;
+}
+
+ssize_t generic_file_write(struct file *fp, void *buf, size_t count)
+{
+	return 0;
+}
 
 off_t generic_file_lseek(struct file *fp, off_t offset, int whence)
 {
@@ -75,3 +99,33 @@ off_t generic_file_lseek(struct file *fp, off_t offset, int whence)
 	
 	return newoffset;
 }
+
+const struct fileops generic_file_fileops = {
+	.open = generic_file_open,
+	.close = generic_file_close,
+	.read = generic_file_read,
+	.write = generic_file_write,
+	.lseek = generic_file_lseek,
+};
+
+int generic_special_open(struct file *fp, struct inode *ip)
+{
+	int major = MAJOR(ip->i_rdev);
+
+	if (S_ISCHR(ip->i_mode)) {
+		ip->i_fops = cdevsw[major].fileops;
+	} else if (S_ISBLK(ip->i_mode)) {
+		ip->i_fops = bdevsw[major].fileops;
+	} else {
+		abort();
+	}
+	fp->f_ops = ip->i_fops;
+	assert(fp->f_ops);
+	assert(fp->f_ops->open);
+	return fp->f_ops->open(fp, ip);
+}
+
+const struct fileops generic_special_fileops = {
+	.open = generic_special_open,
+};
+

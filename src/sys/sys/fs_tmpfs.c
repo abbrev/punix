@@ -8,7 +8,11 @@
 #include "globals.h"
 #include "fs.h"
 
-struct filesystem *tmpfs_read_filesystem(dev_t);
+
+#define TMPFS_SIGNATURE 0x1234
+
+int tmpfs_read_filesystem(struct fstype *, struct filesystem *, int flags, const char *devname, const void *data);
+
 
 struct fstype tmpfs_fstype = {
 	.name = "tmpfs",
@@ -16,9 +20,10 @@ struct fstype tmpfs_fstype = {
 	.read_filesystem = tmpfs_read_filesystem,
 };
 
-struct filesystem *tmpfs_read_filesystem(dev_t dev)
+int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
+                          int flags, const char *devname, const void *data)
 {
-	return NULL;
+	return 1;
 }
 
 int tmpfs_file_open(struct file *fp, struct inode *ip);
@@ -31,6 +36,18 @@ struct fileops tmpfs_file_ops = {
 	.read = tmpfs_file_read,
 	.write = tmpfs_file_write,
 	.lseek = generic_file_lseek,
+};
+
+struct inode *tmpfs_alloc_inode(struct filesystem *);
+void tmpfs_free_inode(struct inode *);
+int tmpfs_read_inode(struct inode *);
+void tmpfs_write_inode(struct inode *inode);
+
+struct fsops tmpfs_fsops = {
+	.alloc_inode = tmpfs_alloc_inode,
+	.free_inode = tmpfs_free_inode,
+	//.read_inode = tmpfs_read_inode,
+	.write_inode = tmpfs_write_inode,
 };
 
 struct tmpfs_inode {
@@ -94,7 +111,88 @@ ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count)
 	return -1;
 }
 
+
+struct inode *tmpfs_alloc_inode(struct filesystem *fs)
+{
+	struct tmpfs_inode *tfsip = NULL;
+	struct inode *ip = NULL;
+	size_t size = sizeof(struct tmpfs_inode);
+
+	tfsip = memalloc(&size, 0);
+	if (!tfsip) return NULL;
+	size = sizeof(struct inode);
+	ip = memalloc(&size, 0); // XXX we should call a global inode allocator here
+	if (!ip) goto free;
+
+	tfsip->signature = TMPFS_SIGNATURE;
+	tfsip->data = NULL;
+
+	ip->i_num = (ino_t)tfsip;
+	ip->i_size = 0;
+	ip->i_flag |= IACC|IMOD|ICHG;
+	ip->i_fs = fs;
+	ip->i_count = 0;
+	ip->i_nlink = 0;
+	i_ref(ip);
+	i_lock(ip);
+
+	return ip;
+
+free:
+	memfree(tfsip, 0);
+	memfree(ip, 0);
+	return NULL;
+}
+
+void tmpfs_free_inode(struct inode *ip)
+{
+	// this assumes this inode is unused (no links, file is truncated, etc)
+	memfree((void *)ip->i_num, 0);
+	memfree(ip, 0); // this should call the system's inode deallocator
+}
+
+//int tmpfs_read_inode(struct inode *);
+void tmpfs_write_inode(struct inode *ip)
+{
+	struct tmpfs_inode *tfsip = (struct tmpfs_inode *)ip->i_num;
+	tfsip->mode = ip->i_mode;
+	tfsip->nlink = ip->i_nlink;
+	tfsip->owner = ip->i_uid;
+	tfsip->group = ip->i_gid;
+	tfsip->size = ip->i_size;
+	tfsip->atime = ip->i_atime;
+	tfsip->mtime = ip->i_mtime;
+	tfsip->ctime = ip->i_ctime;
+}
+
 #if 0 /* for reference */
+struct inode {
+	unsigned short i_flag;
+	struct inodeops *i_ops;
+	struct fileops *i_fops;
+	int i_count;
+	
+	//unsigned short	flag;
+	//dev_t	i_dev; // is this needed?
+	ino_t	i_num;
+	struct	fs *i_fs;
+	
+	/* following fields are stored on the device */
+	unsigned short	i_mode;	/* mode and type of file */
+	unsigned short	i_nlink;	/* number of links to file */
+	uid_t	i_uid;		/* owner's user id */
+	gid_t	i_gid;		/* owner's group id */
+	union {
+		off_t	i_size;		/* number of bytes in file */
+		dev_t	i_rdev;		/* for character/block special files */
+	};
+	time_t	i_atime;		/* time last accessed */
+	time_t	i_mtime;		/* time last modified */
+	time_t	i_ctime;		/* time last changed */
+
+	/* union of filesystem-specific information here */
+};
+
 struct fileops {
 	int (*open)(struct file *, struct inode *);
 	ssize_t (*read)(struct file *, void *, size_t);

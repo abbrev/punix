@@ -94,7 +94,7 @@ STARTUP(static void rdwr(int mode))
 	
 	GETF(fp, ap->fd);
 	
-	if ((fp->f_flag & mode) == 0) {
+	if ((fp->f_flags & mode) == 0) {
 		P.p_error = EBADF;
 		return;
 	}
@@ -153,7 +153,7 @@ void sys_read(void)
 	int error = 0;
 	
 	GETF(fp, ap->fd);
-	if (!(fp->f_flag & FREAD)) {
+	if (!(fp->f_flags & FREAD)) {
 		P.p_error = EBADF;
 		return;
 	}
@@ -204,7 +204,7 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	if (fd < 0)
 		return;
 	fp = P.p_ofile[fd];
-	fp->f_flag = flags & O_RDWR;
+	fp->f_flags = flags & O_RDWR;
 	fp->f_type = DTYPE_INODE;
 	mode = mode & 077777 & ~S_ISVTX;
 	
@@ -219,17 +219,9 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	P.p_error = EMFILE;
 }
 
-int cdev_open(struct file *fp, struct inode *ip)
-{
-	fp->f_ops = cdevsw[MAJOR(ip->i_rdev)].fileops;
-	assert(fp->f_ops);
-	assert(fp->f_ops->open);
-	return fp->f_ops->open(fp, ip);
-}
-
-const struct fileops cdev_fileops = {
-	.open = cdev_open
-};
+extern const struct fileops generic_file_fileops;
+extern const struct fileops generic_dir_fileops;
+extern const struct fileops generic_special_fileops;
 
 /* open system call */
 /* FIXME: open is currently just a hack to produce results */
@@ -246,7 +238,7 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
-	kprintf("sys_open: path=\"%s\"\n", ap->pathname);
+	//kprintf("sys_open: path=\"%s\"\n", ap->pathname);
 	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
 	if (!strcmp(ap->pathname, "/dev/vt"))
 		ip->i_rdev = DEV_VT;
@@ -266,12 +258,21 @@ STARTUP(void sys_open())
 		P.p_error = ENOENT;
 		return;
 	}
-	ip->i_fops = &cdev_fileops;
-	//cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
-	//if (P.p_error)
-		//return;
 
 	ip->i_mode = S_IFCHR;
+
+	// XXX This should be set in each filesystem's read_inode() handler.
+	// The handler tables for regular files and directories would be
+	// defined for each file system too. The special file handler table
+	// would just be generic_special_fileops.
+	if (S_ISREG(ip->i_mode)) {
+		ip->i_fops = &generic_file_fileops;
+	} else if (S_ISDIR(ip->i_mode)) {
+		ip->i_fops = &generic_dir_fileops;
+	} else {
+		ip->i_fops = &generic_special_fileops;
+	}
+
 	fd = falloc();
 	if (fd < 0)
 		return;
@@ -279,14 +280,19 @@ STARTUP(void sys_open())
 	++G.nextinode;
 	
 	fp = P.p_ofile[fd];
-	fp->f_flag = O_RDWR;
+	fp->f_flags = ap->flags; // XXX: validate flags
 	fp->f_type = DTYPE_INODE;
 	fp->f_inode = ip;
-	ip->i_fops->open(fp, ip);
+	if (ip->i_fops->open(fp, ip)) {
+		goto fail;
+	}
 	assert(fp->f_ops);
 	assert(fp->f_ops->read);
 	
 	P.p_retval = fd;
+	return;
+fail:
+	;
 #else
 	doopen(ap->pathname, ap->flags, ap->mode);
 #endif
@@ -301,37 +307,6 @@ STARTUP(void sys_creat())
 	} *ap = (struct a *)P.p_arg;
 	
 	doopen(ap->pathname, O_CREAT | O_TRUNC | O_WRONLY, ap->mode);
-}
-
-/* Internal close routine. Decrement reference count on file structure
- * and call special file close routines on last close. */
-STARTUP(void closef(struct file *fp))
-{
-        struct inode *inop;
-        dev_t dev;
-        int major;
-        int rw;
-        
-	if (--fp->f_count > 0) return;
-	
-	inop = fp->f_inode;
-	dev = inop->i_rdev;
-	
-	i_lock(inop);
-	if (fp->f_type == DTYPE_PIPE) {
-		//inop->i_mode &= ~(IREAD | IWRITE);
-		#warning what do IREAD and IWRITE mean??
-		wakeup(inop); /* XXX */
-	}
-	i_unref(inop);
-	
-	switch (inop->i_mode & S_IFMT) {
-	case S_IFCHR:
-		cdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
-		break;
-	case S_IFBLK:
-		bdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
-	}
 }
 
 STARTUP(void sys_close())
@@ -349,7 +324,7 @@ STARTUP(void sys_close())
 		--P.p_lastfile;
 #endif
 	
-	closef(fp);
+	P.p_retval = fp->f_ops->close(fp);
 }
 
 #define OFLAGIDX(num) ((num) >> 3) /* num/8 */
@@ -443,7 +418,7 @@ STARTUP(void sys_dup())
 STARTUP(void sys_dup2())
 {
 	struct dupa *ap = (struct dupa *)P.p_arg;
-	struct file *oldfp;
+	struct file *oldfp, *fp;
 	
 	GETF(oldfp, ap->oldfd);
 	
@@ -456,8 +431,9 @@ STARTUP(void sys_dup2())
 		return;
 	}
 	
-	if (P.p_ofile[ap->newfd])
-		closef(P.p_ofile[ap->newfd]);
+	fp = P.p_ofile[ap->newfd];
+	if (fp)
+		fp->f_ops->close(fp);
 	
 	P.p_error = 0;
 	
@@ -476,28 +452,7 @@ STARTUP(void sys_lseek())
 	
 	GETF(fp, ap->fd);
 	
-	if (fp->f_type == DTYPE_PIPE) {
-		P.p_error = ESPIPE;
-		return;
-	}
-	
-	switch (ap->whence) {
-		case SEEK_SET:
-			pos = ap->offset;
-			break;
-		case SEEK_CUR:
-			pos = ap->offset + fp->f_offset;
-			break;
-		case SEEK_END:
-			pos = ap->offset + fp->f_inode->i_size;
-			break;
-		default:
-			P.p_error = EINVAL;
-			return;
-	}
-	fp->f_offset = pos;
-	
-	P.p_retval = (long)pos;
+	P.p_retval = fp->f_ops->lseek(fp, ap->offset, ap->whence);
 }
 
 /* umask system call */
@@ -605,16 +560,16 @@ STARTUP(void sys_fcntl())
 			break;
 		case F_GETFL:
 #define OFLAGS(x) ((x) - 1) /* FIXME: what is OFLAGS, really? */
-			P.p_retval = OFLAGS(fp->f_flag);
+			P.p_retval = OFLAGS(fp->f_flags);
 			break;
 #if 0
 		case F_SETFL:
 			/* FIXME: define all these macros */
-			fp->f_flag &= ~FCNTLFLAGS;
-			fp->f_flag |= (FFLAGS(ap->arg)) & FCNTLFLAGS;
-			if ((P.p_error = fset(fp, FNONBLOCK, fp->f_flag & NONBLOCK)))
+			fp->f_flags &= ~FCNTLFLAGS;
+			fp->f_flags |= (FFLAGS(ap->arg)) & FCNTLFLAGS;
+			if ((P.p_error = fset(fp, FNONBLOCK, fp->f_flags & NONBLOCK)))
 				break;
-			if ((P.p_error = fset(fp, O_ASYNC, fp->f_flag & O_ASYNC)))
+			if ((P.p_error = fset(fp, O_ASYNC, fp->f_flags & O_ASYNC)))
 				fset(fp, FNONBLOCK, 0);
 			break;
 #endif
@@ -641,11 +596,11 @@ STARTUP(void sys_ioctl())
 	
 	int fd;
 	struct file *fp;
-	int dev;
+	int major;
 	
 	GETF(fp, ap->d);
-	dev = fp->f_inode->i_rdev;
-	
-	cdevsw[MAJOR(dev)].d_ioctl(dev, ap->request, ap->arg);
+	major = MAJOR(fp->f_inode->i_rdev);
+
+	P.p_retval = fp->f_ops->ioctl(fp, ap->request, ap->arg);
 }
 

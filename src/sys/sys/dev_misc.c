@@ -53,6 +53,23 @@ STARTUP(void miscopen(dev_t dev, int rw))
 	}
 }
 
+int misc_open(struct file *fp, struct inode *ip)
+{
+	int minor = MINOR(ip->i_rdev);
+	
+	if (minor > DEVLAST) {
+		P.p_error = ENXIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int misc_close(struct file *fp)
+{
+	return 0;
+}
+
 STARTUP(void miscread(dev_t dev))
 {
 	int minor = MINOR(dev);
@@ -72,6 +89,32 @@ STARTUP(void miscread(dev_t dev))
 			;
 		break;
 	}
+}
+
+ssize_t misc_read(struct file *fp, void *buf, size_t count)
+{
+	int minor = MINOR(fp->f_inode->i_rdev);
+	size_t n;
+
+	// TODO: better address checking
+	if (!buf) {
+		P.p_error = EFAULT;
+		return -1;
+	}
+
+	switch (minor) {
+	case DEVNULL:
+		return 0;
+	case DEVZERO:
+	case DEVFULL:
+		memset(buf, 0, count);
+		break;
+	case DEVRANDOM:
+		n = count;
+		while (n--)
+			*(char *)buf++ = (rand() >> 7);
+	}
+	return count;
 }
 
 STARTUP(void miscwrite(dev_t dev))
@@ -94,6 +137,58 @@ STARTUP(void miscwrite(dev_t dev))
 	}
 }
 
+ssize_t misc_write(struct file *fp, void *buf, size_t count)
+{
+	int minor = MINOR(fp->f_inode->i_rdev);
+	size_t n;
+
+	// TODO: better address checking
+	if (!buf) {
+		P.p_error = EFAULT;
+		return -1;
+	}
+
+	switch (minor) {
+	case DEVFULL:
+		P.p_error = ENOSPC;
+		return -1;
+	case DEVRANDOM:
+		/* stir the pot */
+		n = count;
+		while (n--)
+			G.prngseed = G.prngseed *
+			  (*(unsigned char *)buf++ + 1103515245UL) + 12345UL;
+	}
+	return count;
+}
+
 STARTUP(void miscioctl(dev_t dev, int cmd, void *cmargs))
 {
 }
+
+int misc_ioctl(struct file *fp, int request, void *arg)
+{
+	P.p_error = EINVAL;
+	return -1;
+}
+
+off_t pipe_lseek(struct file *, off_t, int);
+const struct fileops misc_fileops = {
+	.open = misc_open,
+	.close = misc_close,
+	.read = misc_read,
+	.write = misc_write,
+	.lseek = pipe_lseek,
+	.ioctl = misc_ioctl,
+};
+
+#if 0 /* for reference */
+struct fileops {
+	int (*open)(struct file *, struct inode *);
+	int (*close)(struct file *);
+	ssize_t (*read)(struct file *, void *, size_t);
+	ssize_t (*write)(struct file *, void *, size_t);
+	off_t (*lseek)(struct file *, off_t, int);
+	int (*ioctl)(struct file *, int, void *);
+};
+#endif
