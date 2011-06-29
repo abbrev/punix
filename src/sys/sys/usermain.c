@@ -869,18 +869,22 @@ static int ps_main(int argc, char **argv, char **envp)
 	struct kinfo_proc *kp = NULL;
 	struct kinfo_proc *allproc = NULL;
 	size_t allproclen = 0;
+	int status = 0;
 	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
 		perror("ps");
-		return 1;
+		status = 1;
+		goto out;
 	}
 	allproc = malloc(allproclen);
 	if (!allproc) {
 		perror("ps");
-		return 1;
+		status = 1;
+		goto out;
 	}
 	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
 		perror("ps");
-		return 1;
+		status = 1;
+		goto out_free;
 	}
 	printf("%5s %4s %8s %s\n", "PID", "TTY", "TIME", "CMD");
 	allproclen /= sizeof(struct kinfo_proc);
@@ -895,7 +899,10 @@ static int ps_main(int argc, char **argv, char **envp)
 		printf("%5d %04x %02d:%02d:%02ld %s\n",
 		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd);
 	}
-	return 0;
+out_free:
+	free(allproc);
+out:
+	return status;
 }
 
 static int fdtofd(int fromfd, int tofd)
@@ -1394,7 +1401,7 @@ static int topcompare_pcpu(const void *a, const void *b)
 }
 
 /* use sysctl() to get system and process information */
-static void updatetop(struct topinfo *info)
+static int updatetop(struct topinfo *info)
 {
 	long t;
 	int day, hour, minute, second;
@@ -1417,6 +1424,7 @@ static void updatetop(struct topinfo *info)
 	int nprocs, nrun, nslp, nstop, nzomb;
 	int nusers;
 	dev_t lasttty = 0;
+	int status = 0;
 	nprocs = nrun = nslp = nstop = nzomb = nusers = 0;
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
@@ -1425,15 +1433,16 @@ static void updatetop(struct topinfo *info)
 	
 	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
 		perror("top: sysctl 1");
-		return;
+		return 1;
 	}
 	allproc = malloc(allproclen);
 	if (!allproc) {
 		perror("top: malloc");
-		return;
+		return 1;
 	}
 	if (sysctl(mib, miblen, allproc, &allproclen, NULL, 0L)) {
 		perror("top: sysctl 2");
+		status = 1;
 		goto free;
 	}
 	allproclen /= sizeof(*allproc);
@@ -1441,6 +1450,7 @@ static void updatetop(struct topinfo *info)
 	allprocp = malloc(allproclen * sizeof(void *));
 	if (!allprocp) {
 		perror("top: allprocp");
+		status = 1;
 		goto free;
 	}
 	/* use pointers to procs in allproc array for sorting etc */
@@ -1526,6 +1536,7 @@ static void updatetop(struct topinfo *info)
 free:
 	free(allproc);
 	free(allprocp);
+	return status;
 }
 #endif
 
@@ -1553,7 +1564,8 @@ static int top_main(int argc, char *argv[], char **envp)
 	
 	info.lasttime.tv_sec = info.lasttime.tv_usec = 0;
 	while (!quit) {
-		updatetop(&info);
+		if (updatetop(&info))
+			return 1;
 		n = read(0, buf, TOPBUFSIZE);
 		if (n >= 0) {
 			size_t i;

@@ -1,3 +1,0 @@
-TIGCC cannot put data into a specified region of memory. By default it puts global variables in the same address region as the text (which is read-only in Punix), so I had to write a kludgey workaround: I wrote mksymdefs.sh, which translates global variables into real addresses using C #define statements. It writes ".h" files that are #included in any file that references the variables in them. Every global variable name has the prefix "G_" to indicate that it's global. Now I'm not quite sure why I had to do that, but that's the way it is.
-
-Hopefully in a future version I can use a different compiler toolchain that will allow the data segment to start at a particular address, and then I can remove all of the "G_" prefixes from global variables.
