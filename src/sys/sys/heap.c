@@ -391,7 +391,7 @@ void memfree(void *ptr, pid_t pid)
 	struct heapentry *hp;
 	
 	if (ptr == NULL) {
-		freeall(pid);
+		if (pid > 0) freeall(pid);
 		return;
 	}
 	hp = findentry(ptr);
