@@ -98,7 +98,7 @@ loop:
 		slp(&tp->t_rawq, 1);
 	}
 
-	while ((ch = qgetc(qp)) >= 0 && count > 0) {
+	while (count > 0 && (ch = qgetc(qp)) >= 0) {
 		if ((lflag & ICANON)) {
 			int numc = tp->t_numc;
 			tp->t_numc = !TTBREAKC(ch);
@@ -128,6 +128,7 @@ loop:
 	return n;
 }
 
+// XXX old method
 void ttyread(struct tty *tp)
 {
 	int ch;
