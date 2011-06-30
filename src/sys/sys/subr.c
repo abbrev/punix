@@ -9,7 +9,8 @@
 /* put the character for the user's read call */
 STARTUP(int passc(int ch))
 {
-	if (!P.p_base) {
+	// we should check the buffer before we do a passc()
+	if (badbuffer(P.p_base, 1)) {
 		P.p_error = EFAULT;
 		return -1;
 	}
@@ -26,7 +27,8 @@ STARTUP(int cpass())
 	
 	if (P.p_count == 0)
 		return -1;
-	if (!P.p_base) {
+	// we should check the buffer before we do a cpass()
+	if (badbuffer(P.p_base, 1)) {
 		P.p_error = EFAULT;
 		return -1;
 	}

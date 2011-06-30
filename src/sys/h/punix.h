@@ -12,6 +12,8 @@
 #define OS_VERSION	"0.06"
 #endif
 
+extern int badbuffer(void *base, size_t size);
+
 extern const char
 uname_sysname[],
 uname_nodename[],

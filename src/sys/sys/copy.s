@@ -6,8 +6,22 @@
 
 .global copyout
 .global copyin
+.global badbuffer
 
 .section _st1, "x"
+
+| int badbuffer(void *base, size_t size);
+| return 0 if all parts of buffer are in bounds
+| return non-zero otherwise
+badbuffer:
+	move.l	4(%sp),%d1	| base
+	move.l	8(%sp),%d0	| size
+
+	| chkaddr returns from this routine with a non-zero value in %d0
+	| if the address is not valid
+	bsr.s	chkaddr		
+	moveq.l	#0,%d0		| it's valid
+	rts
 
 | check %d1 through %d1 + %d0 for valid address-ness
 chkaddr:
