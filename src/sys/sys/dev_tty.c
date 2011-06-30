@@ -11,32 +11,23 @@
 #include "inode.h"
 #include "globals.h"
 
-/* FIXME! this probably needs to make a new inode for the tty device. even if all open files are closed, we still need to be able to open the controlling tty */
-STARTUP(void devttyopen(dev_t dev, int rw))
+/*
+ * NB: we only need an open file handler because we switch our file's inode
+ * to the inode of the process's controlling tty
+ */
+int devtty_open(struct file *fp, struct inode *ip)
 {
-	if (!P.p_ttyp) {
+	if (!P.p_tty) {
 		P.p_error = ENXIO;
-		return;
+		return -1;
 	}
+	i_unref(ip);
+	fp->f_inode = ip = P.p_tty;
+	i_ref(ip);
+	fp->f_ops = ip->i_fops;
+	return fp->f_ops->open(fp, ip);
 }
 
-STARTUP(void devttyclose(dev_t dev, int rw))
-{
-}
-
-/* FIXME: we also have to be able to read from/write to the (previous) controlling tty even when the process detaches from its controlling tty */
-STARTUP(void devttyread(dev_t dev))
-{
-	cdevsw[MAJOR(dev)].d_read(dev);
-}
-
-STARTUP(void devttywrite(dev_t dev))
-{
-	cdevsw[MAJOR(dev)].d_write(dev);
-}
-
-STARTUP(void devttyioctl(dev_t dev, int cmd, void *cmarg))
-{
-	/* FIXME: handle the TIOCNOTTY ioctl command */
-	cdevsw[MAJOR(dev)].d_ioctl(dev, cmd, cmarg);
-}
+const struct fileops devtty_fileops = {
+	.open = devtty_open,
+};

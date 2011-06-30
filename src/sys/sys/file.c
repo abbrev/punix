@@ -113,7 +113,7 @@ int generic_special_open(struct file *fp, struct inode *ip)
 	int major = MAJOR(ip->i_rdev);
 
 	if (S_ISCHR(ip->i_mode)) {
-		ip->i_fops = cdevsw[major].fileops;
+		ip->i_fops = cdevsw[major];
 	} else if (S_ISBLK(ip->i_mode)) {
 		ip->i_fops = bdevsw[major].fileops;
 	} else {

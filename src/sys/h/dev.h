@@ -10,6 +10,13 @@
  * device switches is in the
  * file conf.c.
  */
+/*
+ * Block devices have two interfaces: struct fileops and a strategy routine.
+ * The kernel uses the strategy routine for reading/writing block buffers
+ * directly, while user-space uses struct fileops for reading/writing the
+ * device like a real file. The fileops handlers can (should) use the strategy
+ * routine in their implementations.
+ */
 struct	bdevsw
 {
 	struct fileops *fileops;
@@ -33,19 +40,9 @@ extern const int nblkdev;
 
 /*
  * Character device switch.
+ * Character devices have only one interface: struct fileops
  */
-struct	cdevsw
-{
-	const struct fileops *fileops;
-	/* TODO: eventually remove the fields below (they are redundant */
-	void	(*d_open)(dev_t dev, int rw);
-	void	(*d_close)(dev_t dev, int rw);
-	void	(*d_read)(dev_t dev);
-	void	(*d_write)(dev_t dev);
-	void	(*d_ioctl)(dev_t, int cmd, void *arg);
-};
-
-extern const struct cdevsw cdevsw[];
+extern const struct fileops *cdevsw[];
 
 #define DEV_MISC 0x0000
 #define DEV_VT (DEV_MISC+0x0100)

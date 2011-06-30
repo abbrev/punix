@@ -1586,14 +1586,15 @@ int kputchar(int ch)
 	return ch;
 }
 
-void vtopen(dev_t dev, int rw)
+int vt_open(struct file *fp, struct inode *ip)
 {
+	int dev = ip->i_rdev;
 	int minor = MINOR(dev);
 	struct tty *tp;
 	
 	if (minor >= NVT) {
 		P.p_error = ENXIO;
-		return;
+		return -1;
 	}
 	tp = &G.vt.vt[minor];
 	if (!(tp->t_state & ISOPEN)) {
@@ -1619,17 +1620,7 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);
-}
-
-int vt_open(struct file *fp, struct inode *ip)
-{
-	// XXX
-	vtopen(ip->i_rdev, 0); // XXX: rw
 	return 0;
-}
-
-void vtclose(dev_t dev, int rw)
-{
 }
 
 ssize_t tty_read(struct tty *tp, void *buf, size_t count);
@@ -1637,11 +1628,6 @@ ssize_t vt_read(struct file *fp, void *buf, size_t count)
 {
 	dev_t dev = fp->f_inode->i_rdev;
 	return tty_read(&G.vt.vt[MINOR(dev)], buf, count);
-}
-
-void vtread(dev_t dev)
-{
-	ttyread(&G.vt.vt[MINOR(dev)]);
 }
 
 size_t vt_write(struct file *fp, void *buf, size_t count)
@@ -1678,25 +1664,6 @@ size_t vt_write(struct file *fp, void *buf, size_t count)
 int vt_close(struct file *fp)
 {
 	return 0;
-}
-
-void vtwrite(dev_t dev)
-{
-	struct tty *tp = &G.vt.vt[MINOR(dev)];
-	int ch;
-	int whereami = G.whereami;
-	G.whereami = WHEREAMI_VTWRITE;
-	
-	if (!(tp->t_state & ISOPEN))
-		return;
-	
-	while ((ch = cpass()) >= 0)
-		ttyoutput(ch, tp);
-	G.whereami = whereami;
-}
-
-void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
-{
 }
 
 int vt_ioctl(struct file *fp, int request, void *arg)

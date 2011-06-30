@@ -143,11 +143,11 @@ STARTUP(void linkintr())
 	}
 }
 
-STARTUP(void linkopen(dev_t dev, int rw))
+STARTUP(int link_open(struct file *fp, struct inode *ip))
 {
 	if (ioport) {
 		P.p_error = EBUSY;
-		return;
+		return -1;
 	}
 	
 	++ioport; /* block other uses of the IO port */
@@ -156,24 +156,29 @@ STARTUP(void linkopen(dev_t dev, int rw))
 	qclear(&G.link.writeq);
 	
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
+
 	/* XXX: anything more? */
+	return 0;
 }
 
-STARTUP(void linkclose(dev_t dev, int flag))
+STARTUP(int link_close(struct file *fp))
 {
 	flush();
 	qclear(&G.link.readq); /* discard any unread data */
 	ioport = 0; /* free the IO port for other uses */
+	return 0;
 }
 
-STARTUP(void linkread(dev_t dev))
+// XXX link device should be a tty
+// we need to use ttyread and stuff here
+STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count))
 {
 	/* read up to p_count bytes from the rx queue to p_base */
 	int ch;
 	int x;
-	size_t count = P.p_count;
+	size_t oldcount = count;
 	
-	while (P.p_count) {
+	while (count) {
 		x = spl5();
 		while ((ch = qgetc(&G.link.readq)) < 0) {
 			rxon();
@@ -182,25 +187,27 @@ STARTUP(void linkread(dev_t dev))
 				recvbyte();
 				continue;
 			}
-			if (count == P.p_count) {
+			if (oldcount == count) {
 				G.link.hiwat = 1;
 				slp(&G.link.readq, 1);
 			} else /* we got some data already, so just return */
 				return;
 		}
 		splx(x);
-		*P.p_base++ = ch;
-		--P.p_count;
+		*(char *)buf++ = ch;
+		--count;
 	}
+	return oldcount;
 }
 
-STARTUP(void linkwrite(dev_t dev))
+STARTUP(ssize_t link_write(struct file *fp, void *buf, size_t count))
 {
 	int ch;
 	int x;
+	size_t oldcount = count;
 	
-	for (; P.p_count; --P.p_count) {
-		ch = *P.p_base++;
+	for (; count; --count) {
+		ch = *(char *)buf++;
 		x = spl5();
 		txon();
 		while (qputc(ch, &G.link.writeq) < 0) {
@@ -210,8 +217,22 @@ STARTUP(void linkwrite(dev_t dev))
 		}
 		splx(x);
 	}
+	return oldcount;
 }
 
-STARTUP(void linkioctl(dev_t dev, int cmd, void *cmarg, int flag))
+STARTUP(int link_ioctl(struct file *fp, int request, void *arg))
 {
+	// TODO
+	P.p_error = EINVAL;
+	return -1;
 }
+
+off_t pipe_lseek(struct file *, off_t, int);
+const struct fileops link_fileops = {
+	.open = link_open,
+	.close = link_close,
+	.read = link_read,
+	.write = link_write,
+	.lseek = pipe_lseek,
+	.ioctl = link_ioctl,
+};

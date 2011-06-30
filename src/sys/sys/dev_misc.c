@@ -43,6 +43,7 @@ STARTUP(void srand(unsigned s))
 	G.prngseed = s;
 }
 
+// XXX old method
 STARTUP(void miscopen(dev_t dev, int rw))
 {
 	int minor = MINOR(dev);
@@ -70,6 +71,7 @@ int misc_close(struct file *fp)
 	return 0;
 }
 
+// XXX old method
 STARTUP(void miscread(dev_t dev))
 {
 	int minor = MINOR(dev);
@@ -96,8 +98,7 @@ ssize_t misc_read(struct file *fp, void *buf, size_t count)
 	int minor = MINOR(fp->f_inode->i_rdev);
 	size_t n;
 
-	// TODO: better address checking
-	if (!buf) {
+	if (badbuffer(buf, count)) {
 		P.p_error = EFAULT;
 		return -1;
 	}
@@ -117,6 +118,7 @@ ssize_t misc_read(struct file *fp, void *buf, size_t count)
 	return count;
 }
 
+// XXX old method
 STARTUP(void miscwrite(dev_t dev))
 {
 	int minor = MINOR(dev);
@@ -142,8 +144,7 @@ ssize_t misc_write(struct file *fp, void *buf, size_t count)
 	int minor = MINOR(fp->f_inode->i_rdev);
 	size_t n;
 
-	// TODO: better address checking
-	if (!buf) {
+	if (badbuffer(buf, count)) {
 		P.p_error = EFAULT;
 		return -1;
 	}
@@ -162,6 +163,7 @@ ssize_t misc_write(struct file *fp, void *buf, size_t count)
 	return count;
 }
 
+// XXX old method
 STARTUP(void miscioctl(dev_t dev, int cmd, void *cmargs))
 {
 }
