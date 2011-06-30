@@ -1930,6 +1930,8 @@ int getty_main(int argc, char *argv[], char *envp[])
 	struct utsname uts;
 	char *dev = "/dev/vt";
 
+	// Usage: getty [devname]
+	// devname defaults to /dev/vt
 	if (argc == 2) dev = argv[1];
 
 	fd = open(dev, O_RDWR); /* fd 0 */
@@ -1974,6 +1976,13 @@ int login_main(int argc, char *argv[], char *envp[])
 	ssize_t n;
 	static const char password[] = "";
 	struct sigaction sa;
+	char *rootenv[] = {
+		"USER=root",
+		"LOGNAME=root",
+		"SHELL=stupidsh",
+		"HOME=/",
+		NULL
+	};
 
 	count = LOGINBUFSIZE;
 	bp = line;
@@ -1993,7 +2002,7 @@ int login_main(int argc, char *argv[], char *envp[])
 	    !strcmp(line, password)) {
 		argv[0] = "sh";
 		argv[1] = NULL;
-		execve(argv[0], argv, envp);
+		execve(argv[0], argv, rootenv);
 		return 1;
 	}
 badpass:
@@ -2048,30 +2057,18 @@ spawn:
 	if (linkpid < 0)
 		linkpid = spawn_getty("/dev/link");
 	
-#if 0
-	fd = open("/dev/vt", O_RDWR); /* 0 */
-	if (fd < 0) return -1;
-	dup(fd); /* 1 */
-	dup(fd); /* 2 */
-#endif
-	
-	//printf("This is the parent process of init\n");
-	
 	/* sit here and reap zombie processes */
-	/* a real init process would also spawn tty's and stuff */
+	/* also re-spawn getty processes */
 	for (;;) {
 		int pid;
 		int status;
 		pid = wait(&status);
 		if (pid < 0) {
 			if (errno == ECHILD) {
-				//printf("init: no processes running. starting new getty...\n");
 				goto spawn;
 			} else {
-				//perror("init: wait");
 			}
 		} else {
-			//printf("init: reaped child (pid=%d status=%d)\n", pid, status);
 			if (pid == vtpid) vtpid = -1;
 			if (pid == linkpid) linkpid = -1;
 			goto spawn;
