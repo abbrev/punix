@@ -125,10 +125,8 @@ bad:
 
 STARTUP(int canaccess(struct inode *ip, int mode))
 {
-	extern struct fs *getfs(dev_t); /* XXX put this in a header */
-	
 	if (mode == IWRITE) {
-		if (getfs(ip->i_dev)->fs_ronly) {
+		if (ip->i_fs->fs_ronly) {
 			P.p_error = EROFS;
 			return 1;
 		}
