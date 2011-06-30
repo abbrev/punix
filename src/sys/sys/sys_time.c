@@ -177,11 +177,6 @@ STARTUP(void sys_getitimer())
 		return;
 	}
 	
-	if (!ap->value) {
-		P.p_error = EFAULT;
-		return;
-	}
-	
 	getit(ap->which, ap->value);
 }
 
