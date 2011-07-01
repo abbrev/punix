@@ -27,8 +27,8 @@ int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
 }
 
 int tmpfs_file_open(struct file *fp, struct inode *ip);
-ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count);
-ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count);
+ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count, off_t *);
+ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count, off_t *);
 off_t generic_file_lseek(struct file *fp, off_t offset, int whence);
 
 struct fileops tmpfs_file_ops = {
@@ -83,7 +83,7 @@ int tmpfs_file_open(struct file *fp, struct inode *ip)
 	return 0;
 }
 
-ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count)
+ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	struct inode *ip = fp->f_inode;
 	struct tmpfs_inode *tmpfs_ip = (struct tmpfs_inode *)ip->i_num;
@@ -91,20 +91,20 @@ ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count)
 	if (count > LONG_MAX)
 		count = LONG_MAX;
 
-	if (fp->f_offset >= ip->i_size)
+	if (*pos >= ip->i_size)
 		return 0;
-	if (fp->f_offset + count > ip->i_size)
-		count = ip->i_size - fp->f_offset;
+	if (*pos + count > ip->i_size)
+		count = ip->i_size - *pos;
 	
-	if (copyout(buf, tmpfs_ip->data+fp->f_offset, count)) {
+	if (copyout(buf, tmpfs_ip->data + *pos, count)) {
 		P.p_error = EFAULT;
 		return -1;
 	}
-	fp->f_offset += count;
+	*pos += count;
 	return count;
 }
 
-ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count)
+ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	/* TODO: write this (will be similar to read) */
 	P.p_error = ENOSPC;
@@ -151,7 +151,12 @@ void tmpfs_free_inode(struct inode *ip)
 	memfree(ip, 0); // this should call the system's inode deallocator
 }
 
-//int tmpfs_read_inode(struct inode *);
+int tmpfs_read_inode(struct inode *ip)
+{
+	P.p_error = EINVAL; // XXX
+	return -1;
+}
+
 void tmpfs_write_inode(struct inode *ip)
 {
 	struct tmpfs_inode *tfsip = (struct tmpfs_inode *)ip->i_num;

@@ -43,17 +43,6 @@ STARTUP(void srand(unsigned s))
 	G.prngseed = s;
 }
 
-// XXX old method
-STARTUP(void miscopen(dev_t dev, int rw))
-{
-	int minor = MINOR(dev);
-	
-	if (minor > DEVLAST) {
-		P.p_error = ENXIO;
-		return;
-	}
-}
-
 int misc_open(struct file *fp, struct inode *ip)
 {
 	int minor = MINOR(ip->i_rdev);
@@ -71,29 +60,7 @@ int misc_close(struct file *fp)
 	return 0;
 }
 
-// XXX old method
-STARTUP(void miscread(dev_t dev))
-{
-	int minor = MINOR(dev);
-	
-	switch (minor) {
-	case DEVZERO:
-	case DEVFULL:
-		if (!P.p_base) {
-			P.p_error = EFAULT;
-			return;
-		}
-		memset(P.p_base, 0, P.p_count);
-		P.p_count = 0;
-		break;
-	case DEVRANDOM:
-		while (passc((unsigned char)(rand() >> 7)) >= 0) /* XXX constant */
-			;
-		break;
-	}
-}
-
-ssize_t misc_read(struct file *fp, void *buf, size_t count)
+ssize_t misc_read(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	int minor = MINOR(fp->f_inode->i_rdev);
 	size_t n;
@@ -118,28 +85,7 @@ ssize_t misc_read(struct file *fp, void *buf, size_t count)
 	return count;
 }
 
-// XXX old method
-STARTUP(void miscwrite(dev_t dev))
-{
-	int minor = MINOR(dev);
-	int c;
-	
-	switch (minor) {
-	case DEVZERO:
-	case DEVNULL:
-		P.p_count = 0;
-		break;
-	case DEVFULL:
-		P.p_error = ENOSPC;
-		break;
-	case DEVRANDOM:
-		/* stir the pot */
-		while ((c = cpass()) >= 0)
-			G.prngseed = G.prngseed * (c + 1103515245UL) + 12345UL;
-	}
-}
-
-ssize_t misc_write(struct file *fp, void *buf, size_t count)
+ssize_t misc_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	int minor = MINOR(fp->f_inode->i_rdev);
 	size_t n;
@@ -163,11 +109,6 @@ ssize_t misc_write(struct file *fp, void *buf, size_t count)
 	return count;
 }
 
-// XXX old method
-STARTUP(void miscioctl(dev_t dev, int cmd, void *cmargs))
-{
-}
-
 int misc_ioctl(struct file *fp, int request, void *arg)
 {
 	P.p_error = EINVAL;
@@ -184,13 +125,3 @@ const struct fileops misc_fileops = {
 	.ioctl = misc_ioctl,
 };
 
-#if 0 /* for reference */
-struct fileops {
-	int (*open)(struct file *, struct inode *);
-	int (*close)(struct file *);
-	ssize_t (*read)(struct file *, void *, size_t);
-	ssize_t (*write)(struct file *, void *, size_t);
-	off_t (*lseek)(struct file *, off_t, int);
-	int (*ioctl)(struct file *, int, void *);
-};
-#endif

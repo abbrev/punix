@@ -171,7 +171,7 @@ STARTUP(int link_close(struct file *fp))
 
 // XXX link device should be a tty
 // we need to use ttyread and stuff here
-STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count))
+STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	/* read up to p_count bytes from the rx queue to p_base */
 	int ch;
@@ -200,7 +200,7 @@ STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count))
 	return oldcount;
 }
 
-STARTUP(ssize_t link_write(struct file *fp, void *buf, size_t count))
+STARTUP(ssize_t link_write(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	int ch;
 	int x;

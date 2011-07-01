@@ -81,16 +81,24 @@ STARTUP(void sys_getdtablesize())
 	P.p_retval = NOFILE;
 }
 
-struct rdwra {
+struct prdwra {
 	int fd;
 	void *buf;
 	size_t count;
+	off_t offset;
 };
 
-STARTUP(static void rdwr(int mode))
+/* values for whichoffset */
+enum {
+	OFFSET_FILE, /* use (and update) offset from file structure */
+	OFFSET_ARG, /* use offset from the syscall argument (pread/pwrite) */
+};
+
+STARTUP(static void rdwr(int mode, int whichoffset))
 {
-	struct rdwra *ap = (struct rdwra *)P.p_arg;
+	struct prdwra *ap = (struct prdwra *)P.p_arg;
 	struct file *fp;
+	off_t *offset = NULL;
 	
 	GETF(fp, ap->fd);
 	
@@ -104,6 +112,12 @@ STARTUP(static void rdwr(int mode))
 	
 	/* if we were interrupted by a signal, just return the byte count if
 	 * it's not zero, else return an error */
+	/*
+	 * XXX: this only works right if the read/write routine updates
+	 * P.p_count between interruptible sleeps. If the routine doesn't
+	 * update P.p_count, it needs to catch signals itself and return the
+	 * count or error condition, as we do here.
+	 */
 	if (setjmp(P.p_sigjmp)) {
 		n = ap->count - P.p_count;
 		if (n == 0) {
@@ -114,17 +128,19 @@ STARTUP(static void rdwr(int mode))
 		return;
 	}
 	
+	offset = (whichoffset == OFFSET_FILE) ? &fp->f_offset : &ap->offset;
+
 	assert(fp->f_ops);
 	if (mode == FREAD) {
 		assert(fp->f_ops->read);
-		n = fp->f_ops->read(fp, ap->buf, ap->count);
+		n = fp->f_ops->read(fp, ap->buf, ap->count, offset);
 	} else {
 		assert(fp->f_ops->write);
 #if 0
 		kprintf("%s (%d): fp->f_ops->write=%p\n",
 		        __FILE__, __LINE__, fp->f_ops->write);
 #endif
-		n = fp->f_ops->write(fp, ap->buf, ap->count);
+		n = fp->f_ops->write(fp, ap->buf, ap->count, offset);
 	}
 
 	// n is -1 if one of the above routines catches a signal
@@ -137,58 +153,27 @@ STARTUP(static void rdwr(int mode))
 
 STARTUP(void sys_read(void))
 {
-	rdwr(FREAD);
+	rdwr(FREAD, OFFSET_FILE);
 }
-
-#if 0
-/* modified from 4.4BSD-Lite */
-void sys_read(void)
-{
-	struct rdwr *ap = (struct rdwr *)P.p_arg;
-	
-	struct file *fp;
-	struct uio auio;
-	struct iovec aiov;
-	long cnt;
-	int error = 0;
-	
-	GETF(fp, ap->fd);
-	if (!(fp->f_flags & FREAD)) {
-		P.p_error = EBADF;
-		return;
-	}
-	
-	aiov.iov_base = ap->buf;
-	aiov.iov_len = ap->count;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_resid = ap->count;
-	auio.uio_rw = UIO_READ;
-#if 0
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = current;
-#endif
-	cnt = ap->count;
-	//error = f_read(fp, &auio);
-	if (error = (*fp->f_ops->fo_read)(fp, &auio, fp->f_cred))
-		if (auio.uio_resid != cnt && (error == ERESTART
-		     || error == EINTR || error == EWOULDBLOCK))
-			error = 0;
-	cnt -= auio.uio_resid;
-	*retval = cnt;
-	return (error);
-}
-
-#endif
 
 STARTUP(void sys_write())
 {
 	int whereami = G.whereami;
 	G.whereami = WHEREAMI_WRITE;
 	
-	rdwr(FWRITE);
+	rdwr(FWRITE, OFFSET_FILE);
 	
 	G.whereami = whereami;
+}
+
+STARTUP(void sys_pread(void))
+{
+	rdwr(FREAD, OFFSET_ARG);
+}
+
+STARTUP(void sys_pwrite(void))
+{
+	rdwr(FWRITE, OFFSET_ARG);
 }
 
 STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))

@@ -33,8 +33,8 @@ struct inode;
 struct fileops {
 	int (*open)(struct file *, struct inode *);
 	int (*close)(struct file *);
-	ssize_t (*read)(struct file *, void *, size_t);
-	ssize_t (*write)(struct file *, void *, size_t);
+	ssize_t (*read)(struct file *, void *, size_t, off_t *);
+	ssize_t (*write)(struct file *, void *, size_t, off_t *);
 	off_t (*lseek)(struct file *, off_t, int);
 	int (*ioctl)(struct file *, int, void *);
 };

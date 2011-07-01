@@ -1624,13 +1624,13 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 }
 
 ssize_t tty_read(struct tty *tp, void *buf, size_t count);
-ssize_t vt_read(struct file *fp, void *buf, size_t count)
+ssize_t vt_read(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	dev_t dev = fp->f_inode->i_rdev;
 	return tty_read(&G.vt.vt[MINOR(dev)], buf, count);
 }
 
-size_t vt_write(struct file *fp, void *buf, size_t count)
+size_t vt_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	size_t n = 0;
 	char ch;

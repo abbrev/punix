@@ -112,7 +112,7 @@ STARTUP(int audio_close(struct file *fp))
 }
 
 /* there is no reading from the audio device */
-STARTUP(ssize_t audio_read(struct file *fp, void *buf, size_t count))
+STARTUP(ssize_t audio_read(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	return 0;
 }
@@ -127,7 +127,7 @@ STARTUP(ssize_t audio_read(struct file *fp, void *buf, size_t count))
 #define MAXCOPYSIZE 16
 
 /* write audio samples to the audio queue */
-STARTUP(ssize_t audio_write(struct file *fp, void *buf, size_t count))
+STARTUP(ssize_t audio_write(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	int x;
 	size_t oldcount = count;

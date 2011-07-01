@@ -27,6 +27,8 @@ void sys_adjtime();
 
 void sys_read();
 void sys_write();
+void sys_pread();
+void sys_pwrite();
 void sys_open();
 void sys_creat();
 void sys_close();
@@ -178,8 +180,8 @@ STARTUP(struct sysent sysent[]) = {
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},
 	{0, sys_poweroff, 0},
-	{0, sys_NONE, 0},		/* 70 */
-	{0, sys_NONE, 0},
+	{7, sys_pread, 0},		/* 70 */
+	{7, sys_write, 0},
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},
 	{0, sys_NONE, 0},

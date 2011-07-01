@@ -55,12 +55,12 @@ int generic_file_close(struct file *fp)
 	return -1;
 }
 
-ssize_t generic_file_read(struct file *fp, void *buf, size_t count)
+ssize_t generic_file_read(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	return 0;
 }
 
-ssize_t generic_file_write(struct file *fp, void *buf, size_t count)
+ssize_t generic_file_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
 	return 0;
 }
