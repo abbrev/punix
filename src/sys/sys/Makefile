@@ -19,6 +19,8 @@ UNAME_MACHINE := m68k
 
 
 
+AWK	= awk
+
 CC	= ${TIGCC}/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
 	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= \
@@ -111,6 +113,9 @@ kputs.o: kputs.c
 kputchar.o: kputchar.c ${SYSINC}/cell.h ${SYSINC}/scrollcell.h ${SYSINC}/drawcell.h
 syscall.o: syscall.c ${SYSINC}/sysent.h ${SYSINC}/process.h
 sysent.o: sysent.c ${SYSINC}/sysent.h
+sysent.c: sysent.txt
+	${AWK} -f mksysent.awk sysent.txt >sysent.c
+
 main.o: main.c ${SYSINC}/proc.h ${STDINC}/assert.h
 sys_desc.o: sys_desc.c ${SYSINC}/proc.h ${SYSINC}/punix.h ${SYSINC}/file.h \
 		${SYSINC}/process.h
