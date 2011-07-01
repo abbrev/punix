@@ -6,8 +6,8 @@ struct filesystem;
 
 struct inode {
 	unsigned short i_flag;
-	struct inodeops *i_ops;
-	struct fileops *i_fops;
+	const struct inodeops *i_ops;
+	const struct fileops *i_fops;
 	int i_count;
 	
 	//unsigned short	flag;
