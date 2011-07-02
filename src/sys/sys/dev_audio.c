@@ -10,6 +10,7 @@
 #include "queue.h"
 #include "inode.h"
 #include "globals.h"
+#include "process.h"
 
 #define SAMPLESPERSEC 8192
 #define SAMPLESPERBYTE 4
@@ -70,12 +71,8 @@ STARTUP(void audiointr())
 	
 	if (!G.audio.samples) {
 		int c;
-		if (G.audio.q.q_count <= G.audio.lowat) {
-			G.audio.lowat = -1;
-			wakeup(&G.audio.q);
-		}
 		if ((c = qgetc(&G.audio.q)) < 0)
-			return;
+			goto out;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
 	}
@@ -85,6 +82,12 @@ STARTUP(void audiointr())
 	--G.audio.samples;
 	
 	++G.audio.optr;
+out:
+	if (G.audio.q.q_count <= G.audio.lowat) {
+		G.audio.lowat = -1;
+		spl4();
+		defer(wakeup, &G.audio.q);
+	}
 }
 
 STARTUP(void audioopen(dev_t dev, int rw))

@@ -9,6 +9,7 @@
 #include "queue.h"
 #include "inode.h"
 #include "globals.h"
+#include "process.h"
 
 /* one-shot routine on system startup */
 STARTUP(void linkinit())
@@ -115,7 +116,7 @@ STARTUP(void linkintr())
 			
 			if (G.link.hiwat >= 0 && G.link.readq.q_count >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
-				wakeup(&G.link.readq);
+				defer(wakeup, &G.link.readq);
 				G.link.hiwat = -1;
 			}
 		}
@@ -136,7 +137,7 @@ STARTUP(void linkintr())
 			
 			if (G.link.writeq.q_count <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
-				wakeup(&G.link.writeq);
+				defer(wakeup, &G.link.writeq);
 				G.link.lowat = -1;
 			}
 		}

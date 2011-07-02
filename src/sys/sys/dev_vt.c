@@ -1254,9 +1254,14 @@ static void vtoutput(int ch, struct tty *tp)
 	splx(x);
 
 	dovtoutput(ch, tp);
-	while ((c = qgetc(&tp->t_outq)) != -1)
+	x = spl7();
+	while ((c = qgetc(&tp->t_outq)) != -1) {
+		splx(x);
 		dovtoutput(c, tp);
+		x = spl7();
+	}
 	G.vt.lock = 0;
+	splx(x);
 }
 
 /*
@@ -1334,7 +1339,7 @@ void ttyrub(int ch, struct tty *tp)
 
 	if ((lflag & ECHOE)) {
 		/* FIXME: handle different character classes */
-		if ((lflag & ECHOCTL) && ch < 037)
+		if ((lflag & ECHOCTL) && ch <= 037)
 			ttyrubo(tp, 2);
 		else
 			ttyrubo(tp, 1);
@@ -1352,6 +1357,7 @@ void ttyrub(int ch, struct tty *tp)
 
 }
 
+extern void ttywakeup(struct tty *tp);
 /*
  * ttyinput is implemented here because it calls ttyoutput which has an
  * implementation specific to dev_vt
@@ -1495,14 +1501,14 @@ static void ttyinput(int ch, struct tty *tp)
 #if 0 /* from 4.4BSD-Lite (clean) */
         if (qputc(c, &tp->t_rawq) >= 0) {
                 if (!ISSET(lflag, ICANON)) {
-                        ttywakeup(tp);
+                        defer(ttywakeup, tp);
                         ttyecho(c, tp);
                         goto endcase;
                 }
                 if (TTBREAKC(c)) {
                         tp->t_rocount = 0;
                         catq(&tp->t_rawq, &tp->t_canq);
-                        ttywakeup(tp);
+                        defer(ttywakeup, tp);
                 } else if (tp->t_rocount++ == 0)
                         tp->t_rocol = tp->t_column;
                 if (ISSET(tp->t_state, TS_ERASE)) {
@@ -1530,7 +1536,7 @@ static void ttyinput(int ch, struct tty *tp)
 		if (TTBREAKC(ch)) {
 			//tp->t_rocount = 0;
 			catq(&tp->t_rawq, &tp->t_canq);
-			ttywakeup(tp);
+			defer(ttywakeup, tp);
 		} /*else if (tp->t_rocount++ == 0)
 			tp->t_rocol = tp->t_column;*/
 #if 0
@@ -1557,11 +1563,11 @@ static void ttyinput(int ch, struct tty *tp)
 /*
 		if (ch == cc[VEOL] || ch == cc[VEOF]) {
 			catq(&tp->t_rawq, &tp->t_canq);
-			ttywakeup(tp);
+			defer(ttywakeup, tp);
 		}
 */
 	} else {
-		ttywakeup(tp);
+		defer(ttywakeup, tp);
 		ttyecho(ch, tp);
 	}
 endcase: ;

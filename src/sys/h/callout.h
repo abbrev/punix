@@ -9,5 +9,7 @@ struct callout {
 
 int timeout(void (*func)(void *), void *arg, long time);
 int untimeout(void (*func)(void *), void *arg);
+int defer(void (*func)(void *), void *arg);
+int undefer(void (*func)(void *), void *arg);
 
 #endif

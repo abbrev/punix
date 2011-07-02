@@ -110,3 +110,15 @@ STARTUP(int untimeout(void (*func)(void *), void *arg))
 	splx(x);
 	return canhastimeout;
 }
+
+/* schedule a task until after all interrupts are handled */
+STARTUP(int defer(void (*func)(void *), void *arg))
+{
+	return timeout(func, arg, 0);
+}
+
+/* unschedule a deferred task */
+STARTUP(int undefer(void (*func)(void *), void *arg))
+{
+	return untimeout(func, arg);
+}
