@@ -230,6 +230,7 @@ static const struct expand expand_table[] = {
 	{ KEY_F7, "\e[18~" },
 	{ KEY_F8, "\e[19~" },
 #endif
+	{ KEY_CLEAR, "clear" },
 	{ 0, "" }
 };
 
@@ -238,7 +239,7 @@ static void expand(short key)
 	const struct expand *ep = expand_table;
 	while (ep->oldkey) {
 		if (ep->oldkey == key) {
-			char *cp = ep->expansion;
+			const char *cp = ep->expansion;
 			while (*cp != '\0')
 				vtrint(DEV_VT, *cp++);
 			return;
@@ -633,7 +634,7 @@ static void addkey(unsigned short key)
 			key = 0xa9; /* copyright */
 #else
 		} else if (key == '/') {
-			key == 0x1f;
+			key = 0x1f;
 #endif
 		}
 	}
