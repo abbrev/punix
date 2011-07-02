@@ -19,7 +19,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-/* these are generic file operation routines (in struct fileops) */
+/* these are common file routines and generic file operation routines */
 
 #include <limits.h>
 #include <unistd.h>
@@ -129,3 +129,60 @@ const struct fileops generic_special_fileops = {
 	.open = generic_special_open,
 };
 
+/*
+ * Internal routine to close a file.
+ * Decrement the reference count.
+ * On the last reference, also put the inode back.
+ */
+int closef(struct file *fp)
+{
+	int ret = fp->f_ops->close(fp);
+	if (--fp->f_count == 0)
+		iput(fp->f_inode);
+	return ret;
+}
+
+/* allocate a file descriptor */
+/* start searching at 'd' */
+STARTUP(int fdalloc(int d))
+{
+	/* look for lowest free fd */
+	for (; d < NOFILE; ++d) {
+		if (P.p_ofile[d] == NULL) {
+			P.p_retval = d;
+			//P.p_oflag[d] = 0;
+			fdflags_to_oflag(d, 0L);
+#if 0
+			if (d > P.p_lastfile)
+				P.p_lastfile = d;
+#endif
+			return d;
+		}
+	}
+	
+	P.p_error = EMFILE;
+	return -1;
+}
+
+/* allocate a file descriptor and a file structure */
+/* NOTE! this returns the fd instead of the fp as in V6 */
+STARTUP(int falloc())
+{
+	struct file *fp;
+	int fd;
+	
+	if ((fd = fdalloc(0)) < 0)
+		return -1;
+	
+	for EACHFILE(fp) {
+		if (fp->f_count == 0) {
+			P.p_ofile[fd] = fp;
+			++fp->f_count;
+			fp->f_offset = 0;
+			return fd;
+		}
+	}
+	kprintf("no free files!\n");
+	P.p_error = ENFILE;
+	return -1;
+}

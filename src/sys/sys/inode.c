@@ -65,19 +65,54 @@ static void delete_inode(struct inode *ip)
 	memfree(ip, 0);
 }
 
+void inodeinit()
+{
+	struct inode *ip;
+	for (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip) {
+		ip->i_fs = NULL;
+		ip->i_flag = 0;
+		ip->i_count = 0;
+	}
+}
+
 /*
  * Get an inode by filesystem/inum pair.
  * If inode is already in memory, lock it and return it.
  * Otherwise, read it in from the device, lock it, and return it.
  * If the inode is mounted on, return the inode that covers it.
  */
+/* TODO: follow mount points */
 struct inode *iget(struct filesystem *fs, ino_t num)
 {
-	// TODO: write this
-	// if inode is not in memory, call fs->f_ops->read_inode()
-	// to read the inode from the file system
-	P.p_error = ENFILE;
-	return NULL;
+	struct inode *ip;
+	struct inode *freeip;
+
+retry:
+	freeip = NULL;
+	for (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip) {
+		if (ip->i_fs == fs && ip->i_num == num) {
+			if (ip->i_flag & ILOCKED) {
+				ip->i_flag |= IWANTED;
+				slp(ip, 0);
+				goto retry;
+			}
+			goto out;
+		}
+		if (ip->i_count == 0)
+			freeip = ip;
+	}
+	if (!(ip = freeip)) {
+		kprintf("no free inodes!\n");
+		P.p_error = ENFILE;
+		return NULL;
+	}
+	ip->i_fs = fs;
+	ip->i_num = num;
+
+out:
+	ip->i_flag |= ILOCKED;
+	++ip->i_count;
+	return ip;
 }
 
 /*
@@ -87,16 +122,12 @@ struct inode *iget(struct filesystem *fs, ino_t num)
  */
 void iput(struct inode *ip)
 {
+	if (--ip->i_count) return;
+
 	// TODO: write this
 }
 
-/* allocate an inode on device and return with a locked inode */
-struct inode *i_alloc(dev_t dev)
-{
-	return NULL;
-}
-
-STARTUP(void i_lock(struct inode *inop))
+STARTUP(void ilock(struct inode *inop))
 {
 	while (inop->i_flag & ILOCKED) {
 		inop->i_flag |= IWANTED;
@@ -105,7 +136,7 @@ STARTUP(void i_lock(struct inode *inop))
 	inop->i_flag |= ILOCKED;
 }
 
-STARTUP(void i_unlock(struct inode *inop))
+STARTUP(void iunlock(struct inode *inop))
 {
 	inop->i_flag &= ~ILOCKED;
 	if (inop->i_flag & IWANTED) {

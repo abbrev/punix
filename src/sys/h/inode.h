@@ -54,5 +54,10 @@ struct inodeops {
 //#define IWCOLL		0x4000		/* write select collision on pipe */
 //#define IXMOD		0x8000		/* inode is text, but impure (XXX) */
 
+struct inode *iget(struct filesystem *, ino_t);
+void iput(struct inode *);
+
+void ilock(struct inode *);
+void iunlock(struct inode *);
 
 #endif

@@ -51,6 +51,7 @@ STARTUP(void kmain())
 	procinit();
 	bufinit();
 	flashinit();
+	inodeinit();
 	batt_check();
 	
 #if 1

@@ -171,7 +171,6 @@ struct globals {
 		int _errno;
 		jmp_buf getcalcjmp;
 	} user;
-	int nextinode;
 	/* end temp/debugging variables */
 	
 	/* heap static variables (this must be last!) */

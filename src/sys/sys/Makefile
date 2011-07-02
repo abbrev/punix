@@ -43,7 +43,7 @@ OBJ	+= dev.o dev_audio.o dev_flash.o dev_link.o dev_misc.o dev_vt.o
 OBJ	+= lcd.o dev_tty.o keyscan.o batt.o
 # helper routines
 OBJ	+= kputs.o scroll.o
-OBJ	+= copy.o fio.o
+OBJ	+= copy.o
 OBJ	+= setjmp.o m68k.o string.o trap.o queue.o flash.o bio.o # rdwri.o
 OBJ	+= context.o
 OBJ	+= long.o subr.o tty.o inode.o process.o #pfs_alloc.o pfs_bmap.o

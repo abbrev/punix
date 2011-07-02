@@ -129,6 +129,10 @@ STARTUP(static void rdwr(int mode, int whichoffset))
 	}
 	
 	offset = (whichoffset == OFFSET_FILE) ? &fp->f_offset : &ap->offset;
+	if (*offset < 0) {
+		P.p_error = EINVAL;
+		return;
+	}
 
 	assert(fp->f_ops);
 	if (mode == FREAD) {
@@ -142,11 +146,6 @@ STARTUP(static void rdwr(int mode, int whichoffset))
 #endif
 		n = fp->f_ops->write(fp, ap->buf, ap->count, offset);
 	}
-
-	// n is -1 if one of the above routines catches a signal
-	// otherwise the signal will take us to the setjmp() above
-	if (n == -1)
-		return;
 
 	P.p_retval = n;
 }
@@ -208,6 +207,61 @@ extern const struct fileops generic_file_fileops;
 extern const struct fileops generic_dir_fileops;
 extern const struct fileops generic_special_fileops;
 
+/*
+ * calling this namei0() because it's just a temporary placeholder for a real
+ * namei() function
+ */
+struct inode *namei0(const char *path)
+{
+	struct inode *ip;
+	struct filesystem *fs = NULL;
+	dev_t dev;
+	ino_t inum;
+	struct file_list { const char *name; ino_t inum; dev_t dev; };
+	static const struct file_list file_list[] = {
+		{ "/dev/vt", 1, DEV_VT },
+		{ "/dev/audio", 2, DEV_AUDIO },
+		{ "/dev/link", 3, DEV_LINK },
+		{ "/dev/null", 4, DEV_MISC|0 },
+		{ "/dev/zero", 5, DEV_MISC|1 },
+		{ "/dev/full", 6, DEV_MISC|2 },
+		{ "/dev/random", 7, DEV_MISC|3 },
+		{ NULL, 0, 0 },
+	};
+	struct file_list *flp;
+	
+	for (flp = &file_list[0]; flp->name; ++flp) {
+		if (!strcmp(path, flp->name)) {
+			fs = (struct filesystem *)42;
+			inum = flp->inum;
+			dev = flp->dev;
+			break;
+		}
+	}
+	if (!fs) {
+		P.p_error = ENOENT;
+		return NULL;
+	}
+
+	ip = iget(fs, inum);
+	ip->i_rdev = dev;
+	ip->i_mode = S_IFCHR;
+
+	// XXX This should be set in each filesystem's read_inode() handler.
+	// The handler tables for regular files and directories would be
+	// defined for each file system too. The special file handler table
+	// would just be generic_special_fileops.
+	if (S_ISREG(ip->i_mode)) {
+		ip->i_fops = &generic_file_fileops;
+	} else if (S_ISDIR(ip->i_mode)) {
+		ip->i_fops = NULL; //&generic_dir_fileops;
+	} else {
+		ip->i_fops = &generic_special_fileops;
+	}
+
+	return ip;
+}
+
 /* open system call */
 /* FIXME: open is currently just a hack to produce results */
 STARTUP(void sys_open())
@@ -223,60 +277,38 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
-	//kprintf("sys_open: path=\"%s\"\n", ap->pathname);
-	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
-	if (!strcmp(ap->pathname, "/dev/vt"))
-		ip->i_rdev = DEV_VT;
-	else if (!strcmp(ap->pathname, "/dev/audio"))
-		ip->i_rdev = DEV_AUDIO;
-	else if (!strcmp(ap->pathname, "/dev/link"))
-		ip->i_rdev = DEV_LINK;
-	else if (!strcmp(ap->pathname, "/dev/null"))
-		ip->i_rdev = DEV_MISC | 0;
-	else if (!strcmp(ap->pathname, "/dev/zero"))
-		ip->i_rdev = DEV_MISC | 1;
-	else if (!strcmp(ap->pathname, "/dev/full"))
-		ip->i_rdev = DEV_MISC | 2;
-	else if (!strcmp(ap->pathname, "/dev/random"))
-		ip->i_rdev = DEV_MISC | 3;
-	else {
-		P.p_error = ENOENT;
-		return;
-	}
-
-	ip->i_mode = S_IFCHR;
-
-	// XXX This should be set in each filesystem's read_inode() handler.
-	// The handler tables for regular files and directories would be
-	// defined for each file system too. The special file handler table
-	// would just be generic_special_fileops.
-	if (S_ISREG(ip->i_mode)) {
-		ip->i_fops = &generic_file_fileops;
-	} else if (S_ISDIR(ip->i_mode)) {
-		ip->i_fops = &generic_dir_fileops;
-	} else {
-		ip->i_fops = &generic_special_fileops;
-	}
-
 	fd = falloc();
 	if (fd < 0)
 		return;
-	ip->i_num = G.nextinode;
-	++G.nextinode;
 	
 	fp = P.p_ofile[fd];
+	ip = namei0(ap->pathname);
+	if (!ip) {
+		if (ap->flags & O_CREAT) {
+			P.p_error = EROFS; // XXX no way to create files yet
+		}
+		goto fail_file;
+	}
+	
 	fp->f_flags = ap->flags; // XXX: validate flags
 	fp->f_type = DTYPE_INODE;
 	fp->f_inode = ip;
 	if (ip->i_fops->open(fp, ip)) {
-		goto fail;
+		goto fail_inode;
 	}
 	assert(fp->f_ops);
 	assert(fp->f_ops->read);
+
+	iunlock(ip);
 	
 	P.p_retval = fd;
 	return;
-fail:
+fail_inode:
+	iunlock(ip);
+	iput(ip);
+fail_file:
+	--fp->f_count; // XXX free the file structure
+	P.p_ofile[fd] = NULL;
 	;
 #else
 	doopen(ap->pathname, ap->flags, ap->mode);
@@ -309,7 +341,7 @@ STARTUP(void sys_close())
 		--P.p_lastfile;
 #endif
 	
-	P.p_retval = fp->f_ops->close(fp);
+	P.p_retval = closef(fp);
 }
 
 #define OFLAGIDX(num) ((num) >> 3) /* num/8 */
@@ -418,7 +450,7 @@ STARTUP(void sys_dup2())
 	
 	fp = P.p_ofile[ap->newfd];
 	if (fp)
-		fp->f_ops->close(fp);
+		closef(fp);
 	
 	P.p_error = 0;
 	

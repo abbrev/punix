@@ -134,7 +134,7 @@ struct inode *tmpfs_alloc_inode(struct filesystem *fs)
 	ip->i_count = 0;
 	ip->i_nlink = 0;
 	i_ref(ip);
-	i_lock(ip);
+	ilock(ip);
 
 	return ip;
 
