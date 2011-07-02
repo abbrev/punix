@@ -159,22 +159,25 @@ Int_1:
 	move	5*4(%sp),-(%sp)		| old ps
 	bsr	hardclock
 	addq.l	#2,%sp
-	bra	2f
+	bra	trapret2
 
 trapret:
 	addq.l	#4,%sp
-2:	move    5*4(%sp),%d0
-	and     #0x2000,%d0
-	bne.b   0f
+trapret2:
+	move	5*4(%sp),%d0
+	and	#0x0700,%d0
+	bne.b	0f
 	
-	move.l  %usp,%a0
-	pea.l   (%a0)                   | void *usp
-	pea.l   (%sp)                   | void **usp
-	move.l  7*4+2(%sp),-(%sp)       | void *pc
-	| call signal handler here (prototype is dosig(void *pc, void **usp))
-	addq.l  #2*4,%sp
-	move.l  (%sp)+,%a0
-	move.l  %a0,%usp
+	move.l	%usp,%a0
+	pea.l	(%a0)		| void *usp
+	pea.l	(%sp)		| void **usp
+	pea.l	7*4+2(%sp)	| void **pc
+	move	8*4(%sp),-(%sp)	| unsigned short ps
+	| void return_from_trap(unsigned short ps, void **pc, void **usp);
+	jbsr	return_from_trap
+	add.l	#2*4+2,%sp
+	move.l	(%sp)+,%a0
+	move.l	%a0,%usp
 	
 0:	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 1:	rte
@@ -207,8 +210,7 @@ Int_3:
 Int_4:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	linkintr	| just call the C routine
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra	trapret2
 
 | System timers.
 Int_5:
@@ -216,7 +218,7 @@ Int_5:
 	bne	1f		| ZZZZzzz
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	audiointr	| just call the C routine
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
+	bra	trapret2
 1:	rte
 
 | ON Int.

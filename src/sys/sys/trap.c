@@ -93,7 +93,6 @@ STARTUP(void trace(union exception_info *eip))
 STARTUP(void hardclock(unsigned short ps))
 {
 	int itimerdecr(struct itimerspec *itp, long nsec);
-	int sig;
 	int whereami;
 	long nsec = TICK;
 	
@@ -202,53 +201,11 @@ STARTUP(void hardclock(unsigned short ps))
 			++current->p_kru.kru_stime;
 	}
 	
-	/* do call-outs */
-	
-	if (G.callout[0].c_func == NULL)
-		goto out;
-	
-	--G.callout[0].c_dtime;
-	
-	if (G.calloutlock)
-		goto out;
-	
-	++G.calloutlock;
-	
-	if (G.callout[0].c_dtime <= 0) {
-		int t = 0;
-		struct callout *c1, *c2, c;
-		do {
-			int x;
-			c = G.callout[0];
-			c1 = &G.callout[0];
-			c2 = &G.callout[1];
-			/* remove the first callout before calling it */
-			do {
-				*c1 = *c2++;
-			} while (c1++->c_func);
-			x = spl0();
-			c.c_func(c.c_arg);
-			splx(x);
-			t += c.c_dtime;
-		} while (G.callout[0].c_func != NULL && t <= 0);
-	}
-	G.calloutlock = 0;
-	
-out:	//spl0();
+	// decrement the first callout's count-down timer
+	if (G.callout[0].c_func)
+		--G.callout[0].c_dtime;
 	
 	scankb();
-	
-	//spl1();
-	
-	if (!USERMODE(ps)) return;
-	
-	/* preempt a running user process */
-	if (G.need_resched) {
-		swtch();
-	}
-	
-	while ((sig = CURSIG(&P)))
-		postsig(sig);
 }
 
 #if 1
@@ -289,3 +246,53 @@ STARTUP(void updwalltime())
 	++G.seconds;
 }
 #endif
+
+/*
+ * return_from_trap runs every time the system returns from a trap to the base
+ * interrupt level (0)
+ */
+void return_from_trap(unsigned short ps, void **pc, void **usp)
+{
+	int sig;
+	spl1();
+	
+	/* do call-outs */
+	if (!G.calloutlock &&
+	    G.callout[0].c_func && G.callout[0].c_dtime <= 0) {
+		int t = 0;
+		struct callout *c1, *c2, c;
+		++G.calloutlock;
+		spl0();
+		do {
+			int x;
+			c = G.callout[0];
+			c1 = &G.callout[0];
+			c2 = &G.callout[1];
+			spl7();
+			/* remove the first callout before calling it */
+			do {
+				*c1 = *c2++;
+			} while (c1++->c_func);
+			spl0();
+			c.c_func(c.c_arg);
+			t += c.c_dtime;
+		} while (G.callout[0].c_func != NULL && t <= 0);
+		G.calloutlock = 0;
+	}
+	spl0();
+	
+	if (!USERMODE(ps))
+		return;
+
+	/* preempt a running user process */
+	if (G.need_resched)
+		swtch();
+	
+	/*
+	 * TODO:
+	 * check pending signals for current process (and post one or
+	 * more signals using 'pc' and 'usp' if any are pending)
+	 */
+	while ((sig = CURSIG(&P)))
+		postsig(sig);
+}
