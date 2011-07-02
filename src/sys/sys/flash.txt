@@ -1,0 +1,80 @@
+Flash device driver notes
+
+The FlashROM on the TI-89, 92+, V200, and TI-89Ti consists of 64KB pages. The HW1/HW2 models (TI-89, TI-92+) contain 32 pages, and the HW3/HW4 models (V200, TI-89Ti) contain 64 (128?) pages of FlashROM. The following will apply specifically to the HW1/HW2 models, but most will apply to the HW3/HW4 models as well.
+
+Writing to FlashROM may only clear bits. A bit can never be set when writing. To clear a bit, a whole page must be erased. Erasing a page sets all bits in that page (all bytes are 0xff). Obviously this means that any data that should be kept must be copied somewhere else (ie, another page or to RAM).
+
+The flash driver divides the FlashROM pages into blocks. A block is 128 bytes long and a block number is 2 bytes (16 bits) long. Each block contains its block number, so that blocks may reside anywhere in FlashROM. This facilitates wear-leveling.
+
+Each page consists of three parts: a signature, a block number list, and the blocks themselves. The signature is used to ensure that the page is "clean"; the signature is described in more detail below. The block number list is a flat array of block numbers (16-bit integers) that describes the mapping of block number to physical FlashROM address. A page will initially be filled entirely (except for the signature) with the bytes 0xff. This means that the block number list is terminated by the first value of 0xffff. To find a block, the driver must scan the block number list of all pages until a match is found.
+
+The driver will maintain a head pointer (a page number and block position within that page) to make writing new blocks relatively fast. That is, when a new block needs to be written, the driver will write it to the head and then advance the head.
+
+When an existing block needs to be overwritten (ie, the contents change), the driver will attempt to overwrite the block in-place. If overwriting the block in-place would set a bit that has been cleared, then the block must be moved. This can be done by first writing the new contents to the head, and then writing the value 0x0000 to the block number of the old ("obsolete") block. A block number of 0x0000 indicates the block is obsolete and can be purged by the garbage collector. As a special case, when the kernel writes a block filled with all zero bytes, the driver will only obsolete the old block and will not write a new block. This effectively deletes the block and makes garbage collection faster. This also means that when the driver searches for a non-existent block, it must return a block filled with zeroes.
+
+To speed up block searches, the driver will maintain a cache of recently-used block numbers. Each entry in this cache consists of a block number, the FlashROM page number where this block is located, and the offset within that page. The latter two elements (page number and offset) can fit within 16 bits. When a block is requested, its number is placed into the cache (if it is not already) and then moved to the top (most recently used spot).
+
+Occasionally a rarely-written block will be moved in order to promote even wearing of all pages. This can be done by moving the first valid block from the page with the largest number of obsolete blocks to the head. This increases the obsolete count for that page, and eventually that page will be completely obsolete (and the GC will reap it).
+
+
+Upon opening the flash device, the driver will scan all pages in FlashROM to ensure that they are "clean". A "clean" page means that the page contains a signature which indicates that the page is valid for writing new content. The value of the signature is arbitrary, but it never changes. During the scanning, the driver also gathers some statistics about the pages (eg, number of valid, free, and obsolete blocks). The driver will point the head at the page with the lowest (non-zero) number of free blocks so it can fill it up first. Once the head page has no more free blocks, the head will again move to the page with the lowest (non-zero) number of free blocks.
+
+To ensure that pages can be garbage collected, the driver MUST ensure that (f-fhead >= v), where f is the total number of free blocks, fhead is the number of free blocks in the head, and v is the minimum number of valid blocks in all pages. If a new block would cause this formula to become false, the garbage collector must be run on the page with the minimum number of valid blocks.
+
+The Garbage Collector
+
+The GC is responsible for reaping obsolete blocks. When the GC is called on for a page, it moves all valid blocks from that page to the head, then it erases that page and adds the page signature to it. The signature tells the rest of the driver that the page was erased successfully and is ready for writing new blocks to it. If moving a block causes a page to become completely obsolete, it should call the GC on that page.
+
+
+Pseudo-code for various actions:
+
+init:
+	for each page:
+		if the page has no signature, erase the page
+		add this page's statistics to totals
+
+find block:
+	if block number is in cache, make it RU and return the pointer
+	scan pages until block number is found
+	if block number is not found, pointer is NULL
+	put it in the cache, make it RU, and return the pointer
+
+obsolete block:
+	write 0x0000 in the block number
+
+put block (given old block position, new block position, and buffer to write):
+	write buffer to new block position
+	if old != new, obsolete old block
+
+write block:
+	find the old pos
+	if block is all zero bytes
+		if old pos != NULL
+			obsolete old block
+		return
+	if old pos is NULL or block cannot be written in place
+		new pos = head
+	put block at new pos
+
+move block:
+	copy block contents to buffer
+	put block at head
+
+erase page:
+	FlashErase the page
+	write signature to page
+
+garbage collect a page:
+	move all valid blocks from this page to the head
+	erase page
+
+
+notes about cache:
+Cache is in LRU order. Most-recently used block is at the head (index 0) of the cache list. This type of cache is vulnerable to scanning, where many blocks are accessed only once each. This pollutes the cache with blocks that will probably not be accessed again soon. A slight change to the cache should fix this: on the first access to a block, insert the block reference somewhere in the *middle* of the cache. On the next access, move the reference to the head. This will only pollute a smaller fraction of the cache toward the least-recently used end, and the cache will act as a normal LRU cache for blocks that are accessed more than once.
+
+
+block is 128 bytes, block number is 2 bytes
+65536 / 130 = 504 blocks per page + 16 bytes
+the signature can be up to 16 bytes long, such as:
+* "PunixFlashDevice"
+* "Kilroy Was Here "
