@@ -54,3 +54,35 @@ void loadav(unsigned long numrun)
 		                 + (F_ONE / 2)) >> F_SHIFT;
 	}
 }
+
+void calcloadav(void *unused)
+{
+#if 0
+	/* sanity check */
+	struct proc *p;
+	int i;
+	int n = 0;
+	int x = spl7();
+	for (i = 0; i < PRIO_LIMIT; ++i)
+		list_for_each_entry(p, &G.runqueues[i], p_runlist)
+			++n;
+	if (G.numrunning != n) {
+		kprintf("warning: numrunning=%d n=%d\n",
+			G.numrunning, n);
+		G.numrunning = n;
+	}
+	splx(x);
+#endif
+	loadav((unsigned long)G.cumulrunning * F_ONE / (HZ * 5));
+	
+	G.cumulrunning = 0;
+#if 0
+	++*(long *)(0x4c00+0xf00-26);
+#endif
+	timeout(calcloadav, NULL, HZ * 5);
+}
+
+void loadavinit()
+{
+	calcloadav(NULL);
+}
