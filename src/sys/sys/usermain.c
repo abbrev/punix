@@ -799,18 +799,12 @@ static void testlink(int argc, char *argv[], char *envp[])
 	alarm(1);
 	pause();
 	
-	printf("sending RDY packet...\n");
-	write(linkfd, rdypkt, sizeof(rdypkt));
-	
-	printf("reading packet...\n");
-	recvpkt(&packet, buf, LINKBUFSIZE, linkfd); /* ACK */
-	free(buf);
-	
 	printf("closing link...\n");
 	close(linkfd);
 	printf("closed.\n");
 	
 out:
+	free(buf);
 	userpause();
 }
 
