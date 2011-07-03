@@ -119,3 +119,21 @@ cpupoweroff:
 	move.l	%d2,realtime
 	move	%d0,%sr
 	rts
+
+| int trygetlock(char *lockp);
+| try to get a lock
+| return non-zero if we have a lock, 0 if we don't
+.global trygetlock
+trygetlock:
+	move.l	4(%sp),%a0
+	tas	(%a0)	| try to get the lock
+	seq	%d0	| set %d0=0xff if we got it, 0x00 if not
+	ext.w	%d0	| extend to word
+	rts
+
+| void unlock(char *lockp);
+.global unlock
+unlock:
+	move.l	4(%sp),%a0
+	move.b	#0,(%a0)
+	rts
