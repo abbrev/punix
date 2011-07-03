@@ -12,11 +12,51 @@
 
 /* These are all called from interrupts in entry.s */
 
+STARTUP(static void handle_ex_bus(union exception_info *eip,
+                                  const char *name,
+				  int signum))
+{
+	kprintf("%s exception\n"
+		"       function code: 0x%04x\n"
+		"      access address: %p\n"
+		"instruction register: 0x%04x\n"
+		"     status register: 0x%04x\n"
+		"     program counter: %p\n"
+		"\n",
+		name,
+		eip->bus_error.function_code,
+		eip->bus_error.access_address,
+		eip->bus_error.instruction_register,
+		eip->bus_error.status_register,
+		eip->bus_error.program_counter
+	);
+	if (!USERMODE(eip->bus_error.status_register))
+		panic("exception in kernel");
+	psignal(current, signum);
+}
+
+STARTUP(static void handle_ex_other(union exception_info *eip,
+                                    const char *name,
+				    int signum))
+{
+	kprintf("%s exception\n"
+		"     status register: 0x%04x\n"
+		"       vector offset: 0x%04x\n"
+		"     program counter: %p\n"
+		"\n",
+		name,
+		eip->other.status_register,
+		eip->other.vector_offset,
+		eip->other.program_counter
+	);
+	if (!USERMODE(eip->other.status_register))
+		panic("exception in kernel");
+	psignal(current, signum);
+}
+
 STARTUP(void bus_error(union exception_info *eip))
 {
-	if (!USERMODE(eip->bus_error.status_register))
-		panic("bus error");
-	psignal(&P, SIGBUS);
+	handle_ex_bus(eip, "bus error", SIGBUS);
 }
 
 STARTUP(void spurious(union exception_info *eip))
@@ -26,55 +66,37 @@ STARTUP(void spurious(union exception_info *eip))
 
 STARTUP(void address_error(union exception_info *eip))
 {
-	if (!USERMODE(eip->address_error.status_register))
-		panic("address error");
-	else {
-		kprintf("address error at PC %06lx\n",
-		        eip->address_error.program_counter);
-		panic("address error in usermode");
-	}
-	psignal(&P, SIGBUS);
+	handle_ex_bus(eip, "address error", SIGBUS);
 }
 
 STARTUP(void illegal_instr(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("illegal instruction");
-	else
-		panic("illegal instruction in usermode");
-	psignal(&P, SIGILL);
+	handle_ex_other(eip, "illegal instruction", SIGILL);
 }
 
 STARTUP(void zero_divide(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("zero divide");
-	psignal(&P, SIGFPE);
+	handle_ex_other(eip, "zero divide", SIGFPE);
 }
 
 STARTUP(void chk_instr(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("chk instruction");
+	handle_ex_other(eip, "chk instruction", SIGILL);
 }
 
 STARTUP(void i_trapv(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("trapv");
+	handle_ex_other(eip, "trapv", SIGTRAP);
 }
 
 STARTUP(void privilege(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("privileged instruction");
-	psignal(&P, SIGILL);
+	handle_ex_other(eip, "privileged instruction", SIGILL);
 }
 
 STARTUP(void trace(union exception_info *eip))
 {
-	if (!USERMODE(eip->other.status_register))
-		panic("trace");
+	handle_ex_other(eip, "trace", SIGTRAP);
 }
 
 #define BUMPNTIME(tv, nsec) do { \
@@ -138,34 +160,6 @@ STARTUP(void hardclock(unsigned short ps))
 	BUMPNTIME(&realtime_mono, TICK);
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
-	++loadavtime;
-	
-	if (loadavtime >= HZ * 5) {
-#if 0
-		/* sanity check */
-		struct proc *p;
-		int i;
-		int n = 0;
-		int x = spl7();
-		for (i = 0; i < PRIO_LIMIT; ++i)
-			list_for_each_entry(p, &G.runqueues[i], p_runlist)
-				++n;
-		if (G.numrunning != n) {
-			kprintf("warning: numrunning=%d n=%d\n",
-				G.numrunning, n);
-			G.numrunning = n;
-		}
-		splx(x);
-#endif
-		loadav((unsigned long)G.cumulrunning * F_ONE / loadavtime);
-		
-		batt_check();
-		loadavtime = 0;
-		G.cumulrunning = 0;
-#if 0
-		++*(long *)(0x4c00+0xf00-26);
-#endif
-	}
 	
 	sched_tick();
 	
@@ -176,21 +170,6 @@ STARTUP(void hardclock(unsigned short ps))
 		++current->p_cputime;
 	}
 
-#define CPUTICKS (HZ/2)
-#define DECAY_NUM 3
-#define DECAY_DEN 4
-#define DECAY DECAY_NUM / DECAY_DEN
-#define UNDECAY (DECAY_DEN-DECAY_NUM) / DECAY_DEN
-
-	/* once per second, calculate percent cpu for each process */
-	if ((G.ticks % CPUTICKS) == 0) {
-		struct proc *p;
-		list_for_each_entry(p, &G.proc_list, p_list) {
-			p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
-			p->p_cputime = p->p_cputime * DECAY;
-		}
-	}
-	
 	if (USERMODE(ps)) {
 		++current->p_kru.kru_utime;
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
@@ -206,6 +185,36 @@ STARTUP(void hardclock(unsigned short ps))
 		--G.callout[0].c_dtime;
 	
 	scankb();
+}
+
+void calcusage(void *unused)
+{
+#define CPUTICKS (HZ/2)
+#define DECAY_NUM 3
+#define DECAY_DEN 4
+#define DECAY DECAY_NUM / DECAY_DEN
+#define UNDECAY (DECAY_DEN-DECAY_NUM) / DECAY_DEN
+
+	/* calculate percent cpu for each process */
+	struct proc *p;
+	int x;
+	list_for_each_entry(p, &G.proc_list, p_list) {
+#if 1
+		p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
+		p->p_cputime = p->p_cputime * DECAY;
+#else
+		x = splclock();
+		p->p_pctcpu = 25600UL * p->p_cputime / CPUTICKS;
+		p->p_cputime = 0;
+		splx(x);
+#endif
+	}
+	timeout(calcusage, NULL, CPUTICKS);
+}
+
+void usageinit()
+{
+	calcusage(NULL);
 }
 
 #if 1
@@ -247,6 +256,8 @@ STARTUP(void updwalltime())
 }
 #endif
 
+extern int trygetlock(char *lock);
+
 /*
  * return_from_trap runs every time the system returns from a trap to the base
  * interrupt level (0)
@@ -254,32 +265,30 @@ STARTUP(void updwalltime())
 void return_from_trap(unsigned short ps, void **pc, void **usp)
 {
 	int sig;
-	spl1();
+	int x;
 	
 	/* do call-outs */
-	if (!G.calloutlock &&
-	    G.callout[0].c_func && G.callout[0].c_dtime <= 0) {
+	if (trygetlock(&G.calloutlock)) {
 		int t = 0;
 		struct callout *c1, *c2, c;
-		++G.calloutlock;
-		spl0();
-		do {
-			int x;
+		x = spl7();
+		t = G.callout[0].c_dtime;
+		while (G.callout[0].c_func && t <= 0) {
 			c = G.callout[0];
 			c1 = &G.callout[0];
 			c2 = &G.callout[1];
-			spl7();
 			/* remove the first callout before calling it */
 			do {
 				*c1 = *c2++;
 			} while (c1++->c_func);
 			spl0();
 			c.c_func(c.c_arg);
-			t += c.c_dtime;
-		} while (G.callout[0].c_func != NULL && t <= 0);
-		G.calloutlock = 0;
+			spl7();
+			t = G.callout[0].c_dtime += c.c_dtime;
+		}
+		spl0();
+		unlock(&G.calloutlock);
 	}
-	spl0();
 	
 	if (!USERMODE(ps))
 		return;

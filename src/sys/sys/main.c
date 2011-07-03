@@ -51,7 +51,9 @@ STARTUP(void kmain())
 	procinit();
 	bufinit();
 	flashinit();
-	batt_check();
+	loadavinit();
+	battinit();
+	usageinit();
 	
 #if 1
 	kprintf("%s build %s\n", uname_sysname, uname_version);
