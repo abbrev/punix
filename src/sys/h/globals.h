@@ -93,7 +93,7 @@ struct globals {
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
-	int calloutlock;
+	char calloutlock;
 	
 	struct buf avbuflist; /* list of buf */
 	struct list_head avbuf_list; /* list of available buf */
