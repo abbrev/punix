@@ -49,7 +49,7 @@ struct file {
 	unsigned char	f_type;		/* descriptor type */
 	unsigned short	f_count;	/* reference count */
 	struct inode *	f_inode;	/* pointer to inode structure */
-	struct fileops *f_ops;
+	const struct fileops *f_ops;
 #if 0
 	short		f_msgcount;	/* references from message queue */
 #endif

@@ -27,7 +27,7 @@ struct fsops {
 struct fstype {
 	const char name[MAXFSTYPENAMELEN];
 	unsigned long flags;
-	int (*read_filesystem)(struct fstype *,
+	int (*read_filesystem)(const struct fstype *,
 	                       struct filesystem *, int flags,
 			       const char *devname, const void *data);
 };
