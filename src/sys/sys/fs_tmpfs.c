@@ -1,6 +1,7 @@
 /* fs_tmpfs.c, temporary filesystem driver for Punix */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -25,30 +26,6 @@ int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
 {
 	return 1;
 }
-
-int tmpfs_file_open(struct file *fp, struct inode *ip);
-ssize_t tmpfs_file_read(struct file *fp, void *buf, size_t count, off_t *);
-ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count, off_t *);
-off_t generic_file_lseek(struct file *fp, off_t offset, int whence);
-
-struct fileops tmpfs_file_ops = {
-	.open = tmpfs_file_open,
-	.read = tmpfs_file_read,
-	.write = tmpfs_file_write,
-	.lseek = generic_file_lseek,
-};
-
-struct inode *tmpfs_alloc_inode(struct filesystem *);
-void tmpfs_free_inode(struct inode *);
-int tmpfs_read_inode(struct inode *);
-void tmpfs_write_inode(struct inode *inode);
-
-struct fsops tmpfs_fsops = {
-	.alloc_inode = tmpfs_alloc_inode,
-	.free_inode = tmpfs_free_inode,
-	//.read_inode = tmpfs_read_inode,
-	.write_inode = tmpfs_write_inode,
-};
 
 struct tmpfs_inode {
 	short signature;
@@ -75,6 +52,8 @@ struct tmpfs_direntry {
 	struct tmpfs_inode *inode;
 	struct tmpfs_direntry *next;
 };
+
+/* file operations */
 
 int tmpfs_file_open(struct file *fp, struct inode *ip)
 {
@@ -111,6 +90,16 @@ ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count, off_t *pos)
 	return -1;
 }
 
+off_t generic_file_lseek(struct file *fp, off_t offset, int whence);
+
+struct fileops tmpfs_file_ops = {
+	.open = tmpfs_file_open,
+	.read = tmpfs_file_read,
+	.write = tmpfs_file_write,
+	.lseek = generic_file_lseek,
+};
+
+/* filesystem operations */
 
 struct inode *tmpfs_alloc_inode(struct filesystem *fs)
 {
@@ -153,8 +142,22 @@ void tmpfs_free_inode(struct inode *ip)
 
 int tmpfs_read_inode(struct inode *ip)
 {
-	P.p_error = EINVAL; // XXX
-	return -1;
+	struct tmpfs_inode *tfsip = (struct tmpfs_inode *)ip->i_num;
+	// TODO: verify signature
+	ip->i_mode = tfsip->mode;
+	ip->i_nlink = tfsip->nlink;
+	ip->i_uid = tfsip->owner;
+	ip->i_gid = tfsip->group;
+	ip->i_atime = tfsip->atime;
+	ip->i_mtime = tfsip->mtime;
+	ip->i_ctime = tfsip->ctime;
+	if (S_ISCHR(ip->i_mode) || S_ISBLK(ip->i_mode))
+		ip->i_rdev = tfsip->rdev;
+	else
+		ip->i_size = tfsip->size;
+	ip->i_size = tfsip->size;
+
+	return 0;
 }
 
 void tmpfs_write_inode(struct inode *ip)
@@ -164,11 +167,21 @@ void tmpfs_write_inode(struct inode *ip)
 	tfsip->nlink = ip->i_nlink;
 	tfsip->owner = ip->i_uid;
 	tfsip->group = ip->i_gid;
-	tfsip->size = ip->i_size;
 	tfsip->atime = ip->i_atime;
 	tfsip->mtime = ip->i_mtime;
 	tfsip->ctime = ip->i_ctime;
+	if (S_ISCHR(ip->i_mode) || S_ISBLK(ip->i_mode))
+		tfsip->rdev = ip->i_rdev;
+	else
+		tfsip->size = ip->i_size;
 }
+
+struct fsops tmpfs_fsops = {
+	.alloc_inode = tmpfs_alloc_inode,
+	.free_inode = tmpfs_free_inode,
+	.read_inode = tmpfs_read_inode,
+	.write_inode = tmpfs_write_inode,
+};
 
 #if 0 /* for reference */
 struct inode {
