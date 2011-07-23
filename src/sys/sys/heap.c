@@ -10,6 +10,30 @@
  * to represent current allocations.
  */
 
+/*
+ * TODO: assign owners to allocations
+ *
+ * This can be done by using the pid field to store which module owns that
+ * block. The owner will be a negative value since a positive value is a pid,
+ * and 0 will indicate an unused block (currently -1 is used for this purpose).
+ * The negative of an owner will be used as an index into a table of pointers
+ * to functions which are used to request the module to free a memory block.
+ * The function will take a pointer and will return a boolean value--whether
+ * the block was freed or not. This will be used in allocentry when memory is
+ * running low to try to free memory that is otherwise not needed (eg, caches).
+ * One example owner is the block buffer cache; a block of memory may belong to
+ * a buffer. If the buffer is locked, the module's function will return false
+ * (0) right away. If the buffer is unlocked, it can be written out (if dirty),
+ * freed, and the function will return true (non-0).
+ *
+ * If the function returns true, allocentry will either retry allocating memory,
+ * or will again request a module to free some of its memory.
+ *
+ * It would also be a good idea to add a parameter to memalloc() whereby the
+ * caller can indicate whether it is willing to wait for this process, or if it
+ * would rather fail immediately.
+ */
+
 #define heapblock_to_offset(h) ((size_t)(h) * HEAPBLOCKSIZE)
 #define offset_to_heapblock(o) (((o) + HEAPBLOCKSIZE - 1) / HEAPBLOCKSIZE)
 #define heapentry_to_pointer(he) (G.heap.heap[(he)->start])
@@ -304,6 +328,10 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 	struct heapentry *hp, *newhp;
 	size_t size, oldsize;
 	void *newptr;
+
+	if (!ptr)
+		return memalloc(newsizep, pid);
+	
 	hp = findentry(ptr);
 	if (!hp || (pid && pid != hp->pid)) {
 		P.p_error = EFAULT;
