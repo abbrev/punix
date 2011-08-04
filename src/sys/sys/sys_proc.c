@@ -290,6 +290,8 @@ void sys_execve()
 	/* go to the new user context */
 	P.p_syscall_ctx->pc = text;
 	P.p_syscall_ctx->usp = ustack;
+	P.p_syscall_ctx->fp = 0; // clear out the frame pointer
+	// XXX: we ought to clear out all registers here while we're at it
 	
 	return;
 	
@@ -481,12 +483,6 @@ void sys_vfork()
 	void *stack = NULL;
 	size_t stacksize = STACKSIZE;
 	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
-	
-	/* XXX: remove this block once vfork is completely written */
-	if (0) {
-		P.p_error = ENOMEM;
-		return;
-	}
 	
 	/* spl7(); */
 	
