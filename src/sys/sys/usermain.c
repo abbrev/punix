@@ -313,6 +313,20 @@ clock_t times(struct tms *buf)
 	return timeval_to_clock_t(&tod);
 }
 
+int sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp,
+           void *newp, size_t newlen);
+int getloadavg32(long la[], int nelem)
+{
+	static int loadmib[] = { CTL_VM, VM_LOADAVG };
+	static unsigned loadmiblen = sizeof(loadmib) / sizeof(*loadmib);
+	size_t lalen = nelem * sizeof(long);
+
+	int ret = sysctl(loadmib, loadmiblen, la, &lalen, NULL, 0L);
+	if (ret)
+		return -1;
+	return lalen / sizeof(long);
+}
+
 #define ESC "\x1b"
 /* erase from cursor to end of line (inclusive) */
 static void cleareol()
@@ -379,7 +393,7 @@ static void testrandom(int argc, char *argv[], char *envp[])
 	userpause();
 }
 
-#define AUDIOBUFSIZE 1024
+#define AUDIOBUFSIZE 4096
 static void testaudio(int argc, char *argv[], char *envp[])
 {
 	int i;
@@ -838,9 +852,6 @@ unsigned long long sr64(unsigned long long, unsigned);
 
 #define BUFSIZE 512
 
-int sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp,
-           void *newp, size_t newlen);
-
 static int sysctltest_main(int argc, char **argv, char **envp)
 {
 	int mib[] = { CTL_KERN, KERN_NGROUPS };
@@ -885,7 +896,7 @@ static int ps_main(int argc, char **argv, char **envp)
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
 		long s;
 		int h, m;
-		s = kp->kp_ctime;
+		s = kp->kp_ctime / CLOCKS_PER_SEC;
 		h = s / 3600;
 		s %= 3600;
 		m = s / 60;
@@ -897,6 +908,87 @@ out_free:
 	free(allproc);
 out:
 	return status;
+}
+
+static int bt_main(int argc, char **argv, char **envp)
+{
+#define BTBUFSIZ 20
+	void *buffer[BTBUFSIZ];
+	void **p;
+	int size;
+	int backtrace(void **buffer, int size);
+	size = backtrace(&buffer[0], BTBUFSIZ);
+	printf("%d frames:\n", size);
+	for (p = &buffer[0]; size; --size, ++p)
+		printf("%p\n", *p);
+	return 0;
+}
+
+static int crash_main(int argc, char **argv, char **envp)
+{
+	/*
+.global buserr
+.global SPURIOUS
+.global ADDRESS_ERROR
+.global ILLEGAL_INSTR
+.global ZERO_DIVIDE
+.global CHK_INSTR
+.global I_TRAPV
+.global PRIVILEGE
+.global TRACE
+.global LINE_1010
+.global LINE_1111
+*/
+	char *type;
+	if (argc != 2) {
+		printf("Usage: %s type\n", argv[0]);
+		printf("where type is one of:\n"
+		       //"  buserr\n"
+		       "  address  address error\n"
+		       //"  illegal  illegal instruction\n"
+		       "  zerodiv  division by zero\n"
+		       "  chk      chk instruction\n"
+		       "  trapv    trap on overflow\n"
+		       "  priv     privileged instruction\n"
+		       //"  trace    instruction tracing\n"
+		       "  1010     line 1010 emulator\n"
+		       "  1111     line 1111 emulator\n"
+		       "  segv     invalid memory access\n");
+		return 1;
+	}
+
+	type = argv[1];
+	//if (!strcasecmp(type, "buserr")) {
+		//asm(" jsr 0x4321 "); // FIXME
+	//} else
+	if (!strcasecmp(type, "address")) {
+		asm(" move #42,0x4321 ");
+	//} else if (!strcasecmp(type, "illegal")) {
+		//asm(" .word 0x4321 "); // FIXME
+	} else if (!strcasecmp(type, "zerodiv")) {
+		asm(" divu #0,%d0 ");
+	} else if (!strcasecmp(type, "chk")) {
+		asm(" move #5,%d0; chk #4,%d0 ");
+	} else if (!strcasecmp(type, "trapv")) {
+		asm(" move #0x7fff,%d0; add #1,%d0; trapv ");
+	} else if (!strcasecmp(type, "priv")) {
+		asm(" move #0x2700,%sr ");
+	//} else if (!strcasecmp(type, "trace")) {
+		//asm(" trace ");
+	} else if (!strcasecmp(type, "1010")) {
+		asm(" .word 0xa000 ");
+	} else if (!strcasecmp(type, "1111")) {
+		// this won't crash if fpuemu is enabled
+		asm(" .word 0xf000; nop; nop ");
+	} else if (!strcasecmp(type, "segv")) {
+		*(long *)2 = 42;
+	} else {
+		printf("%s: unknown crash type %s\n", argv[0], type);
+		return 1;
+	}
+
+	printf("Look at that! We didn't crash!\n");
+	return 0;
 }
 
 static int fdtofd(int fromfd, int tofd)
@@ -1413,7 +1505,6 @@ static int updatetop(struct topinfo *info)
 	struct timeval tv;
 	int i;
 	long la[3];
-	int getloadavg1(long loadavg[], int nelem);
 	static const char procstates[] = "RSDTZ";
 	int nprocs, nrun, nslp, nstop, nzomb;
 	int nusers;
@@ -1423,7 +1514,7 @@ static int updatetop(struct topinfo *info)
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
 	gettimeofday(&tv, NULL);
-	getloadavg1(la, 3);
+	getloadavg32(la, 3);
 	
 	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
 		perror("top: sysctl 1");
@@ -1516,13 +1607,14 @@ static int updatetop(struct topinfo *info)
 	/* line 7- */
 	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
 	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
-		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
+		long s = (*kpp)->kp_ctime / CLOCKS_PER_SEC;
+		long m = s / 60;
+		s %= 60;
+		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3ld:%02ld %.12s",
 		       (*kpp)->kp_pid, (*kpp)->kp_euid, 0,
 		       (*kpp)->kp_nice, 0L, 0L, procstates[(*kpp)->kp_state],
 		       (*kpp)->kp_pcpu / 256, ((*kpp)->kp_pcpu % 256) * 10 / 256,
-		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) / 60),
-		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) % 60),
-		       (*kpp)->kp_cmd);
+		       m, s, (*kpp)->kp_cmd);
 		cleareol();
 	}
 	/* clear to the end of the screen */
@@ -1826,6 +1918,8 @@ static struct applet applets[] = {
 	{ "times", times_main },
 	{ "sysctltest", sysctltest_main },
 	{ "ps", ps_main },
+	{ "bt", bt_main },
+	{ "crash", crash_main },
 	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
