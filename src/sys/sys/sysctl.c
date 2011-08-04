@@ -281,9 +281,19 @@ static int kern_uptime(int *name, unsigned namelen,
 	return putvalue(oldp, oldlenp, &uptime.tv_sec, sizeof(long));
 }
 
+/* return load averages array in 16.16 fixed-point format */
 static int vm_loadavg(int *name, unsigned namelen, void *oldp, size_t *oldlenp)
 {
-	return ENOENT;
+	long load[3];
+	int i;
+
+	if (namelen < 0) return ENOTDIR;
+	if (namelen > 0) return ENOENT;
+
+	for (i = 0; i < 3; ++i)
+		load[i] = G.loadavg[i] << (16 - F_SHIFT);
+
+	return putvalue(oldp, oldlenp, load, sizeof(load));
 }
 
 static int vm_total(int *name, unsigned namelen, void *oldp, size_t *oldlenp)
