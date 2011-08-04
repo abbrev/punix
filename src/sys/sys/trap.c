@@ -99,6 +99,21 @@ STARTUP(void trace(union exception_info *eip))
 	handle_ex_other(eip, "trace", SIGTRAP);
 }
 
+STARTUP(void send_sigsegv(union exception_info *eip))
+{
+	handle_ex_other(eip, "bad memory access", SIGSEGV);
+}
+
+STARTUP(void line1010(union exception_info *eip))
+{
+	handle_ex_other(eip, "line 1010 emulator", SIGILL);
+}
+
+STARTUP(void line1111(union exception_info *eip))
+{
+	handle_ex_other(eip, "line 1111 emulator", SIGILL);
+}
+
 #define BUMPNTIME(tv, nsec) do { \
 	(tv)->tv_nsec += (nsec); \
 	if ((tv)->tv_nsec >= SECOND) { \
@@ -199,15 +214,15 @@ void calcusage(void *unused)
 	struct proc *p;
 	int x;
 	list_for_each_entry(p, &G.proc_list, p_list) {
+		x = splclock();
 #if 1
 		p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
 		p->p_cputime = p->p_cputime * DECAY;
 #else
-		x = splclock();
 		p->p_pctcpu = 25600UL * p->p_cputime / CPUTICKS;
 		p->p_cputime = 0;
-		splx(x);
 #endif
+		splx(x);
 	}
 	timeout(calcusage, NULL, CPUTICKS);
 }
@@ -259,10 +274,10 @@ STARTUP(void updwalltime())
 extern int trygetlock(char *lock);
 
 /*
- * return_from_trap runs every time the system returns from a trap to the base
- * interrupt level (0)
+ * return_from_int runs every time the system returns from an interrupt to the
+ * base interrupt level (0). This means returning to a kernel or user process.
  */
-void return_from_trap(unsigned short ps, void **pc, void **usp)
+void return_from_int(unsigned short ps, void **pc, void **usp)
 {
 	int sig;
 	int x;

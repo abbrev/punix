@@ -100,6 +100,13 @@ ADDRESS_ERROR:
 	bsr	address_error
 	bra	trapret
 
+| send signal SIGSEGV
+Int_7:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
+	bsr	send_sigsegv
+	bra	trapret
+
 	.long 0xbeef1004
 ILLEGAL_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
@@ -145,9 +152,20 @@ TRACE:
 	bra	trapret
 
 	.long 0xbeef100a
-| I don't know (send signal SIGILL?)
+| Line 1010 emulator. Send SIGILL
 | Are there valid 68010+ instructions starting with 1010?
 LINE_1010:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
+	bsr	line1010
+	rte
+
+| Line 1111 emulator. Send SIGILL
+| use this only if fpuemu is not included in the kernel
+LINE_1111:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	pea.l	5*4(%sp)
+	bsr	line1111
 	rte
 
 | Scan for the hardware to know what keys are pressed 
@@ -173,8 +191,8 @@ trapret2:
 	pea.l	(%sp)		| void **usp
 	pea.l	7*4+2(%sp)	| void **pc
 	move	8*4(%sp),-(%sp)	| unsigned short ps
-	| void return_from_trap(unsigned short ps, void **pc, void **usp);
-	jbsr	return_from_trap
+	| void return_from_int(unsigned short ps, void **pc, void **usp);
+	jbsr	return_from_int
 	add.l	#2*4+2,%sp
 	move.l	(%sp)+,%a0
 	move.l	%a0,%usp
@@ -228,11 +246,6 @@ Int_6:
 	move.b	#0,0x60001a	| acknowledge the key press
 	move	#1,onkey
 	rte
-
-| send signal SIGSEGV
-Int_7:
-	/* FIXME */
-	jmp	the_beginning
 
 _WaitKeyboard:
 	moveq	#0x58,%d0
