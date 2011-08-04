@@ -178,7 +178,7 @@ STARTUP(static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
 		
 			/* pointer */
 		case 'p':
-			u = va_arg(argp, unsigned long);
+			u = va_arg(argp, void *);
 			if (u) {
 				/* leading zeroes */
 				fill = '0';
