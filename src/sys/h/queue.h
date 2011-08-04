@@ -29,6 +29,8 @@ int qisempty(struct queue *qp);
 #define qisfull(qp) ((qp)->q_count >= QSIZE)
 #define qisempty(qp) ((qp)->q_count == 0)
 void qclear(struct queue *qp);
+#define qused(qp) ((qp)->q_count)
+#define qfree(qp) (QSIZE - (qp)->q_count)
 
 int qputc(int ch, struct queue *qp);
 int qunputc(struct queue *qp);
