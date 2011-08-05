@@ -1,7 +1,7 @@
 /*
  * Punix
  * Copyright (C) 2003 PpHd
- * Copyright 2004, 2005 Chris Williams
+ * Copyright 2004, 2005, 2010, 2011 Chris Williams
  * 
  * $Id$
  * 
@@ -43,15 +43,11 @@
 .global CheckBatt
 
 .global _syscall
-.global _trap
-.global setup_env
-
-|.include "procglo.inc"
-.include "signal.inc"
 
 .section _st1,"rx"
 .even
 
+| XXX see h/globals.h
 G = 0x5c00
 seconds = G+0
 onkey = G+180
@@ -264,8 +260,4 @@ _syscall:
 .global return_from_vfork
 return_from_vfork:
 	moveq	#0,%d0
-	rte
-
-| unused for now
-_trap:
 	rte
