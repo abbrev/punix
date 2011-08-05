@@ -157,5 +157,6 @@ glyphsets/all:
 
 clean:
 	rm -f *.bin *.o punix-9x.tib ${TMPUNAME}
+	rm -f sysent.c
 	${MAKE} -C glyphsets clean
 	#${MAKE} -C ${SYSINC} clean
