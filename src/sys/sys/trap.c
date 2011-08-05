@@ -81,7 +81,7 @@ STARTUP(void zero_divide(union exception_info *eip))
 
 STARTUP(void chk_instr(union exception_info *eip))
 {
-	handle_ex_other(eip, "chk instruction", SIGILL);
+	handle_ex_other(eip, "chk instruction", SIGTRAP);
 }
 
 STARTUP(void i_trapv(union exception_info *eip))
