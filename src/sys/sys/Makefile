@@ -88,7 +88,7 @@ uname.machine:
 	echo -n "$(UNAME_MACHINE)" >$@
 stupiddate:
 	echo -n "$(STUPIDDATE)" >$@
-entry.o: entry.s ${SYSINC}/signal.inc
+entry.o: entry.s
 drawcell.o: drawcell.s ${SYSINC}/lcd.inc
 calc.o: calc.s
 #switchthread.o:
