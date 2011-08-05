@@ -37,21 +37,21 @@ vectors_table:
 	.long	Int_6			| 78 Auto-Int 6
 	.long	Int_7			| 7C Auto-Int 7
 	.long	_syscall		| 80 trap 0
-	.long	_trap			| 84 trap 1
-	.long	_trap			| 88 trap 2
-	.long	_trap			| 8C trap 3
-	.long	_trap			| 90 trap 4
-	.long	_trap			| 94 trap 5
-	.long	_trap			| 98 trap 6
-	.long	_trap			| 9C trap 7
-	.long	_trap			| A0 trap 8
-	.long	_trap			| A4 trap 9
-	.long	_trap			| A8 trap 10
-	.long	_trap			| AC trap 11
-	.long	_trap			| B0 trap 12
-	.long	_trap			| B4 trap 13
-	.long	_trap			| B8 trap 14
-	.long	_trap			| BC trap 15
+	.long	TRAP_1			| 84 trap 1
+	.long	TRAP_2			| 88 trap 2
+	.long	TRAP_3			| 8C trap 3
+	.long	TRAP_4			| 90 trap 4
+	.long	TRAP_5			| 94 trap 5
+	.long	TRAP_6			| 98 trap 6
+	.long	TRAP_7			| 9C trap 7
+	.long	TRAP_8			| A0 trap 8
+	.long	TRAP_9			| A4 trap 9
+	.long	TRAP_10			| A8 trap 10
+	.long	TRAP_11			| AC trap 11
+	.long	TRAP_12			| B0 trap 12
+	.long	TRAP_13			| B4 trap 13
+	.long	TRAP_14			| B8 trap 14
+	.long	TRAP_15			| BC trap 15
 	.long	0xFF0055AA		| C0 *SIGNATURE
 	.long	0x1FFFFC		| C4 *RAM_SIZE
 	.fill	0x100-0x00C8		| XXX: why was it 0x400 previously??

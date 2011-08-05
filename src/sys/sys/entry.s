@@ -39,6 +39,21 @@
 .global Int_5
 .global Int_6
 .global Int_7
+.global TRAP_1
+.global TRAP_2
+.global TRAP_3
+.global TRAP_4
+.global TRAP_5
+.global TRAP_6
+.global TRAP_7
+.global TRAP_8
+.global TRAP_9
+.global TRAP_10
+.global TRAP_11
+.global TRAP_12
+.global TRAP_13
+.global TRAP_14
+.global TRAP_15
 .global _WaitKeyboard
 .global CheckBatt
 
@@ -137,17 +152,88 @@ SPURIOUS:
 Int_7:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	move	#31,-(%sp)
+	bra	exception
+
+TRAP_1:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#33,-(%sp)
+	bra	exception
+
+TRAP_2:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#34,-(%sp)
+	bra	exception
+
+TRAP_3:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#35,-(%sp)
+	bra	exception
+
+TRAP_4:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#36,-(%sp)
+	bra	exception
+
+TRAP_5:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#37,-(%sp)
+	bra	exception
+
+TRAP_6:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#38,-(%sp)
+	bra	exception
+
+TRAP_7:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#39,-(%sp)
+	bra	exception
+
+TRAP_8:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#40,-(%sp)
+	bra	exception
+
+TRAP_9:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#41,-(%sp)
+	bra	exception
+
+TRAP_10:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#42,-(%sp)
+	bra	exception
+
+TRAP_11:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#43,-(%sp)
+	bra	exception
+
+TRAP_12:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#44,-(%sp)
+	bra	exception
+
+TRAP_13:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#45,-(%sp)
+	bra	exception
+
+TRAP_14:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#46,-(%sp)
+	bra	exception
+
+TRAP_15:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#47,-(%sp)
 	|bra	exception
 	| fall through
 
+| common point for all exceptions
 exception:
 	pea.l	5*4+2(%sp)
 	jbsr	handle_exception
-	addq.l	#6,%sp
-	bra	trapret
-
-| exit point for all exceptions
-exret:
 	addq.l	#6,%sp
 	bra	trapret
 
