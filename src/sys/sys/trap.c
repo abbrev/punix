@@ -12,107 +12,112 @@
 
 /* These are all called from interrupts in entry.s */
 
-STARTUP(static void handle_ex_bus(union exception_info *eip,
-                                  const char *name,
-				  int signum))
+enum exception_type {
+	EX_BUS,
+	EX_OTHER
+};
+
+struct exception_signal {
+	enum exception_type type;
+	int signal;
+	const char *name;
+};
+
+static const struct exception_signal exception_signals[] = {
+	{ EX_OTHER,       0, NULL }, /* initial SP */
+	{ EX_OTHER,       0, NULL }, /* initial PC */
+	{ EX_BUS,    SIGBUS, "access fault" },
+	{ EX_BUS,    SIGBUS, "address error" },
+	{ EX_OTHER,  SIGILL, "illegal instruction" },
+	{ EX_OTHER,  SIGFPE, "integer divide by zero" },
+	{ EX_OTHER,  SIGFPE, "chk instruction" },
+	{ EX_OTHER,  SIGFPE, "trapv instruction" },
+	{ EX_OTHER,  SIGILL, "privilege violation" },
+	{ EX_OTHER, SIGTRAP, "trace" },
+	{ EX_OTHER,  SIGILL, "line 1010" },
+	{ EX_OTHER,  SIGILL, "line 1111" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "spurious interrupt" }, /* spurious interrupt */
+	{ EX_OTHER,       0, "" }, /* auto-int 1 */
+	{ EX_OTHER,       0, "" }, /* auto-int 2 */
+	{ EX_OTHER,       0, "" }, /* auto-int 3 */
+	{ EX_OTHER,       0, "" }, /* auto-int 4 */
+	{ EX_OTHER,       0, "" }, /* auto-int 5 */
+	{ EX_OTHER,       0, "" }, /* auto-int 6 */
+	{ EX_OTHER, SIGSEGV, "illegal memory access" },
+	{ EX_OTHER,       0, "" }, /* trap #0 (syscall) */
+	{ EX_OTHER, SIGTRAP, "trap #1" },
+	{ EX_OTHER, SIGTRAP, "trap #2" },
+	{ EX_OTHER, SIGTRAP, "trap #3" },
+	{ EX_OTHER, SIGTRAP, "trap #4" },
+	{ EX_OTHER, SIGTRAP, "trap #5" },
+	{ EX_OTHER, SIGTRAP, "trap #6" },
+	{ EX_OTHER, SIGTRAP, "trap #7" },
+	{ EX_OTHER, SIGTRAP, "trap #8" },
+	{ EX_OTHER, SIGTRAP, "trap #9" },
+	{ EX_OTHER, SIGTRAP, "trap #10" },
+	{ EX_OTHER, SIGTRAP, "trap #11" },
+	{ EX_OTHER, SIGTRAP, "trap #12" },
+	{ EX_OTHER, SIGTRAP, "trap #13" },
+	{ EX_OTHER, SIGTRAP, "trap #14" },
+	{ EX_OTHER, SIGTRAP, "trap #15" },
+};
+
+#define SIZEOF_SIGNALS (sizeof(exception_signals) / sizeof(exception_signals[0]))
+
+STARTUP(void handle_exception(union exception_info *eip, int num))
 {
-	kprintf("%s exception\n"
-		"       function code: 0x%04x\n"
-		"      access address: %p\n"
-		"instruction register: 0x%04x\n"
-		"     status register: 0x%04x\n"
-		"     program counter: %p\n"
-		"\n",
-		name,
-		eip->bus_error.function_code,
-		eip->bus_error.access_address,
-		eip->bus_error.instruction_register,
-		eip->bus_error.status_register,
-		eip->bus_error.program_counter
-	);
-	if (!USERMODE(eip->bus_error.status_register))
+	const struct exception_signal *esp;
+	short sr;
+	if (num < 0 || SIZEOF_SIGNALS <= num)
+		panic("invalid exception number");
+
+	esp = &exception_signals[num];
+	kprintf("%s exception\n", esp->name);
+	if (esp->type == EX_BUS) {
+		kprintf("       function code: 0x%04x\n"
+			"      access address: %p\n"
+			"instruction register: 0x%04x\n"
+			"     status register: 0x%04x\n"
+			"     program counter: %p\n"
+			"\n",
+			eip->bus_error.function_code,
+			eip->bus_error.access_address,
+			eip->bus_error.instruction_register,
+			eip->bus_error.status_register,
+			eip->bus_error.program_counter
+		);
+		sr = eip->bus_error.status_register;
+	} else {
+		kprintf("     status register: 0x%04x\n"
+			"     program counter: %p\n"
+			"       vector offset: 0x%04x\n"
+			"             address: %p\n"
+			"\n",
+			eip->other.status_register,
+			eip->other.program_counter,
+			eip->other.vector_offset,
+			eip->other.address
+		);
+		sr = eip->other.status_register;
+	}
+	if (!USERMODE(sr))
 		panic("exception in kernel");
-	psignal(current, signum);
+	psignal(current, esp->signal);
 }
 
-STARTUP(static void handle_ex_other(union exception_info *eip,
-                                    const char *name,
-				    int signum))
-{
-	kprintf("%s exception\n"
-		"     status register: 0x%04x\n"
-		"       vector offset: 0x%04x\n"
-		"     program counter: %p\n"
-		"\n",
-		name,
-		eip->other.status_register,
-		eip->other.vector_offset,
-		eip->other.program_counter
-	);
-	if (!USERMODE(eip->other.status_register))
-		panic("exception in kernel");
-	psignal(current, signum);
-}
 
-STARTUP(void bus_error(union exception_info *eip))
-{
-	handle_ex_bus(eip, "bus error", SIGBUS);
-}
-
-STARTUP(void spurious(union exception_info *eip))
-{
-	panic("spurious exception");
-}
-
-STARTUP(void address_error(union exception_info *eip))
-{
-	handle_ex_bus(eip, "address error", SIGBUS);
-}
-
-STARTUP(void illegal_instr(union exception_info *eip))
-{
-	handle_ex_other(eip, "illegal instruction", SIGILL);
-}
-
-STARTUP(void zero_divide(union exception_info *eip))
-{
-	handle_ex_other(eip, "zero divide", SIGFPE);
-}
-
-STARTUP(void chk_instr(union exception_info *eip))
-{
-	handle_ex_other(eip, "chk instruction", SIGTRAP);
-}
-
-STARTUP(void i_trapv(union exception_info *eip))
-{
-	handle_ex_other(eip, "trapv", SIGTRAP);
-}
-
-STARTUP(void privilege(union exception_info *eip))
-{
-	handle_ex_other(eip, "privileged instruction", SIGILL);
-}
-
-STARTUP(void trace(union exception_info *eip))
-{
-	handle_ex_other(eip, "trace", SIGTRAP);
-}
-
-STARTUP(void send_sigsegv(union exception_info *eip))
-{
-	handle_ex_other(eip, "bad memory access", SIGSEGV);
-}
-
-STARTUP(void line1010(union exception_info *eip))
-{
-	handle_ex_other(eip, "line 1010 emulator", SIGILL);
-}
-
-STARTUP(void line1111(union exception_info *eip))
-{
-	handle_ex_other(eip, "line 1111 emulator", SIGILL);
-}
 
 #define BUMPNTIME(tv, nsec) do { \
 	(tv)->tv_nsec += (nsec); \

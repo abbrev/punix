@@ -79,94 +79,81 @@ powerstate = G+182
  *       I/N (Instruction/Not): Instruction = 0, Not = 1.
  */
 
-	.long 0xbeef1001
 buserr:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	bus_error
-	bra	trapret
+	move	#2,-(%sp)
+	bra	exception
 
-	.long 0xbeef1002
-SPURIOUS:
-	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	spurious
-	bra	trapret
-
-	.long 0xbeef1003
 ADDRESS_ERROR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	address_error
-	bra	trapret
+	move	#3,-(%sp)
+	bra	exception
 
-| send signal SIGSEGV
-Int_7:
-	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	send_sigsegv
-	bra	trapret
-
-	.long 0xbeef1004
 ILLEGAL_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	illegal_instr
-	bra	trapret
+	move	#4,-(%sp)
+	bra	exception
 
-	.long 0xbeef1005
-| send signal SIGFPE
 ZERO_DIVIDE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	zero_divide
-	bra	trapret
+	move	#5,-(%sp)
+	bra	exception
 
-	.long 0xbeef1006
 CHK_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	chk_instr
-	bra	trapret
+	move	#6,-(%sp)
+	bra	exception
 
-	.long 0xbeef1007
 I_TRAPV:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	i_trapv
-	bra	trapret
+	move	#7,-(%sp)
+	bra	exception
 
-	.long 0xbeef1008
-| send signal SIGILL
 PRIVILEGE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	privilege
-	bra	trapret
+	move	#8,-(%sp)
+	bra	exception
 
-	.long 0xbeef1009
 TRACE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	trace
-	bra	trapret
+	move	#9,-(%sp)
+	bra	exception
 
-	.long 0xbeef100a
 | Line 1010 emulator. Send SIGILL
 | Are there valid 68010+ instructions starting with 1010?
 LINE_1010:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	line1010
-	rte
+	move	#10,-(%sp)
+	bra	exception
 
 | Line 1111 emulator. Send SIGILL
 | use this only if fpuemu is not included in the kernel
 LINE_1111:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	line1111
-	rte
+	move	#11,-(%sp)
+	bra	exception
+
+SPURIOUS:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#24,-(%sp)
+	bra	exception
+
+Int_7:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#31,-(%sp)
+	|bra	exception
+	| fall through
+
+exception:
+	pea.l	5*4+2(%sp)
+	jbsr	handle_exception
+	addq.l	#6,%sp
+	bra	trapret
+
+| exit point for all exceptions
+exret:
+	addq.l	#6,%sp
+	bra	trapret
 
 | Scan for the hardware to know what keys are pressed 
 Int_1:
@@ -177,11 +164,9 @@ Int_1:
 	move	5*4(%sp),-(%sp)		| old ps
 	bsr	hardclock
 	addq.l	#2,%sp
-	bra	trapret2
 
+| common exit point for all traps
 trapret:
-	addq.l	#4,%sp
-trapret2:
 	move	5*4(%sp),%d0
 	and	#0x0700,%d0
 	bne.b	0f
@@ -228,7 +213,7 @@ Int_3:
 Int_4:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	linkintr	| just call the C routine
-	bra	trapret2
+	bra	trapret
 
 | System timers.
 Int_5:
@@ -236,7 +221,7 @@ Int_5:
 	bne	1f		| ZZZZzzz
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	audiointr	| just call the C routine
-	bra	trapret2
+	bra	trapret
 1:	rte
 
 | ON Int.
@@ -252,7 +237,6 @@ _WaitKeyboard:
 	dbf	%d0,.
 	rts
 
-	.long	0xdeadd00d
 	|long dreg[5];  /* %d3-%d7 */
 	|long *usp;     /* %usp */
 	|long areg[5];  /* %a2-%a6 */
