@@ -943,9 +943,9 @@ static int crash_main(int argc, char **argv, char **envp)
 	if (argc != 2) {
 		printf("Usage: %s type\n", argv[0]);
 		printf("where type is one of:\n"
-		       //"  buserr\n"
+		       //"  bus      bus error\n"
 		       "  address  address error\n"
-		       //"  illegal  illegal instruction\n"
+		       "  illegal  illegal instruction\n"
 		       "  zerodiv  division by zero\n"
 		       "  chk      chk instruction\n"
 		       "  trapv    trap on overflow\n"
@@ -963,8 +963,8 @@ static int crash_main(int argc, char **argv, char **envp)
 	//} else
 	if (!strcasecmp(type, "address")) {
 		asm(" move #42,0x4321 ");
-	//} else if (!strcasecmp(type, "illegal")) {
-		//asm(" .word 0x4321 "); // FIXME
+	} else if (!strcasecmp(type, "illegal")) {
+		asm(" illegal ");
 	} else if (!strcasecmp(type, "zerodiv")) {
 		asm(" divu #0,%d0 ");
 	} else if (!strcasecmp(type, "chk")) {
