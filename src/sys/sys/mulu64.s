@@ -109,6 +109,7 @@ ae  df
 |  y = %d2:%d3
 | output:
 |  x*y = %d0:%d1:%d2:%d3
+| 2326 cycles (74 cycles per mulu)
 mulu64:
 	| save registers
 	movem.l	%d4/%a0-%a1,-(%sp)
@@ -337,19 +338,546 @@ mul64:
 
 	move.l	4+4(%sp),%a0
 	move.l	4+4+4(%sp),%a1
-	move.l	(%a0)+,%d0
-	move.l	(%a0)+,%d1
-	move.l	(%a1)+,%d2
-	move.l	(%a1)+,%d3
+	movem.l	(%a0),%d0-%d1
+	movem.l	(%a1),%d2-%d3
 
-	jbsr	mulu64
+	|jbsr	mulu64
+	|jbsr	mulu64b
+	jbsr	mulu64c
 
 	move.l	4+4+4+4(%sp),%a0
-	move.l	%d0,(%a0)+
-	move.l	%d1,(%a0)+
-	move.l	%d2,(%a0)+
-	move.l	%d3,(%a0)+
+	movem.l	%d0-%d3,(%a0)
 
 	| restore
 	move.l	(%sp)+,%d3
+	rts
+
+
+
+| this version is like mulu64 above, but it stores the result in registers
+| instead of the stack for speed
+
+| calculate these first:
+| ag ah bg bh cg ch dg dh
+| this will free up %d3 to use as a scratch register
+| 00000000
+|       dh \
+|      ch  |
+|      dg  |
+|     bh    >-- free up %d3
+|     cg   |
+|    ah    |
+|    bg    |
+|   ag     /
+| 00000000
+|     df   \
+|    cf     >-- free up %d1
+|    de    |
+|   ce     /
+|   bf
+|  af
+|  be
+| ae
+| 00000000
+|
+| %d4 %d5 %d6 %d7
+|              dh
+|          bh
+|            dg    no carry
+|                  clear %d5
+|        bg        no carry
+| %d4 %d5 %d6 %d7
+|            ch    carry up to %d5
+|                  if needed, we can move %d7 to %a0 and use it as a temporary
+|        ah        carry up to %d5
+|          cg      carry up to %d5
+|                  compute ag in %d3 and clear %d4
+|      ag          carry into %d4
+| --second half--
+| %d4 %d5 %d6 %d7
+|  ae
+|    be            carry up to %d4
+|    af            carry up to %d4
+|      bf          carry up to %d4
+|                  %d0 is now scratch
+| %d4 %d5 %d6 %d7
+|      ce          carry up to %d4
+|        de        carry up to %d4
+|        cf        carry up to %d4
+|          df      carry up to %d4
+
+
+
+.if 0
+	| add staggered long:
+	| %d4 = dg
+	swap	%d4	| gd
+	add.w	%d4,%d6
+	moveq.w	#0,%d4
+	add.l	%d4,%d7
+
+	| %d4 = bg
+	swap	%d4	| gb
+	add.w	%d4,%d5
+	moveq.w	#0,%d4
+	add.l	%d4,%d6
+.endif
+
+| multiply unsigned 64-bit integers
+| return unsigned 128-bit integer
+| input:
+|  x = %d0:%d1
+|  y = %d2:%d3
+| output:
+|  x*y = %d0:%d1:%d2:%d3
+mulu64b:
+	| save registers
+	movem.l	%d4-%d7,-(%sp)
+
+	move.l	%d2,%a0		| d2 is scratch
+	moveq.l	#0,%d4
+	| ab:cd d0:d1
+	| ef:gh a0:d3
+	
+|                  clear %d5
+	move.l	%d4,%d5
+
+| %d4 %d5 %d6 %d7
+|              dh
+	move.w	%d1,%d7		| d
+	mulu.w	%d3,%d7		| dh
+
+| %d4 %d5 %d6 %d7
+|          bh
+	move.w	%d0,%d6		| b
+	mulu.w	%d3,%d6		| bh
+
+| %d4 %d5 %d6 %d7
+|            dg    no carry
+	swap	%d3
+	| ab:cd d0:d1
+	| ef:gh a0:d3
+	move	%d3,%d2
+	mulu	%d1,%d2
+	swap	%d2
+	add.w	%d2,%d6
+	move.w	%d4,%d2		| clear low word
+	add.l	%d2,%d7		| XXX this may carry!
+	addx.w	%d2,%d6		| add 0 + carry
+
+
+| %d4 %d5 %d6 %d7
+|        bg        no carry
+	move.l	%d3,%d2
+	swap	%d2
+	mulu	%d0,%d2
+	swap	%d2
+	move.w	%d2,%d5
+	move.w	%d4,%d2		| clear low word
+	add.l	%d2,%d6		| XXX this may carry!
+	addx.w	%d2,%d5		| add 0 + carry
+
+| %d4 %d5 %d6 %d7
+|            ch    carry up to %d5
+	move.l	%d1,%d2
+	swap	%d2
+	mulu	%d3,%d2
+	swap	%d2
+	move.w	%d2,%d4		| d4 is high word (goes into d6)
+	clr.w	%d2		| d2 is low word (goes into d7)
+	add.l	%d2,%d7
+	addx.l	%d4,%d6		| carry
+	addx.w	%d2,%d5		| carry (%d2.w=0) (only affects low word in %d5)
+
+|                  if needed, we can move %d7 to %a0 and use it as a temporary
+	move.l	%d7,%a0		| %d7 is now scratch
+
+| %d4 %d5 %d6 %d7
+|        ah        carry up to %d5
+	swap	%d0
+	| ba:cd d0:d1
+	| ef:gh a0:d3
+	move	%d0,%d2
+	mulu	%d3,%d2
+	swap	%d2
+	move.w	%d2,%d4		| d4 is high word (goes into d5)
+	clr.w	%d2		| d2 is low word (goes into d6)
+	add.l	%d2,%d6
+	addx.l	%d4,%d5		| carry
+	
+| %d4 %d5 %d6 %d7
+|          cg      carry up to %d5
+	swap	%d1
+	swap	%d3
+	| ba:dc d0:d1
+	| ef:hg a0:d3
+	move	%d1,%d4
+	mulu	%d3,%d4
+	moveq.l	#0,%d2
+	add.l	%d4,%d6
+	addx.l	%d2,%d5		| carry
+
+| %d4 %d5 %d6 %d7
+|                  clear %d4
+	move.l	%d2,%d4
+
+| %d4 %d5 %d6 %d7
+|                  compute ag in %d3
+|      ag          carry into %d4
+	mulu	%d0,%d3
+	add.l	%d3,%d5
+	addx.w	%d2,%d4		| carry
+
+|                  %d3 is now available as a temporary
+| --second half--
+| %d4 %d5 %d6 %d7
+|  ae
+	move.l	%a0,%d2
+	| ba:dc d0:d1
+	| ef:XX d2:XX
+	swap	%d2
+	| ba:dc d0:d1
+	| fe:XX d2:XX
+	move	%d0,%d3
+	mulu	%d2,%d3
+	add.l	%d3,%d4
+
+| %d4 %d5 %d6 %d7
+|    be            carry up to %d4
+	move.l	%d0,%d3
+	swap	%d3
+	mulu	%d2,%d3
+	swap	%d3
+	move.w	%d3,%d7		| d7 is high word (goes into d4)
+	clr.w	%d3		| d3 is low word (goes into d5)
+	add.l	%d3,%d5
+	addx.l	%d7,%d4		| carry
+
+| %d4 %d5 %d6 %d7
+|    af            carry up to %d4
+	swap	%d2
+	| ba:dc d0:d1
+	| ef:XX d2:XX
+	move	%d2,%d3
+	mulu	%d2,%d3
+	swap	%d3
+	move.w	%d3,%d7		| d7 is high word (goes into d4)
+	clr.w	%d3		| d3 is low word (goes into d5)
+	add.l	%d3,%d5
+	addx.l	%d7,%d4		| carry
+
+
+| %d4 %d5 %d6 %d7
+|      bf          carry up to %d4
+	swap	%d0
+	| ab:dc d0:d1
+	| ef:XX d2:XX
+	move	%d0,%d3
+	mulu	%d2,%d3
+	moveq.l	#0,%d7
+	add.l	%d3,%d5
+	addx.w	%d7,%d4		| carry
+
+|                  %d0 is now scratch
+| %d4 %d5 %d6 %d7
+|      ce          carry up to %d4
+	swap	%d2
+	| ab:dc d0:d1
+	| fe:XX d2:XX
+	move	%d2,%d3
+	mulu	%d1,%d3
+	add.l	%d3,%d5
+	addx.l	%d7,%d4		| carry
+
+| %d4 %d5 %d6 %d7
+|        de        carry up to %d4
+	swap	%d1
+	| ab:cd d0:d1
+	| fe:XX d2:XX
+	move	%d1,%d3
+	mulu	%d2,%d3
+	swap	%d3
+	move.l	%d7,%d0		| 0
+	move.w	%d3,%d7		| d7 is high word (goes into d5)
+	move.w	%d0,%d3		| d3 is low word (goes into d6)
+	add.l	%d3,%d6
+	addx.l	%d7,%d5		| carry
+	addx.l	%d0,%d4		| carry
+
+| %d4 %d5 %d6 %d7
+|          df      carry up to %d4
+	swap	%d2
+	| ab:cd d0:d1
+	| ef:XX d2:XX
+	move	%d2,%d3
+	mulu	%d1,%d3
+	add.l	%d3,%d5
+	addx.l	%d0,%d4		| carry
+
+| %d4 %d5 %d6 %d7
+|        cf        carry up to %d4
+	swap	%d1
+	| ab:dc d0:d1
+	| ef:XX d2:XX
+	move	%d1,%d3
+	mulu	%d2,%d3
+	swap	%d3
+	move.l	%d0,%d7		| 0
+	move.w	%d3,%d7		| d7 is high word (goes into d5)
+	move.w	%d0,%d3		| d3 is low word (goes into d6)
+	add.l	%d3,%d6
+	addx.l	%d7,%d5		| carry
+	addx.l	%d0,%d4		| carry
+
+	move.l	%d4,%d0
+	move.l	%d5,%d1
+	move.l	%d6,%d2
+	move.l	%a0,%d3
+
+	| restore registers
+	movem.l	(%sp)+,%d4-%d7
+	rts
+
+
+| version 3 optimizations!
+| idea brought up by Lionel Debroux:
+| add up aligned products and unaligned products separately:
+| * on the one side:
+|0055ddff +
+|..88aa.. +
+|..2277..
+| * on the other side:
+|.44ccee. +
+|.1166bb. +
+|...99...
+|...33... 
+|
+| I would compute the unaligned part first, push 0.w and 3.5 longs on the
+| stack, compute the aligned part, pop the was-unaligned part off the stack,
+| and then add them together.
+
+
+| ae af ag ah     00 11 22 33
+| be bf bg bh     44 55 66 77
+| ce cf cg ch     88 99 aa bb
+| de df dg dh     cc dd ee ff
+
+| ab:cd
+| ef:gh
+
+| %d4 %d5 %d6 %d7
+|     be  de  dg
+|     af  bg  ch
+|         cf
+|         ah
+
+| %d4 %d5 %d6 %d7
+|  ae  bf  df  dh
+|      ce  cg
+|      ag  bh
+
+| %d4 %d5 %d6 %d7
+|              dg
+| %d4 %d5 %d6 %d7
+|          de
+| %d4 %d5 %d6 %d7
+|      be
+| %d4 %d5 %d6 %d7
+|              ch carry through d4
+| %d4 %d5 %d6 %d7
+|          cf     carry through d4
+| %d4 %d5 %d6 %d7
+|          ah     carry through d4
+| %d4 %d5 %d6 %d7
+|          bg     carry through d4
+| %d4 %d5 %d6 %d7
+|      af         carry through d4
+
+| %d4 %d5 %d6 %d7
+|              dh
+| %d4 %d5 %d6 %d7
+|          df
+| %d4 %d5 %d6 %d7
+|      bf
+| %d4 %d5 %d6 %d7
+|  ae
+| %d4 %d5 %d6 %d7
+|          cg
+| %d4 %d5 %d6 %d7
+|      ce
+| %d4 %d5 %d6 %d7
+|      ag
+| %d4 %d5 %d6 %d7
+|          bh
+
+mulu64c:
+	| ab:cd  d0:d1
+	| ef:gh  d2:d3
+
+| %d4 %d5 %d6 %d7
+|              dg
+	swap	%d3
+	| ab:cd  d0:d1
+	| ef:hg  d2:d3
+	move	%d3,%d7
+	mulu	%d1,%d7
+
+| %d4 %d5 %d6 %d7
+|          de
+	swap	%d2
+	| ab:cd  d0:d1
+	| fe:hg  d2:d3
+	move	%d2,%d6
+	mulu	%d1,%d6
+	
+| %d4 %d5 %d6 %d7
+|      be
+	move	%d0,%d5
+	mulu	%d2,%d5
+
+| %d4 %d5 %d6 %d7
+|              ch carry through d4
+	swap	%d1
+	swap	%d3
+	move.l	%d0,%a0		| save %d0
+	| ab:dc  a0:d1
+	| fe:gh  d2:d3
+	moveq.l	#0,%d0
+	move	%d1,%d4
+	mulu	%d3,%d4
+	add.l	%d4,%d7
+	addx.l	%d0,%d6
+	addx.l	%d0,%d5
+	addx.l	%d0,%d0
+	move.l	%d0,%d4
+
+| %d4 %d5 %d6 %d7
+|          cf     carry through d4
+	move.l	%d7,%a1		| save %d7
+	swap	%d2
+	| ab:dc  a0:d1
+	| ef:gh  d2:d3
+	move	%d1,%d7
+	mulu	%d2,%d7
+	moveq.l	#0,%d0
+	add.l	%d7,%d6
+	addx.l	%d0,%d5
+	addx.l	%d0,%d4
+
+| %d4 %d5 %d6 %d7
+|          bg     carry through d4
+	move.l	%a0,%d0		| restore %d0
+	move.l	%d1,%a0		| save %d1
+	moveq.l	#0,%d1
+	move.l	%d3,%d7
+	swap	%d7
+	| ab:dc  d0:a0
+	| ef:gh  d2:d3
+	mulu	%d0,%d7
+	add.l	%d7,%d6
+	addx.l	%d1,%d5
+	addx.l	%d1,%d4
+
+| %d4 %d5 %d6 %d7
+|          ah     carry through d4
+	swap	%d0
+	| ba:dc  d0:a0
+	| ef:gh  d2:d3
+	move	%d0,%d7
+	mulu	%d3,%d7
+	add.l	%d7,%d6
+	addx.l	%d1,%d5
+	addx.l	%d1,%d4
+
+| %d4 %d5 %d6 %d7
+|      af         carry through d4
+	move	%d0,%d7
+	mulu	%d2,%d7
+	add.l	%d7,%d5
+	addx.l	%d1,%d4
+
+| save unaligned part to stack
+	move.w	%d1,-(%sp)	| push a zero word to align this part
+	movem.l	%d4-%d6/%a1,-(%sp)	| %a1 is %d7
+	addq	#2,%sp
+
+| aligned part
+| %d4 %d5 %d6 %d7
+|              dh
+	move.l	%a0,%d1		| restore %d1
+	swap	%d1
+	| ba:cd  d0:d1
+	| ef:gh  d2:d3
+	move	%d1,%d7
+	mulu	%d3,%d7
+
+| %d4 %d5 %d6 %d7
+|          df
+	move	%d1,%d6
+	mulu	%d2,%d6
+
+| %d4 %d5 %d6 %d7
+|      bf
+	move.l	%d0,%d5
+	swap	%d5
+	mulu	%d2,%d5
+
+| %d4 %d5 %d6 %d7
+|  ae
+	move	%d0,%d4
+	swap	%d2
+	| ba:cd  d0:d1
+	| fe:gh  d2:d3
+	mulu	%d2,%d4
+
+| %d4 %d5 %d6 %d7
+|          cg
+	move.l	%d7,%a1		| save %d7
+	swap	%d1
+	swap	%d3
+	move.l	%d2,%a0		| save %d2
+	moveq.l	#0,%d2
+	| ba:dc  d0:d1
+	| fe:hg  a0:d3
+	move	%d1,%d7
+	mulu	%d3,%d7
+	add.l	%d7,%d6
+	addx.l	%d2,%d5
+	addx.l	%d2,%d4
+
+| %d4 %d5 %d6 %d7
+|      ce
+	move	%a0,%d7
+	mulu	%d1,%d7
+	add.l	%d7,%d5
+	addx.l	%d2,%d4
+
+| %d4 %d5 %d6 %d7
+|      ag
+	move	%d0,%d7
+	mulu	%d3,%d7
+	add.l	%d7,%d5
+	addx.l	%d2,%d4
+
+| %d4 %d5 %d6 %d7
+|          bh
+	swap	%d0
+	swap	%d3
+	| ab:dc  d0:d1
+	| fe:gh  a0:d3
+	move	%d0,%d7
+	mulu	%d3,%d7
+	add.l	%d7,%d6
+	addx.l	%d2,%d5
+	addx.l	%d2,%d4
+
+| restore unaligned part and add it to aligned part
+	movem.l	(%sp)+,%d0-%d3
+	add.l	%a1,%d3		| %d7
+	addx.l	%d6,%d2
+	addx.l	%d5,%d1
+	addx.l	%d4,%d0
+
+| result is in %d0-%d3
+
 	rts
