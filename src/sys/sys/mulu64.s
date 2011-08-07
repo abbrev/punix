@@ -343,7 +343,9 @@ mul64:
 
 	|jbsr	mulu64
 	|jbsr	mulu64b
+	movem.l	%d4-%d7,-(%sp)
 	jbsr	mulu64c
+	movem.l	(%sp)+,%d4-%d7
 
 	move.l	4+4+4+4(%sp),%a0
 	movem.l	%d0-%d3,(%a0)
@@ -710,6 +712,7 @@ mulu64b:
 | %d4 %d5 %d6 %d7
 |          bh
 
+| destroys %d4-%d7, %a0-%a1
 mulu64c:
 	| ab:cd  d0:d1
 	| ef:gh  d2:d3
