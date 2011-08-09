@@ -654,22 +654,15 @@ mulu64b:
 |...99...
 |...33... 
 |
-| I would compute the unaligned part first, push 0.w and 3.5 longs on the
-| stack, compute the aligned part, pop the was-unaligned part off the stack,
-| and then add them together.
-
 
 | ae af ag ah     00 11 22 33
 | be bf bg bh     44 55 66 77
 | ce cf cg ch     88 99 aa bb
 | de df dg dh     cc dd ee ff
 
-| ab:cd
-| ef:gh
-
 | %d4 %d5 %d6 %d7
 |     be  de  dg
-|     af  bg  ch
+|   * af  bg  ch  carry in %d4
 |         cf
 |         ah
 
@@ -677,40 +670,6 @@ mulu64b:
 |  ae  bf  df  dh
 |      ce  cg
 |      ag  bh
-
-| %d4 %d5 %d6 %d7
-|              dg
-| %d4 %d5 %d6 %d7
-|          de
-| %d4 %d5 %d6 %d7
-|      be
-| %d4 %d5 %d6 %d7
-|              ch carry through d4
-| %d4 %d5 %d6 %d7
-|          cf     carry through d4
-| %d4 %d5 %d6 %d7
-|          ah     carry through d4
-| %d4 %d5 %d6 %d7
-|          bg     carry through d4
-| %d4 %d5 %d6 %d7
-|      af         carry through d4
-
-| %d4 %d5 %d6 %d7
-|              dh
-| %d4 %d5 %d6 %d7
-|          df
-| %d4 %d5 %d6 %d7
-|      bf
-| %d4 %d5 %d6 %d7
-|  ae
-| %d4 %d5 %d6 %d7
-|          cg
-| %d4 %d5 %d6 %d7
-|      ce
-| %d4 %d5 %d6 %d7
-|      ag
-| %d4 %d5 %d6 %d7
-|          bh
 
 | destroys %d4-%d7, %a0-%a1
 mulu64c:
