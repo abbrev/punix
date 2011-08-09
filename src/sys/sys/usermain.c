@@ -991,6 +991,68 @@ static int crash_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+typedef unsigned long int64[2];
+typedef unsigned long int128[4];
+
+static void test_mul(int64 a, int64 b)
+{
+	int128 r;
+	
+	void mul64(int64 a, int64 b, int128 result);
+	mul64(a, b, r);
+
+	printf("%08lx%08lx * %08lx%08lx =\n"
+	       "%08lx%08lx%08lx%08lx\n",
+	       a[0], a[1], b[0], b[1],
+	       r[0], r[1], r[2], r[3]);
+}
+
+static int mul_main(int argc, char **argv, char **envp)
+{
+
+	int64 tests[][2] = {
+		{ { 0x000000E8,0xD4A51000 }, { 0x00000000,0x0280DE80 } },
+		{ { 0xDEADFACE,0xBEEFF00D }, { 0xCAFEBABE,0x0B00B1E5 } },
+		{ { 0xB504F333,0xf9de6484 }, { 0xB504F333,0xf9de6484 } },
+	};
+	int i;
+
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i)
+		test_mul(tests[i][0], tests[i][1]);
+
+	return 0;
+}
+
+static void test_div(int64 a, int64 b)
+{
+	int64 r;
+	
+	void div64(int64 a, int64 b, int64 result);
+	div64(a, b, r);
+
+	printf("%08lx%08lx / %08lx%08lx =\n"
+	       "%08lx%08lx\n",
+	       a[0], a[1], b[0], b[1],
+	       r[0], r[1]);
+}
+
+static int div_main(int argc, char **argv, char **envp)
+{
+	int64 tests[][2] = {
+		{ { 0x80000000,0x00000000 }, { 0x80000000,0x00000000 }, },
+		{ { 0x80000000,0x00000000 }, { 0xffffffff,0xffffffff }, },
+		{ { 0xffffffff,0xffffffff }, { 0xffffffff,0xffffffff }, },
+		{ { 0xffffffff,0xffffffff }, { 0x80000000,0x00000000 }, },
+		{ { 0xC90FDAA2,0x20000000 }, { 0xA0000000,0x00000000 }, },
+	};
+	int i;
+
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i)
+		test_div(tests[i][0], tests[i][1]);
+
+	return 0;
+}
+
 static int fdtofd(int fromfd, int tofd)
 {
 	char buf[BUFSIZE];
@@ -1920,6 +1982,8 @@ static struct applet applets[] = {
 	{ "ps", ps_main },
 	{ "bt", bt_main },
 	{ "crash", crash_main },
+	{ "mul", mul_main },
+	{ "div", div_main },
 	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
