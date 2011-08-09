@@ -1156,9 +1156,14 @@ int time_main(int argc, char **argv, char **envp)
 	} else if (pid > 0) {
 		int status;
 		for (;;) {
-			wait(&status);
-			if (WIFEXITED(status)) {
+			if (wait(&status) < 0) {
+				err = 1;
+				break;
+			} else if (WIFEXITED(status)) {
 				err = WEXITSTATUS(status);
+				break;
+			} else if (WIFSIGNALED(status)) {
+				err = WTERMSIG(status);
 				break;
 			}
 		}
