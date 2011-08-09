@@ -1427,6 +1427,158 @@ static int pid_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+int atoi(const char *a)
+{
+	int i = 0;
+	int neg = 0;
+	while (isspace(*a)) {
+		++a;
+	}
+	switch (*a) {
+	case '-': neg = 1;
+	case '+': ++a;
+	}
+	while (isdigit(*a)) {
+		i = 10 * i + (*a++ - '0');
+	}
+	if (neg)
+		i = -i;
+	return i;
+}
+
+static int kill_main(int argc, char **argv, char **envp)
+{
+/*
+ * kill -s signal_name pid ...
+ * kill -l [exit_status]
+ * kill [-signal_name] pid ...
+ * kill [-signal_number] pid ...
+ */
+	static const char *const names[] = {
+		[SIGHUP] = "SIGHUP",
+		[SIGINT] = "SIGINT",
+		[SIGQUIT] = "SIGQUIT",
+		[SIGILL] = "SIGILL",
+		[SIGTRAP] = "SIGTRAP",
+		[SIGABRT] = "SIGABRT",
+		[SIGBUS] = "SIGBUS",
+		[SIGFPE] = "SIGFPE",
+		[SIGKILL] = "SIGKILL",
+		[SIGBUS] = "SIGBUS",
+		[SIGSEGV] = "SIGSEGV",
+		[SIGSYS] = "SIGSYS",
+		[SIGPIPE] = "SIGPIPE",
+		[SIGALRM] = "SIGALRM",
+		[SIGTERM] = "SIGTERM",
+		[SIGURG] = "SIGURG",
+		[SIGSTOP] = "SIGSTOP",
+		[SIGTSTP] = "SIGTSTP",
+		[SIGCONT] = "SIGCONT",
+		[SIGCHLD] = "SIGCHLD",
+		[SIGTTIN] = "SIGTTIN",
+		[SIGTTOU] = "SIGTTOU",
+		[SIGIO] = "SIGIO",
+		[SIGXCPU] = "SIGXCPU",
+		[SIGXFSZ] = "SIGXFSZ",
+		[SIGVTALRM] = "SIGVTALRM",
+		[SIGPROF] = "SIGPROF",
+		[SIGWINCH] = "SIGWINCH",
+		[SIGUSR1] = "SIGUSR1",
+		[SIGUSR2] = "SIGUSR2",
+	};
+#define SIZEOF_NAMES (sizeof(names)/sizeof(names[0]))
+	void usage() {
+		printf("Usage: kill -s signal_name pid ...\n"
+		       "       kill -l [exit_status]\n"
+		       "       kill [-signal_name] pid ...\n"
+		       "       kill [-signal_number] pid ...\n");
+	}
+	int signum(const char *signame) {
+		int i;
+		for (i = 0; i < SIZEOF_NAMES; ++i) {
+			if (!names[i]) continue;
+			if (!strcmp(signame, names[i]) ||
+			    !strcmp(signame, names[i]+3)) {
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	int sig = SIGTERM;
+	int pidarg = 1;
+	pid_t pid = -1;
+	int i;
+	int err = 0;
+
+	if (argv[1][0] == '-') {
+		if (!strcmp(argv[1], "-s")) {
+			/* kill -s signal_name pid ... */
+			if (argc < 4) {
+				printf("kill: not enough arguments\n");
+				usage();
+				return 1;
+			}
+			sig = signum(argv[2]);
+			if (sig == 0) {
+				printf("kill: unknown signal \"%s\"\n",
+				       argv[2]);
+				return 1;
+			}
+			pidarg = 3;
+		} else if (!strcmp(argv[1], "-l")) {
+			/* kill -l [exit_status] */
+			if (argc > 3) {
+				printf("kill: too many arguments\n");
+				usage();
+				return 1;
+			}
+			if (argc == 3)
+				sig = atoi(argv[2]);
+			else
+				sig = -1;
+			if (sig > 0) {
+				if (sig > SIZEOF_NAMES) {
+					printf("kill: unknown signal %d\n",
+					       sig);
+					return 1;
+				}
+				printf("%s\n", names[sig]);
+				return 0;
+			}
+			for (i = 1; i <= SIZEOF_NAMES; ++i) {
+				printf("%2d %-13s", i, names[i]);
+			}
+			return 0;
+		} else {
+			/* kill -signal_name pid ... */
+			/* kill -signal_number pid ... */
+			sig = atoi(&argv[1][1]);
+			if (sig == 0) {
+				sig = signum(&argv[1][1]);
+			}
+			if (sig == 0) {
+				printf("kill: unknown signal \"%s\"\n",
+				       &argv[1][1]);
+				return 1;
+			}
+			pidarg = 2;
+		}
+	}
+	if (pidarg >= argc) {
+		usage();
+		return 1;
+	}
+	for (; pidarg < argc; ++pidarg) {
+		pid = atoi(argv[pidarg]);
+		if (kill(pid, sig)) {
+			err = 1;
+			perror("kill");
+		}
+	}
+	return err;
+}
+
 static int exec_command(int ch)
 {
 	switch (ch) {
@@ -1989,6 +2141,7 @@ static struct applet applets[] = {
 	{ "crash", crash_main },
 	{ "mul", mul_main },
 	{ "div", div_main },
+	{ "kill", kill_main },
 	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
