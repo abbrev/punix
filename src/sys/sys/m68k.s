@@ -152,3 +152,37 @@ unlock:
 	move.l	4(%sp),%a0
 	move.b	#0,(%a0)
 	rts
+
+| masklock:
+| 1 byte atomic lock
+
+| void initmask(masklock *lockp);
+.global initmask
+initmask:
+	move.l	4(%sp),%a0
+	clr.w	(%a0)
+	rts
+
+	.long	0xb00b1e5
+| int mask(masklock *lockp);
+.global mask
+mask:
+	move.l	4(%sp),%a0
+	addq.w	#1,(%a0)
+	tas	(%a0)
+	seq	%d0
+	ext.w	%d0
+	rts
+
+| void unmask(masklock *lockp);
+.global unmask
+unmask:
+	move.l	4(%sp),%a0
+	move	%sr,%d0
+	move	#0x2700,%sr
+	subq.b	#1,1(%a0)
+	bne	1f
+	clr.w	(%a0)
+1:
+	move	%d0,%sr
+	rts
