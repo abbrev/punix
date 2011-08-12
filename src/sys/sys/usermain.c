@@ -1782,6 +1782,7 @@ static int updatetop(struct topinfo *info)
 	/* sort the array by cpu usage */
 	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
 	
+#ifdef TI92P
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;
@@ -1836,6 +1837,56 @@ static int updatetop(struct topinfo *info)
 		       m, s, (*kpp)->kp_cmd);
 		cleareol();
 	}
+#else
+	/* line 1 */
+	t = up;
+	second = t % 60; t /= 60;
+	minute = t % 60; t /= 60;
+	hour = t % 24;   t /= 24;
+	day = t;
+	printf(ESC "[H");
+	if (day) {
+		printf("%d+", day);
+	}
+	printf("%02d:%02d, %d user%s, load:",
+	       hour, minute, nusers, nusers == 1 ? "" : "s");
+	for (i = 0; i < 3; ++i) {
+		if (i > 0) putchar(',');
+		printf(" %ld.%02ld", la[i] >> 16,
+		       (100 * la[i] >> 16) % 100);
+	}
+	cleareol();
+	/* line 2 */
+	printf("\n%d tasks, %d run, %d slp, %d stop, %d zomb",
+	       nprocs, nrun, nslp, nstop, nzomb);
+	cleareol();
+	/* line 3 */
+	printf("\n%3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -0, -1, -0, -1, -0, -1, -0);
+	cleareol();
+	/* line 4 */
+	printf("\n%ldk ttl, %ldk used, %ldk free, %ldk buf",
+	       -1L, -1L, -1L, -1L);
+	cleareol();
+	/* line 5 */
+	putchar('\n');
+	cleareol();
+	/* line 6 */
+	printf("\n" ESC "[7m  PID USER     RES S  %%CPU COMMAND" ESC "[m");
+	cleareol();
+	/* line 7- */
+	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
+	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
+		long s = (*kpp)->kp_ctime / CLOCKS_PER_SEC;
+		long m = s / 60;
+		s %= 60;
+		printf("\n%5d %-8d %3d %c %3d.%01d %.13s",
+		       (*kpp)->kp_pid, (*kpp)->kp_euid, 0,
+		       procstates[(*kpp)->kp_state],
+		       (*kpp)->kp_pcpu / 256, ((*kpp)->kp_pcpu % 256)*10 / 256,
+		       (*kpp)->kp_cmd);
+		cleareol();
+	}
+#endif
 	/* clear to the end of the screen */
 	printf(ESC "[J" ESC "[5H");
 free:
