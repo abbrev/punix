@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global memcmp, memcmp_reg
 | int memcmp(const void *s1, const void *s2, size_t count); 

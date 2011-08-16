@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global strchr
 | char *strchr(const char *s, int c);

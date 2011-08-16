@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 /*
 char *strpbrk(const char *s1, const char *accept)

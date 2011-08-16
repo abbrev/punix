@@ -26,10 +26,11 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global memcpy
 .global memcpy_reg
+.global memend
 | void *memcpy(void *dest, const void *src, size_t count);
 memcpy:
 	move.l	4(%a7),%a0	| dest

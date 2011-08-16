@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global strcpy, strcpy_reg
 | char *strcpy(char *dest, const char *src);

@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global memset
 | void *memset(void *s, int c, size_t count);

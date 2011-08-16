@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global memchr, memchr_reg
 | void *memchr(const void *s, int c, size_t n); 

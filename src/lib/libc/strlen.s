@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global strlen, strlen_reg
 | size_t strlen(const char *s);

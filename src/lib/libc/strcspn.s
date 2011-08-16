@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 /*
 size_t strcspn(const char *s1, const char *reject)

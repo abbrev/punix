@@ -26,7 +26,7 @@
 | Memory move / copy
 | String functions
 
-.section text
+.section .text
 
 .global strcasecmp
 | int strcasecmp(const char *s1, const char *s2);
