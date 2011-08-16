@@ -1,6 +1,6 @@
 .include "cell.inc"
 
-.section _st1, "rx"
+.section .text
 
 |void scrolldown(int rows)
 |scroll terminal window down (text moves up)
@@ -17,7 +17,7 @@ scrolldown:
 	ext.l	%d0
 	
 	lea.l	0(%a0,%d1),%a1	| src
-	bsr	memmove_reg
+	jbsr	memmove_reg
 	
 	asr	#2,%d1
 	subq.l	#1,%d1
@@ -42,7 +42,7 @@ scrollup:
 	ext.l	%d0
 	
 	lea.l	0(%a1,%d1),%a0	| dest
-	bsr	memmove_reg
+	jbsr	memmove_reg
 	
 	asr	#2,%d1
 	subq.l	#1,%d1
