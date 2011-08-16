@@ -1,20 +1,22 @@
-MAKE	= gmake
-CALC	= TI92P
-
-PUNIXBASE	= ../../..
-
-STDINC	= ${PUNIXBASE}/include
-SYSINC	= ${PUNIXBASE}/src/sys/h
 DATE := $(shell date +'%Y-%m-%d %H:%M:%S%z')
 REALTIME := $(shell date -d "$(DATE)" +%s)
 STUPIDDATE := $(shell date -d "$(DATE)" +%m/%d/%Y)
+
+# configuration
+ifeq ($(CALC), )
+CALC	= TI92P
+endif
+
 UNAME_SYSNAME := Punix
 UNAME_NODENAME := timmy
 UNAME_RELEASE := 0.08
 UNAME_VERSION := $(DATE)
 UNAME_MACHINE := m68k
 
+PUNIXBASE	= ../../..
 
+STDINC	= ${PUNIXBASE}/include
+SYSINC	= ${PUNIXBASE}/src/sys/h
 
 AWK	= awk
 
@@ -101,20 +103,20 @@ glyphsets/%.inc:
 # miscellaneous
 ########################################
 
+DEPEND = .dep
+
+
+.PHONY: depend
+depend $(DEPEND):
+	@-${TIGCC}/bin/gcc -M -MG ${CFLAGS} ${SRC} >${DEPEND} 2>/dev/null
+
 .PHONY: clean
 clean:
 	rm -f *.bin *.o punix-9x.tib punix-89.tib ${TMPUNAME}
 	rm -f sysent.c
+	rm -f $(DEPEND)
 	${MAKE} -C glyphsets clean
 	#${MAKE} -C ${SYSINC} clean
 
-DEPEND = .dep
+include ${DEPEND}
 
-.PHONY: depend
-depend:
-	-${TIGCC}/bin/gcc -M -MG ${CFLAGS} ${SRC} >${DEPEND}
-
-${DEPEND}:
-	-${TIGCC}/bin/gcc -M -MG ${CFLAGS} ${SRC} >${DEPEND}
-
--include ${DEPEND}
