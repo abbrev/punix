@@ -31,8 +31,7 @@ AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,-m68881,--warn,-I${SYSINC},--defsym,${CALC}= #-l
 
 LD	= ${TIGCC}/bin/tigcc
-LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os $(LIBC)
-# XXX: tigcc seems to be brain-dead: $(STDLIB)/libc.a works, but -lc does not :(
+LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os -lc
 #--optimize-branches --optimize-relocs \
 #          --omit-bss-init
 
