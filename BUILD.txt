@@ -1,0 +1,13 @@
+How to build Punix:
+
+In a shell, run 'make' from the Punix root directory (the one that
+contains this file). This will build all libraries and the kernel for
+all supported platforms. After building, the libraries can be found in
+the lib directory, and the kernels can be found in the Punix root
+directory. The kernels will be named punix-XX.tib, where "XX"
+corresponds to the target calculator (eg, 9x for the TI-92+ or 89 for
+the TI-89).
+
+Once user commands and the file system (and associated tools) are
+developed, these too will be built and placed into the Punix root
+directory.
