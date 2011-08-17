@@ -61,6 +61,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <assert.h>
 
 #include "proc.h"
 #include "file.h"
@@ -231,6 +232,7 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
+	assert(G.nextinode < NINODE);
 	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
 	if (!strcmp(ap->pathname, "/dev/vt"))
 		ip->i_rdev = DEV_VT;
