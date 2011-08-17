@@ -17,6 +17,8 @@ PUNIXBASE	= ../../..
 
 STDINC	= ${PUNIXBASE}/include
 SYSINC	= ${PUNIXBASE}/src/sys/h
+STDLIB	= ${PUNIXBASE}/lib
+LIBC	= $(STDLIB)/libc.a
 
 AWK	= awk
 
@@ -29,7 +31,9 @@ AS	= ${TIGCC}/bin/tigcc
 ASFLAGS	= -c -Wa,-m68881,--warn,-I${SYSINC},--defsym,${CALC}= #-l
 
 LD	= ${TIGCC}/bin/tigcc
-LDFLAGS	= --outputbin --flash-os #--optimize-branches --optimize-relocs \
+LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os $(LIBC)
+# XXX: tigcc seems to be brain-dead: $(STDLIB)/libc.a works, but -lc does not :(
+#--optimize-branches --optimize-relocs \
 #          --omit-bss-init
 
 # core
@@ -43,25 +47,32 @@ SRC	+= lcd.c dev_tty.c keyscan.c batt.c
 # helper routines
 SRC	+= kputs.c scroll.s
 SRC	+= copy.s fio.c
-SRC	+= setjmp.s m68k.s string.s trap.c queue.s flash.s bio.c # rdwri.c
+SRC	+= m68k.s trap.c queue.s flash.s bio.c # rdwri.c
 SRC	+= context.s
 SRC	+= long.s subr.c tty.c inode.c process.c pfs_alloc.c pfs_bmap.c
 SRC	+= panic.c abort.c assert.c kprintf.c printf.c clock.c #globals.c
-SRC	+= ffs.c loadav.c drawglyph.s heap.c sched.c bogomips.c
+SRC	+= loadav.c drawglyph.s heap.c sched.c bogomips.c
 SRC	+= fpuemu.s sysctl.c
 SRC	+= userstart.s usermain.c qsort.c mulu64.s divu64.s
+#SRC	+= string.s setjmp.s ffs.c
 
 #OBJ = testvectors.o
 
 OBJ	:= $(SRC:.c=.o)
 OBJ	:= $(OBJ:.s=.o)
+OBJ	+= $(LIBC)
 
 TMPUNAME = uname.sysname uname.nodename uname.release uname.version uname.machine stupiddate
 
 .PHONY: all
 all:	tib
 .PHONY: scratch
-scratch: clean all
+scratch:
+	$(MAKE) clean
+	$(MAKE) all
+
+%.a:
+	$(MAKE) -C `dirname $@`
 
 .PHONY: tib
 ifeq ($(CALC), TI92P)
