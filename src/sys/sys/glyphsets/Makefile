@@ -2,6 +2,7 @@ GLYPHS2C = (tail -c 1152 | ./bin2c)
 STATUS2C = (tail -c 8 | ./bin2c)
 STATUS2C89 = (tail -c 4 | ./bin2c)
 
+.PHONY: all
 all: bin2c upper.inc small-upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
      status-none.inc status-2nd.inc status-alpha.inc status-bell.inc \
      status-capslock.inc status-compose1.inc status-compose2.inc \
@@ -14,9 +15,8 @@ all: bin2c upper.inc small-upper.inc uk.inc us.inc small-us.inc sg.inc tcs.inc \
      status-shift-89.inc status-batt0-89.inc status-batt1-89.inc \
      status-batt2-89.inc status-batt3-89.inc status-batt4-89.inc \
      status-busy-89.inc status-alphalock-89.inc
-	touch all
 clean:
-	rm -f *.inc all bin2c
+	rm -f *.inc bin2c
 
 bin2c: bin2c.c
 
