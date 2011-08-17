@@ -217,6 +217,7 @@ fpuemu:
 	| 4. in the handlers, decode the rest of the fields and execute the
 	|    instruction
 
+9:
 	| 5. restore all registers
 	move.l	%a5,(SAVED_PC,%fp)
 	move.l	(SAVED_A7,%sp),%a0
@@ -237,11 +238,10 @@ fpuemu:
 	.long	instr_restore
 	.long	instr_invalid
 	.long	instr_invalid
-	.long	instr_invalid
 
 8:
 	bsr	instr_invalid
-	bra	1b
+	bra	9b
 
 | input:
 |  %d0 = format (L/S/X/P/W/D/B)
@@ -314,29 +314,46 @@ get_ea:
 mode	register	addressing mode
 111	000		(xxx).W
 111	001		(xxx).L
-111	100		#<data>
 111	010		(d16,PC)
 111	011		(d8,PC,Xn)
 111	011		(bd,PC,Xn)		not on 68000
 111	011		([bd,PC,Xn],od)		not on 68000
 111	011		([bd,PC],Xn,od)		not on 68000
+111	100		#<data>
 	.endif
-	cmp	#0,%d1
-	bne	1f
+	dbra	%d1,1f	| %d1 == 0?
 	| (xxx).W
 	move.w	(%a5)+,%a3
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#1,%d1
-	bne	1f
+1:	dbra	%d1,1f	| %d1 == 1?
 	| (xxx).L
 	move.l	(%a5)+,%a3
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#4,%d1
-	bne	1f
+1:	dbra	%d1,1f	| %d1 == 2?
+	| (d16,PC) -- tested, works
+	move	(%a5)+,%d0
+	lea.l	(-2,%a5,%d0.w),%a3
+	move	#EA_MEMORY+EA_WRITABLE,%d0
+	rts
+
+1:	dbra	%d1,1f	| %d1 == 3?
+	| (d8,PC,Xn)
+	move.l	(SAVED_PC,%fp),%a3
+	move	(%a5)+,%d2
+	move	%d2,%d1
+	ext.w	%d2		| d8
+	lsr	#8,%d1		| register number
+	move.l	(SAVED_D0,%fp,%d1.w),%a0
+	add.w	%a0,%d2
+	lea.l	(%a3,%a0.w),%a3
+	move	#EA_MEMORY+EA_WRITABLE,%d0
+	rts
+
+1:	dbra	%d1,1f	| %d1 == 4?
 	| #<data> -- tested, works
 	| TODO
 	cmp	#4,%d0
@@ -366,28 +383,6 @@ mode	register	addressing mode
 	rts
 
 
-1:	cmp	#2,%d1
-	bne	1f
-	| (d16,PC) -- tested, works
-	move	(%a5)+,%d0
-	lea.l	(-2,%a5,%d0.w),%a3
-	move	#EA_MEMORY+EA_WRITABLE,%d0
-	rts
-
-1:	cmp	#3,%d1
-	bne	1f
-	| (d8,PC,Xn)
-	move.l	(SAVED_PC,%fp),%a3
-	move	(%a5)+,%d2
-	move	%d2,%d1
-	ext.w	%d2		| d8
-	lsr	#8,%d1		| register number
-	move.l	(SAVED_D0,%fp,%d1.w),%a0
-	add.w	%a0,%d2
-	lea.l	(%a3,%a0.w),%a3
-	move	#EA_MEMORY+EA_WRITABLE,%d0
-	rts
-
 	.if 0
 Effective address field:
 mode	register	addressing mode
@@ -404,8 +399,7 @@ mode	register	addressing mode
 	.endif
 
 3:	lsl	#2,%d1
-	cmp	#0,%d2
-	bne	1f
+	dbra	%d2,1f	| %d2 == 0?
 	| Dn -- tested, works
 	
 	| add (4-size) to offset into register (byte: 3, word: 2, long: 0)
@@ -417,22 +411,19 @@ mode	register	addressing mode
 	move	#EA_DATAREG+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#1,%d2
-	bne	1f
+1:	dbra	%d2,1f	| %d2 == 1?
 	| An
 	lea.l	(SAVED_A0,%fp,%d1.w),%a3
 	move	#EA_ADDRREG+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#2,%d2
-	bne	1f
+1:	dbra	%d2,1f	| %d2 == 2?
 	| (An) -- tested, works
 	move.l	(SAVED_A0,%fp,%d1.w),%a3
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#3,%d2
-	bne	1f
+1:	dbra	%d2,1f	| %d2 == 3?
 	| (An)+ -- tested, works
 	lea.l	(SAVED_A0,%fp,%d1.w),%a0
 	cmp	#4*7,%d1	| is this A7?
@@ -448,8 +439,7 @@ mode	register	addressing mode
 	move	#EA_POSTINC+EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#4,%d2
-	bne	1f
+1:	dbra	%d2,1f	| %d2 == 4?
 	| -(An) -- tested, works
 	lea.l	(SAVED_A0,%fp,%d1.w),%a0
 	ext.l	%d0
@@ -465,8 +455,7 @@ mode	register	addressing mode
 	move	#EA_PREDEC+EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#5,%d2
-	bne	1f
+1:	dbra	%d2,1f	| %d2 == 5?
 	| (d16,An) -- tested, works
 	move.l	(SAVED_A0,%fp,%d1.w),%a3
 	move	(%a5)+,%d0
@@ -474,8 +463,7 @@ mode	register	addressing mode
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
-1:	cmp	#6,%d2
-	bne	1f
+1:	| %d2 == 6
 	| (d8,An,Xn)
 	move.l	(SAVED_A0,%fp,%d1.w),%a3
 	move	(%a5)+,%d0
@@ -492,9 +480,6 @@ mode	register	addressing mode
 	add	%d2,%a0		| Xn + d8
 	move.l	(%a3,%d1.l),%a3
 	move	#EA_MEMORY+EA_WRITABLE,%d0
-	rts
-
-1:	| unknown ea format -- invalid instruction?
 	rts
 	
 
@@ -651,7 +636,7 @@ instr_gen:
 	jbra	copyfp
 
 7:	| instr_gen table
-	.long instr_gen_fmovem
+	.long instr_gen_fmovem	| 0
 	.long instr_gen_fint
 	.long instr_gen_fsinh
 	.long instr_gen_fintrz
@@ -659,7 +644,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_flognp1
 	.long instr_gen_invalid
-	.long instr_gen_fetoxm1
+	.long instr_gen_fetoxm1	| 8
 	.long instr_gen_ftanh
 	.long instr_gen_fatan
 	.long instr_gen_invalid
@@ -667,7 +652,7 @@ instr_gen:
 	.long instr_gen_fatanh
 	.long instr_gen_fsin
 	.long instr_gen_ftan
-	.long instr_gen_fetox
+	.long instr_gen_fetox	| 16
 	.long instr_gen_ftwotox
 	.long instr_gen_ftentox
 	.long instr_gen_invalid
@@ -675,7 +660,7 @@ instr_gen:
 	.long instr_gen_flog10
 	.long instr_gen_flog2
 	.long instr_gen_invalid
-	.long instr_gen_fabs
+	.long instr_gen_fabs	| 24
 	.long instr_gen_fcosh
 	.long instr_gen_fneg
 	.long instr_gen_invalid
@@ -683,7 +668,7 @@ instr_gen:
 	.long instr_gen_fcos
 	.long instr_gen_fgetexp
 	.long instr_gen_fgetman
-	.long instr_gen_fdiv
+	.long instr_gen_fdiv	| 32
 	.long instr_gen_fmod
 	.long instr_gen_fadd
 	.long instr_gen_fmul
@@ -691,7 +676,7 @@ instr_gen:
 	.long instr_gen_frem
 	.long instr_gen_fscale
 	.long instr_gen_fsglmul
-	.long instr_gen_fsub
+	.long instr_gen_fsub	| 40
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -699,6 +684,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_fsincos	| 48
 	.long instr_gen_fsincos
 	.long instr_gen_fsincos
 	.long instr_gen_fsincos
@@ -706,8 +692,7 @@ instr_gen:
 	.long instr_gen_fsincos
 	.long instr_gen_fsincos
 	.long instr_gen_fsincos
-	.long instr_gen_fsincos
-	.long instr_gen_fcmp
+	.long instr_gen_fcmp	| 56
 	.long instr_gen_invalid
 	.long instr_gen_ftst
 	.long instr_gen_invalid
@@ -715,6 +700,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 64
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -722,6 +708,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 72
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -729,6 +716,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 80
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -736,6 +724,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 88
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -743,6 +732,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 96
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -750,6 +740,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 104
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -757,6 +748,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
+	.long instr_gen_invalid	| 112
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -764,14 +756,7 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
-	.long instr_gen_invalid
+	.long instr_gen_invalid	| 120
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 	.long instr_gen_invalid
@@ -1475,15 +1460,14 @@ ftstp:
 	| not supported (yet)
 	rts
 
-ftstb:
-	move.b	(%a3),%d3
-	bra	2f
-ftstw:
-	move.w	(%a3),%d3
-	bra	1f
 ftstl:
 	move.l	(%a3),%d3
 	bra	0f
+ftstw:
+	move.w	(%a3),%d3
+	bra	1f
+ftstb:
+	move.b	(%a3),%d3
 2:	ext.w	%d3
 1:	ext.l	%d3
 0:	
