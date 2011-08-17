@@ -27,6 +27,8 @@
 #define FREAD  O_RDONLY
 #define FWRITE O_WRONLY
 
+struct stat;  // in sys/stat.h
+
 struct file;
 struct inode;
 
@@ -37,6 +39,7 @@ struct fileops {
 	ssize_t (*write)(struct file *, void *, size_t, off_t *);
 	off_t (*lseek)(struct file *, off_t, int);
 	int (*ioctl)(struct file *, int, void *);
+	int (*fstat)(struct file *, struct stat *);
 };
 
 /*
