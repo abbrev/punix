@@ -15,22 +15,22 @@ UNAME_MACHINE := m68k
 
 PUNIXBASE	= ../../..
 
-STDINC	= ${PUNIXBASE}/include
-SYSINC	= ${PUNIXBASE}/src/sys/h
-STDLIB	= ${PUNIXBASE}/lib
+STDINC	= $(PUNIXBASE)/include
+SYSINC	= $(PUNIXBASE)/src/sys/h
+STDLIB	= $(PUNIXBASE)/lib
 LIBC	= $(STDLIB)/libc.a
 
 AWK	= awk
 
-CC	= ${TIGCC}/bin/tigcc
+CC	= $(TIGCC)/bin/tigcc
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
-	-I${SYSINC} -I. -I- -I${STDINC} -D__KERNEL__ -D${CALC}= \
-	-DSMALLGLYPHS= -DREALTIME=${REALTIME}UL
+	-I$(SYSINC) -I. -I- -I$(STDINC) -D__KERNEL__ -D$(CALC)= \
+	-DSMALLGLYPHS= -DREALTIME=$(REALTIME)UL
 
-AS	= ${TIGCC}/bin/tigcc
-ASFLAGS	= -c -Wa,-m68881,--warn,-I${SYSINC},--defsym,${CALC}= #-l
+AS	= $(TIGCC)/bin/tigcc
+ASFLAGS	= -c -Wa,-m68881,--warn,-I$(SYSINC),--defsym,$(CALC)= #-l
 
-LD	= ${TIGCC}/bin/tigcc
+LD	= $(TIGCC)/bin/tigcc
 LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os -lc
 #--optimize-branches --optimize-relocs \
 #          --omit-bss-init
@@ -80,16 +80,16 @@ else
 tib: punix-89.tib
 endif
 
-punix-9x.tib:	${OBJ}
-	${LD} ${LDFLAGS} -o punix $^ #${TIGCC}/lib/flashos.a #${TIGCC}/lib/tigcc.a
-punix-89.tib:	${OBJ}
-	${LD} ${LDFLAGS} -o punix $^ #${TIGCC}/lib/flashos.a #${TIGCC}/lib/tigcc.a
+punix-9x.tib:	$(OBJ)
+	$(LD) $(LDFLAGS) -o punix $^
+punix-89.tib:	$(OBJ)
+	$(LD) $(LDFLAGS) -o punix $^
 
 ########################################
 # generated data
 ########################################
 
-version.o: ${TMPUNAME}
+version.o: $(TMPUNAME)
 uname.sysname:
 	echo -n "$(UNAME_SYSNAME)" >$@
 uname.nodename:
@@ -103,10 +103,10 @@ uname.machine:
 stupiddate:
 	echo -n "$(STUPIDDATE)" >$@
 sysent.c: sysent.txt
-	${AWK} -f mksysent.awk sysent.txt >sysent.c
+	$(AWK) -f mksysent.awk sysent.txt >sysent.c
 
 glyphsets/%.inc:
-	${MAKE} -C glyphsets "`basename $@`"
+	$(MAKE) -C glyphsets "`basename $@`"
 
 
 ########################################
@@ -118,15 +118,15 @@ DEPEND = .dep
 
 .PHONY: depend
 depend $(DEPEND):
-	@-${TIGCC}/bin/gcc -M -MG ${CFLAGS} ${SRC} >${DEPEND} 2>/dev/null
+	@-$(TIGCC)/bin/gcc -M -MG $(CFLAGS) $(SRC) >$(DEPEND) 2>/dev/null
 
 .PHONY: clean
 clean:
-	rm -f *.bin *.o punix-9x.tib punix-89.tib ${TMPUNAME}
+	rm -f *.bin *.o punix-9x.tib punix-89.tib $(TMPUNAME)
 	rm -f sysent.c
 	rm -f $(DEPEND)
-	${MAKE} -C glyphsets clean
-	#${MAKE} -C ${SYSINC} clean
+	$(MAKE) -C glyphsets clean
+	#$(MAKE) -C $(SYSINC) clean
 
-include ${DEPEND}
+include $(DEPEND)
 
