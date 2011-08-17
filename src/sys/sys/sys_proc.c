@@ -256,16 +256,6 @@ void sys_execve()
 	strncpy(current->p_name, argp[0], P_NAMELEN - 1);
 	current->p_name[P_NAMELEN-1] = '\0';
 
-	/* increment reference counts on all open files */
-	if (P.p_flag & P_VFORK) {
-		for (i = 0; i < NOFILE; ++i) {
-			struct file *fp;
-			fp = P.p_ofile[i];
-			if (!fp) continue;
-			++fp->f_count;
-		}
-	}
-
 	size = (size + 1) & ~1; /* size must be even */
 	s = ustack - size; /* start of strings */
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
@@ -353,6 +343,7 @@ void doexit(int status)
 	int i;
 	
 	spl7();
+	//kprintf("doexit(%04x) pid=%d ", status, current->p_pid);
 	P.p_flag &= ~P_TRACED;
 	P.p_sigignore = ~0;
 	P.p_sig = 0;
@@ -393,6 +384,7 @@ void doexit(int status)
 	P.p_waitstat = status;
 	/* add our children's rusage to our own so our parent can retrieve it */
 	kruadd(&P.p_kru, &P.p_ckru);
+	mask(&G.calloutlock);
 	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
@@ -406,17 +398,16 @@ void doexit(int status)
 			}
 		}
 	}
+	unmask(&G.calloutlock);
 	
 	/* close all open files */
-	if (!(P.p_flag & P_VFORK)) {
-		for (i = 0; i < NOFILE; ++i) {
-			struct file *fp;
-			fp = P.p_ofile[i];
-			if (!fp) continue;
-			P.p_ofile[i] = NULL;
-			fdflags_to_oflag(i, 0L);
-			closef(fp);
-		}
+	for (i = 0; i < NOFILE; ++i) {
+		struct file *fp;
+		fp = P.p_ofile[i];
+		if (!fp) continue;
+		P.p_ofile[i] = NULL;
+		fdflags_to_oflag(i, 0L);
+		closef(fp);
 	}
 	release_resources();
 	memfree(P.p_stack, 0);
@@ -482,6 +473,7 @@ void sys_vfork()
 	pid_t pid;
 	void *stack = NULL;
 	size_t stacksize = STACKSIZE;
+	int i;
 	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
 	
 	/* spl7(); */
@@ -508,6 +500,14 @@ void sys_vfork()
 	
 	/* At this point there's no turning back! */
 	
+	/* increment reference counts on all open files */
+	for (i = 0; i < NOFILE; ++i) {
+		struct file *fp;
+		fp = P.p_ofile[i];
+		if (!fp) continue;
+		++fp->f_count;
+	}
+
 	list_add_tail(&cp->p_list, &G.proc_list);
 	
 	cp->p_stack = stack - stacksize;
