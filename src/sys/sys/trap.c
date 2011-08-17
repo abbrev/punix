@@ -276,8 +276,6 @@ STARTUP(void updwalltime())
 }
 #endif
 
-extern int trygetlock(char *lock);
-
 /*
  * return_from_int runs every time the system returns from an interrupt to the
  * base interrupt level (0). This means returning to a kernel or user process.
@@ -288,7 +286,7 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 	int x;
 	
 	/* do call-outs */
-	if (trygetlock(&G.calloutlock)) {
+	if (mask(&G.calloutlock)) {
 		int t = 0;
 		struct callout *c1, *c2, c;
 		x = spl7();
@@ -307,9 +305,9 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 			t = G.callout[0].c_dtime += c.c_dtime;
 		}
 		spl0();
-		unlock(&G.calloutlock);
 	}
-	
+	unmask(&G.calloutlock);
+
 	if (!USERMODE(ps))
 		return;
 

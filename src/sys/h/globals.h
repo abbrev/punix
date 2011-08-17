@@ -78,6 +78,7 @@ struct globals {
 		struct queue readq, writeq;
 		char control;
 		int readoverflow;
+		int open;
 	} link;
 	
 	/* seed for the pseudo-random number generator */
@@ -93,7 +94,7 @@ struct globals {
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
-	char calloutlock;
+	masklock calloutlock;
 	
 	struct buf avbuflist; /* list of buf */
 	struct list_head avbuf_list; /* list of available buf */

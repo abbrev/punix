@@ -12,6 +12,34 @@
 #define OS_VERSION	"0.06"
 #endif
 
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
+
+#define TRACE2(f, l) do { *(long *)(0x4c00+0xf00-22) = f " (" STRING(l) ")"; } while (0)
+#define TRACE() TRACE2(__FILE__, __LINE__)
+
+/*
+ * masklock is used for soft interrupts (see trap.c).
+ * Critical sections which must not be interrupted by a soft interrupt, but
+ * can be interrupted by hard interrupts, should use a masklock. The typical
+ * usage of a masklock in a soft interrupt is like this:
+ *
+ * if (mask(&lock)) {
+ *   // ...
+ * }
+ * unmask(&lock);
+ *
+ * In a critical section it can be used like this:
+ * mask(&lock);
+ * // critical section
+ * unmask(&lock);
+ *
+ * mask() can be nested up to 255 times (which should be more than enough).
+ */
+typedef int masklock;
+int mask(masklock *);
+void unmask(masklock *);
+
 extern const char
 uname_sysname[],
 uname_nodename[],
