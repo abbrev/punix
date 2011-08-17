@@ -1,11 +1,15 @@
-.PHONY: all libc clean scratch
+LIBS = libc
 
-all: libc
+all: $(LIBS)
 
-libc:
-	$(MAKE) -C libc
+$(LIBS):
+	$(MAKE) -C $@
 
 clean:
-	$(MAKE) -C libc clean
+	-for d in $(LIBS); do $(MAKE) -C $$d clean; done
 
-scratch: clean all
+scratch:
+	$(MAKE) clean
+	$(MAKE) all
+
+.PHONY: all libc clean scratch

@@ -14,10 +14,10 @@ LDFLAGS	=
 
 AR	= $(TIGCC)/bin/ar-tigcc
 
-.PHONY: all
 all:	libc.a
-.PHONY: scratch
-scratch: clean all
+scratch:
+	$(MAKE) clean
+	$(MAKE) all
 
 SRC = $(wildcard *.s *.c)
 OBJ := $(SRC:.c=.o)
@@ -33,14 +33,13 @@ libc.a: $(OBJ)
 DEPEND = .dep
 
 
-.PHONY: depend
 depend $(DEPEND):
 	@-${TIGCC}/bin/gcc -M -MG ${CFLAGS} ${SRC} >${DEPEND} 2>/dev/null
 
-.PHONY: clean
 clean:
 	rm -f *.bin *.o *.a
 	rm -f $(DEPEND)
 
 -include ${DEPEND}
 
+.PHONY: all depend clean scratch
