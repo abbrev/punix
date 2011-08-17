@@ -19,8 +19,10 @@ STATUS89 = status-none-89.pbm status-2nd-89.pbm status-alpha-89.pbm \
 PBM = $(GLYPHS) $(STATUS92P) $(STATUS89)
 INC = $(PBM:.pbm=.inc)
 
-.PHONY: all
-all: bin2c $(INC)
+all:
+	$(MAKE) bin2c
+	$(MAKE) $(INC)
+
 clean:
 	rm -f *.inc bin2c .dep
 
@@ -28,18 +30,20 @@ clean:
 	for i in $(GLYPHS); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
 		echo '	$$(GLYPHS2C) <$$< >$$@'; \
-	done >.dep
+	done >.dep ; \
 	for i in $(STATUS92P); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
 		echo '	$$(STATUS2C) <$$< >$$@'; \
-	done >>.dep
+	done >>.dep ; \
 	for i in $(STATUS89); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
 		echo '	$$(STATUS2C89) <$$< >$$@'; \
-	done >>.dep
+	done >>.dep ; \
 
 bin2c: bin2c.c
 
 $(INC): bin2c
 
--include .dep
+include .dep
+
+.PHONY: all clean
