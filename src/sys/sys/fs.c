@@ -14,6 +14,13 @@ static const struct fstype *fstypes[] = {
 	NULL,
 };
 
+struct inode *namei(const char *path)
+{
+	/* TODO: write this */
+	P.p_error = ENOENT;
+	return NULL;
+}
+
 void sys_mount()
 {
 	/* arguments are borrowed from Linux */
@@ -27,13 +34,18 @@ void sys_mount()
 	struct filesystem *fs = NULL;
 	size_t fssize = sizeof(struct filesystem);
 	struct inode *root_inode = NULL;
+	struct inode *target_inode = NULL;
 	int isauto;
-	dev_t dev = (dev_t)-1; /* TODO: resolve source to a dev_t */
 
 	fs = memalloc(&fssize, 0);
 	if (!fs)
 		return;
 	
+	target_inode = namei(ap->target);
+	if (!target_inode || !S_ISDIR(target_inode->i_mode)) {
+		goto fail;
+	}
+
 	isauto = (strcmp(ap->name, "auto") == 0);
 	if (isauto)
 		P.p_error = ENODEV;
@@ -42,18 +54,21 @@ void sys_mount()
 			continue;
 		if (!isauto && strcmp(ap->name, (*f)->name) != 0)
 			continue;
-		if ((*f)->read_filesystem(*f, fs, ap->flags, ap->source,
-		                          ap->options))
+		if (!(*f)->read_filesystem(*f, fs, ap->flags, ap->source,
+		                           ap->options))
 			goto found;
 	}
+	/* couldn't find any matching file system type */
+fail:
+	memfree(fs, 0);
+	iput(target_inode);
 	return;
-found:
-	//root_inode = fs->fsops->read_inode(fs->root_inum);
-	/* TODO: mount this filesystem */
-}
 
-struct inode *namei(const char *path)
-{
-	/* TODO: write this */
-	return NULL;
+found:
+	root_inode = iget(fs, fs->root_inum);
+	if (!root_inode)
+		return; /* problem getting the inode from device */
+	target_inode->i_mount = root_inode;
+	iunlock(root_inode);
+	iunlock(target_inode);
 }
