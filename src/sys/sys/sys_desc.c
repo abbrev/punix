@@ -73,6 +73,7 @@
 #include "uio.h"
 */
 #include "inode.h"
+#include "fs.h"
 #include "queue.h"
 #include "globals.h"
 
@@ -207,6 +208,11 @@ extern const struct fileops generic_file_fileops;
 extern const struct fileops generic_dir_fileops;
 extern const struct fileops generic_special_fileops;
 
+int fakefs_read_inode(struct inode *ip)
+{
+	return 0;
+}
+
 /*
  * calling this namei0() because it's just a temporary placeholder for a real
  * namei() function
@@ -214,7 +220,7 @@ extern const struct fileops generic_special_fileops;
 struct inode *namei0(const char *path)
 {
 	struct inode *ip;
-	struct filesystem *fs = NULL;
+	const struct filesystem *fs = NULL;
 	dev_t dev;
 	ino_t inum;
 	struct file_list { const char *name; ino_t inum; dev_t dev; };
@@ -228,11 +234,18 @@ struct inode *namei0(const char *path)
 		{ "/dev/random", 7, DEV_MISC|3 },
 		{ NULL, 0, 0 },
 	};
-	struct file_list *flp;
+	static const struct fsops fakefsops = {
+		.read_inode = fakefs_read_inode
+	};
+	static const struct filesystem fakefs = {
+		.fsops = &fakefsops
+	};
+
+	const struct file_list *flp;
 	
 	for (flp = &file_list[0]; flp->name; ++flp) {
 		if (!strcmp(path, flp->name)) {
-			fs = (struct filesystem *)42;
+			fs = &fakefs;
 			inum = flp->inum;
 			dev = flp->dev;
 			break;
@@ -244,6 +257,7 @@ struct inode *namei0(const char *path)
 	}
 
 	ip = iget(fs, inum);
+	if (!ip) goto fail;
 	ip->i_rdev = dev;
 	ip->i_mode = S_IFCHR;
 
@@ -260,6 +274,8 @@ struct inode *namei0(const char *path)
 	}
 
 	return ip;
+fail:
+	return NULL;
 }
 
 /* open system call */
@@ -285,7 +301,7 @@ STARTUP(void sys_open())
 	ip = namei0(ap->pathname);
 	if (!ip) {
 		if (ap->flags & O_CREAT) {
-			P.p_error = EROFS; // XXX no way to create files yet
+			P.p_error = EACCES; // XXX no way to create files yet
 		}
 		goto fail_file;
 	}
