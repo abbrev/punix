@@ -100,12 +100,26 @@ off_t generic_file_lseek(struct file *fp, off_t offset, int whence)
 	return newoffset;
 }
 
+int generic_file_fstat(struct file *fp, struct stat *buf)
+{
+	P.p_error = ENOSYS;
+	return -1;
+}
+
+int generic_file_ioctl(struct file *fp, int request, ...)
+{
+	P.p_error = ENOSYS;
+	return -1;
+}
+
 const struct fileops generic_file_fileops = {
 	.open = generic_file_open,
 	.close = generic_file_close,
 	.read = generic_file_read,
 	.write = generic_file_write,
 	.lseek = generic_file_lseek,
+	.ioctl = generic_file_ioctl,
+	.fstat = generic_file_fstat,
 };
 
 int generic_special_open(struct file *fp, struct inode *ip)

@@ -116,6 +116,7 @@ int misc_ioctl(struct file *fp, int request, void *arg)
 }
 
 off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
 const struct fileops misc_fileops = {
 	.open = misc_open,
 	.close = misc_close,
@@ -123,5 +124,6 @@ const struct fileops misc_fileops = {
 	.write = misc_write,
 	.lseek = pipe_lseek,
 	.ioctl = misc_ioctl,
+	.fstat = generic_file_fstat,
 };
 

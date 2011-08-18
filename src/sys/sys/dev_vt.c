@@ -1674,7 +1674,7 @@ int vt_ioctl(struct file *fp, int request, void *arg)
 }
 
 off_t pipe_lseek(struct file *, off_t, int);
-
+int generic_file_fstat(struct file *fp, struct stat *buf);
 const struct fileops vt_fileops = {
 	.open = vt_open,
 	.close = vt_close,
@@ -1682,4 +1682,5 @@ const struct fileops vt_fileops = {
 	.write = vt_write,
 	.lseek = pipe_lseek,
 	.ioctl = vt_ioctl,
+	.fstat = generic_file_fstat,
 };

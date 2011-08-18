@@ -228,6 +228,7 @@ STARTUP(int link_ioctl(struct file *fp, int request, void *arg))
 }
 
 off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
 const struct fileops link_fileops = {
 	.open = link_open,
 	.close = link_close,
@@ -235,4 +236,5 @@ const struct fileops link_fileops = {
 	.write = link_write,
 	.lseek = pipe_lseek,
 	.ioctl = link_ioctl,
+	.fstat = generic_file_fstat,
 };

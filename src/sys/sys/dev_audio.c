@@ -209,6 +209,7 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 #endif
 
 off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
 const struct fileops audio_fileops = {
 	.open = audio_open,
 	.close = audio_close,
@@ -216,4 +217,5 @@ const struct fileops audio_fileops = {
 	.write = audio_write,
 	.lseek = pipe_lseek,
 	.ioctl = audio_ioctl,
+	.fstat = generic_file_fstat,
 };
