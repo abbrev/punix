@@ -1,7 +1,7 @@
 /*
  * $Id$
  * 
- * Copyright 2005-2008 Christopher Williams
+ * Copyright 2005-2011 Christopher Williams
  * 
  * Process management core: switching, signal handling, events, preemption, etc.
  */
@@ -89,6 +89,7 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	struct proc *p = &P;
 	int s;
 	int sig;
+	int err = 0;
 
 	//s = spl7();
 	mask(&G.calloutlock);
@@ -139,30 +140,28 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	}
 	/* p->p_status = P_SLEEPING; */
 	sched_sleep(p);
-	unmask(&G.calloutlock);
 	swtch();
-	mask(&G.calloutlock);
 resume:
 	//splx(s);
 	p->p_flag &= ~P_SINTR;
 	if (p->p_flag & P_TIMEOUT) {
 		p->p_flag &= ~P_TIMEOUT;
 		if (sig == 0) {
-			unmask(&G.calloutlock);
-			return EWOULDBLOCK;
+			err = EWOULDBLOCK;
+			goto out;
 		}
 	} else if (timo)
 		untimeout(endtsleep, (void *)p);
 	if (intr && (sig != 0 || (sig = CURSIG(p)))) {
 		if (P.p_sigintr & sigmask(sig)) {
-			unmask(&G.calloutlock);
-			return EINTR;
+			err = EINTR;
+		} else {
+			err = ERESTART;
 		}
-		unmask(&G.calloutlock);
-		return ERESTART;
 	}
+out:
 	unmask(&G.calloutlock);
-	return 0;
+	return err;
 }
 
 #endif
