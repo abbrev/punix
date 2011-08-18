@@ -93,9 +93,9 @@ out:
 STARTUP(void swtch())
 {
 	struct proc *p;
+	masklock m = mask(&G.calloutlock);
 	
 	//kprintf("swtch() ");
-	int x = spl7();
 	
 	/* XXX: this shows the number of times this function has been called.
  	 * It draws in the bottom-left corner of the screen.
@@ -118,7 +118,9 @@ STARTUP(void swtch())
 	while (!(p = earliest_deadline_proc())) {
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
+		setmask(&G.calloutlock, 0);
 		cpuidle();
+		setmask(&G.calloutlock, m);
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */
 	}
@@ -128,7 +130,7 @@ STARTUP(void swtch())
 	G.need_resched = 0;
 	
 	if (p == current)
-		return;
+		goto out;
 	
 	if (!P.p_fpsaved) {
 		/* savefp(&P.p_fps); */
@@ -136,11 +138,14 @@ STARTUP(void swtch())
 	}
 	
 	if (csave(&P.p_ctx))
-		return; /* we get here via crestore */
+		goto out; /* we get here via crestore */
 	
 	current = p;
 	
-	crestore(&P.p_ctx);
+	crestore(&P.p_ctx); /* jump to the csave() for this context */
+
+out:
+	setmask(&G.calloutlock, m);
 }
 #endif
 
@@ -183,27 +188,35 @@ static void set_state(struct proc *p, int state)
 /* put the given proc on the run queue, possibly preempting the current proc */
 void sched_run(struct proc *p)
 {
+	int x= spl7();
 	//kprintf("sched_run()\n");
-	if (p->p_status == P_RUNNING)
+	if (p->p_status == P_RUNNING) {
+		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
 		panic("trying to run an already running process");
+	}
 	if (p->p_status == P_ZOMBIE)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
 	/* TODO: anything else? */
+	splx(x);
 }
 
 /* put the given process to sleep and take it off the run queue */
 void sched_sleep(struct proc *p)
 {
+	int x = spl7();
 	//kprintf("sched_sleep(%08lx)\n", p);
 	set_state(p, P_SLEEPING);
+	splx(x);
 }
 
 /* stop the given process and take it off the run queue */
 void sched_stop(struct proc *p)
 {
+	int x = spl7();
 	//kprintf("sched_stop(%08lx)\n", p);
 	set_state(p, P_STOPPED);
+	splx(x);
 }
 
 void sched_fork(struct proc *childp)
@@ -213,7 +226,7 @@ void sched_fork(struct proc *childp)
 	 * give the child half of our time_slice
 	 * set first_time_slice in the child
 	 */
-	int x = spl0();
+	int x = spl7();
 	int half = current->p_time_slice / 2;
 	childp->p_time_slice = half;
 	current->p_time_slice -= half;
@@ -229,11 +242,13 @@ void sched_exec(void)
 
 void sched_exit(struct proc *p)
 {
+	int x = spl7();
 	//kprintf("sched_exit(%08lx)\n", p);
 	if (p->p_first_time_slice) {
 		p->p_pptr->p_time_slice += p->p_time_slice;
 	}
 	set_state(p, P_ZOMBIE);
+	splx(x);
 }
 
 #if 0
