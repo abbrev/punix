@@ -164,25 +164,34 @@ initmask:
 	rts
 
 	.long	0xb00b1e5
-| int mask(masklock *lockp);
+| masklock mask(masklock *lockp);
+| increment *lockp atomically and return the old value
 .global mask
 mask:
 	move.l	4(%sp),%a0
+	move	%sr,%d1
+	move	#0x2700,%sr
+	move.w	(%a0),%d0
 	addq.w	#1,(%a0)
-	tas	(%a0)
-	seq	%d0
-	ext.w	%d0
+	move	%d1,%sr
 	rts
 
+/*
+| note: these are defined as macros in ../h/punix.h
+
 | void unmask(masklock *lockp);
+| decrement *lockp atomically
 .global unmask
 unmask:
 	move.l	4(%sp),%a0
-	move	%sr,%d0
-	move	#0x2700,%sr
-	subq.b	#1,1(%a0)
-	bne	1f
-	clr.w	(%a0)
-1:
-	move	%d0,%sr
+	subq.w	#1,(%a0)
 	rts
+
+| void setmask(masklock *lockp, masklock value);
+| set *lockp to value atomically
+.global setmask
+setmask:
+	move.l	4(%sp),%a0
+	move.w	8(%sp),(%a0)
+	rts
+*/

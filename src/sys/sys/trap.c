@@ -286,7 +286,7 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 	int x;
 	
 	/* do call-outs */
-	if (mask(&G.calloutlock)) {
+	if (mask(&G.calloutlock) == 0) {
 		int t = 0;
 		struct callout *c1, *c2, c;
 		x = spl7();

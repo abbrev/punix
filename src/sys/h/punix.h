@@ -24,7 +24,7 @@
  * can be interrupted by hard interrupts, should use a masklock. The typical
  * usage of a masklock in a soft interrupt is like this:
  *
- * if (mask(&lock)) {
+ * if (mask(&lock) == 0) {
  *   // ...
  * }
  * unmask(&lock);
@@ -34,11 +34,24 @@
  * // critical section
  * unmask(&lock);
  *
- * mask() can be nested up to 255 times (which should be more than enough).
+ * OR like this:
+ * int m = mask(&lock);
+ * mask(&lock);
+ * ...
+ * setmask(&lock, m);
+ *
+ * setmask() atomically sets a mask to the given value, which can be used to
+ * restore a masklock after incrementing it an arbitrary number of times.
+ *
+ * mask() can be nested up to 65535 times (which should be more than enough).
  */
 typedef int masklock;
-int mask(masklock *);
+masklcok mask(masklock *);
 void unmask(masklock *);
+void setmask(masklock *, masklock v);
+
+#define unmask(m) (void)(--*m)
+#define setmask(m, v) (void)(*m = v)
 
 extern const char
 uname_sysname[],
