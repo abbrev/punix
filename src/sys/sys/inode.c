@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stddef.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "punix.h"
 #include "param.h"
@@ -12,9 +13,9 @@
 #include "user.h"
 */
 #include "inode.h"
+#include "fs.h"
 /*
 #include "mount.h"
-#include "fs.h"
 #include "conf.h"
 */
 #include "buf.h"
@@ -38,6 +39,7 @@
  * minimum of both).
  */
 
+#if 0 // we're still using a fixed-sized array of inode structures
 /*
  * create a new vfs inode object with fs and num initialized
  * return with inode locked
@@ -64,6 +66,7 @@ static void delete_inode(struct inode *ip)
 	assert(ip->i_count == 0); // make sure nobody is referencing this inode
 	memfree(ip, 0);
 }
+#endif
 
 void inodeinit()
 {
@@ -81,7 +84,6 @@ void inodeinit()
  * Otherwise, read it in from the device, lock it, and return it.
  * If the inode is mounted on, return the inode that covers it.
  */
-/* TODO: follow mount points */
 struct inode *iget(struct filesystem *fs, ino_t num)
 {
 	struct inode *ip;
@@ -91,6 +93,15 @@ retry:
 	freeip = NULL;
 	for (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip) {
 		if (ip->i_fs == fs && ip->i_num == num) {
+			// we found our inode in the cache
+			// follow the mount
+			while (ip->i_mount)
+				ip = ip->i_mount;
+
+			fs = ip->i_fs;
+			num = ip->i_num;
+
+			/* try to lock it */
 			if (ip->i_flag & ILOCKED) {
 				ip->i_flag |= IWANTED;
 				slp(ip, 0);
@@ -108,11 +119,26 @@ retry:
 	}
 	ip->i_fs = fs;
 	ip->i_num = num;
+	ip->i_count = 0;
+	ip->i_mount = NULL;
+	ip->i_flag = 0;
 
+	if (!fs || !fs->fsops) {
+		P.p_error = EIO;
+		goto fail;
+	}
+	if (fs->fsops->read_inode(ip)) {
+		goto fail;
+	}
 out:
 	ip->i_flag |= ILOCKED;
 	++ip->i_count;
 	return ip;
+
+fail:
+	ip->i_fs = NULL;
+	ip->i_num = -1;
+	return NULL;
 }
 
 /*
@@ -122,9 +148,21 @@ out:
  */
 void iput(struct inode *ip)
 {
+	struct filesystem *fs;
 	if (--ip->i_count) return;
-
-	// TODO: write this
+	if (ip->i_nlink == 0) {
+		// TODO: write this
+		return;
+	}
+	// write inode out if it's dirty
+	if (ip->i_flag & (ICHG|IMOD|IUPD)) { // XXX: any other flags?
+		fs = ip->i_fs;
+		assert(fs);
+		assert(fs->fsops);
+		assert(fs->fsops->write_inode);
+		fs->fsops->write_inode(ip);
+		ip->i_flag &= ~(ICHG|IMOD|IUPD);
+	}
 }
 
 STARTUP(void ilock(struct inode *inop))
@@ -142,22 +180,6 @@ STARTUP(void iunlock(struct inode *inop))
 	if (inop->i_flag & IWANTED) {
 		inop->i_flag &= ~IWANTED;
 		wakeup(inop);
-	}
-}
-
-// increase reference count
-void i_ref(struct inode *inop)
-{
-	++inop->i_count;
-}
-
-// decrease reference count, freeing it on disk if nlink=0
-void i_unref(struct inode *inop)
-{
-	if (--inop->i_count) return;
-	/* FIXME */
-	if (inop->i_nlink == 0) {
-		// TODO: delete the inode on disk
 	}
 }
 

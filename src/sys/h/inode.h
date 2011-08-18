@@ -14,6 +14,9 @@ struct inode {
 	//dev_t	i_dev; // is this needed?
 	ino_t	i_num;
 	struct	filesystem *i_fs;
+
+	/* root inode if this inode is mounted on, NULL otherwise */
+	struct inode *i_mount;
 	
 	/* following fields are stored on the device */
 	unsigned short	i_mode;	/* mode and type of file */
@@ -49,7 +52,6 @@ struct inodeops {
 //#define ILWAIT		0x0200		/* someone waiting on file lock */
 #define IMOD		0x0400		/* inode has been modified */
 //#define IRENAME		0x0800		/* inode is being renamed */
-//#define IPIPE		0x1000		/* inode is a pipe */
 //#define IRCOLL		0x2000		/* read select collision on pipe */
 //#define IWCOLL		0x4000		/* write select collision on pipe */
 //#define IXMOD		0x8000		/* inode is text, but impure (XXX) */
