@@ -24,6 +24,7 @@ struct fstype tmpfs_fstype = {
 int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
                           int flags, const char *devname, const void *data)
 {
+	P.p_error = EIO; // XXX
 	return 1;
 }
 
@@ -91,12 +92,16 @@ ssize_t tmpfs_file_write(struct file *fp, void *buf, size_t count, off_t *pos)
 }
 
 off_t generic_file_lseek(struct file *fp, off_t offset, int whence);
+int generic_file_fstat(struct file *fp, struct stat *buf);
+int generic_file_ioctl(struct file *fp, int request, ...);
 
 struct fileops tmpfs_file_ops = {
 	.open = tmpfs_file_open,
 	.read = tmpfs_file_read,
 	.write = tmpfs_file_write,
 	.lseek = generic_file_lseek,
+	.ioctl = generic_file_ioctl,
+	.fstat = generic_file_fstat,
 };
 
 /* filesystem operations */
@@ -118,11 +123,10 @@ struct inode *tmpfs_alloc_inode(struct filesystem *fs)
 
 	ip->i_num = (ino_t)tfsip;
 	ip->i_size = 0;
-	ip->i_flag |= IACC|IMOD|ICHG;
+	ip->i_flag = 0; //|= IACC|IMOD|ICHG;
 	ip->i_fs = fs;
-	ip->i_count = 0;
+	ip->i_count = 1;
 	ip->i_nlink = 0;
-	i_ref(ip);
 	ilock(ip);
 
 	return ip;
