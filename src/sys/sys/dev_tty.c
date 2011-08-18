@@ -21,9 +21,9 @@ int devtty_open(struct file *fp, struct inode *ip)
 		P.p_error = ENXIO;
 		return -1;
 	}
-	i_unref(ip);
+	iput(ip);
 	fp->f_inode = ip = P.p_tty;
-	i_ref(ip);
+	++ip->i_count;
 	fp->f_ops = ip->i_fops;
 	return fp->f_ops->open(fp, ip);
 }

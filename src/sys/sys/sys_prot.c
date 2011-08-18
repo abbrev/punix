@@ -315,7 +315,7 @@ static struct inode *owner(const char *path)
 		return ip;
 	
 	/* we're not the owner of the file nor the superuser :( */
-	i_unref(ip);
+	iput(ip);
 	return NULL;
 }
 
@@ -341,7 +341,7 @@ void sys_chmod()
 	if (ip->i_flag&ITEXT && !(ip->i_mode&S_ISVTX))
 		xrele(ip);
 #endif
-	i_unref(ip);
+	iput(ip);
 }
 
 /* FIXME: make this function less spaghetti-like */
@@ -385,6 +385,6 @@ chown:
 	if (ap->group != (gid_t)-1) ip->i_gid = ap->group;
 	ip->i_flag |= ICHG;
 out:
-	i_unref(ip);
+	iput(ip);
 }
 

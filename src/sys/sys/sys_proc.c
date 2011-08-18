@@ -936,10 +936,10 @@ void sys_chdir()
 		return;
 	if (!(ip->i_mode & S_IFDIR)) {
 		P.p_error = ENOTDIR;
+		iput(ip);
 		return;
 	}
 	if (ip == P.p_cdir) return;
-	i_unref(P.p_cdir);
-	++ip->i_count; /* unless namei() does this ?? */
+	iput(P.p_cdir);
 	P.p_cdir = ip;
 }
