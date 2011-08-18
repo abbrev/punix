@@ -27,7 +27,7 @@ clean:
 	rm -f *.inc bin2c .dep
 
 .dep:
-	for i in $(GLYPHS); do \
+	@-for i in $(GLYPHS); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
 		echo '	$$(GLYPHS2C) <$$< >$$@'; \
 	done >.dep ; \
