@@ -78,6 +78,12 @@ void ttyioctl(dev_t dev, int cmd, void *cmarg)
 	/* FIXME */
 }
 
+/*
+ * FIXME: make this behave like the tty in Linux in canonical mode.
+ * The tty in Linux buffers up to QSIZE - 1 characters in a line to leave room
+ * for a newline or end-of-file (^D) character, either of which will send the
+ * current line to the process.
+ */
 void ttyread(struct tty *tp)
 {
 	int ch;
@@ -90,9 +96,11 @@ void ttyread(struct tty *tp)
 	
 loop:
 	/* TODO: also check for the tty closing */
+	mask(&G.calloutlock);
 	while (qisempty(qp)) {
 		slp(&tp->t_rawq, 1);
 	}
+	unmask(&G.calloutlock);
 	
 	while ((ch = qgetc(qp)) >= 0) {
 		if ((lflag & ICANON)) {
@@ -139,6 +147,7 @@ void ttywakeup(struct tty *tp)
 	if (ISSET(tp->t_state, TS_ASYNC))
 		pgsignal(tp->t_pgrp, SIGIO, 1);
 */
+	TRACE();
 	wakeup((void *)&tp->t_rawq);
 }
 

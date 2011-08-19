@@ -22,7 +22,7 @@
 /* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
 {
-	int x = spl7();
+	mask(&G.calloutlock);
 	p->p_waitchan = NULL;
 #if 0
 	if (p->p_status == P_RUNNING) {
@@ -31,7 +31,7 @@ STARTUP(void setrun(struct proc *p))
 	}
 #endif
 	sched_run(p);
-	splx(x);
+	unmask(&G.calloutlock);
 }
 
 STARTUP(void unsleep(struct proc *p))
@@ -53,7 +53,6 @@ STARTUP(static void endtsleep(void *vp))
 	struct proc *p = (struct proc *)vp;
 	int s;
 	
-	//s = spl7();
 	mask(&G.calloutlock);
 	if (p->p_waitchan) {
 		if (p->p_status == P_SLEEPING) {
@@ -65,7 +64,6 @@ STARTUP(static void endtsleep(void *vp))
 		p->p_flag |= P_TIMEOUT;
 	}
 	unmask(&G.calloutlock);
-	//splx(s);
 }
 
 /* note: following comment block is outdated */
@@ -91,7 +89,6 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	int sig;
 	int err = 0;
 
-	//s = spl7();
 	mask(&G.calloutlock);
 #if 0
 	if (panicstr) {
@@ -142,7 +139,6 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	sched_sleep(p);
 	swtch();
 resume:
-	//splx(s);
 	p->p_flag &= ~P_SINTR;
 	if (p->p_flag & P_TIMEOUT) {
 		p->p_flag &= ~P_TIMEOUT;

@@ -29,7 +29,7 @@ STARTUP(void audioinit())
 
 STARTUP(static void startaudio())
 {
-	LINK_CONTROL = 0;
+	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
 	LINK_DIRECT = 0xfc;
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
 	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
@@ -44,19 +44,29 @@ STARTUP(static void stopaudio())
 {
 	G.audio.play = 0;
 	
-	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX; /* XXX should we just let dev_link set these flags? */
 	INT5RATE |= 0x30;
 	INT5VAL = 0x00;
 }
 
 STARTUP(static void dspsync())
 {
-	int x = spl5();
-	while (!qisempty(&G.audio.q) || G.audio.samples) {
-		G.audio.lowat = 0; /* wait until the audio queue is empty */
-		slp(&G.audio.q, 0);
+	//int x = spl5();
+
+	mask(&G.calloutlock);
+	while (G.audio.play && (!qisempty(&G.audio.q) || G.audio.samples)) {
+		if (qused(&G.audio.q) < 4) { // XXX constant
+			// samples will be played before slp() would even finish
+			unmask(&G.calloutlock);
+			cpuidle();
+			mask(&G.calloutlock);
+		} else {
+			G.audio.lowat = 0;
+			slp(&G.audio.q, 0);
+		}
 	}
-	splx(x);
+out:
+	unmask(&G.calloutlock);
+	//splx(x);
 }
 
 /* produce the sound! */
@@ -85,8 +95,10 @@ STARTUP(void audiointr())
 out:
 	if (G.audio.q.q_count <= G.audio.lowat) {
 		G.audio.lowat = -1;
+		mask(&G.calloutlock);
 		spl4();
 		defer(wakeup, &G.audio.q);
+		unmask(&G.calloutlock);
 	}
 }
 
@@ -127,11 +139,9 @@ STARTUP(void audioread(dev_t dev))
 /* write audio samples to the audio queue */
 STARTUP(void audiowrite(dev_t dev))
 {
-	int x;
+	size_t n;
 
 	while (P.p_count) {
-	
-		size_t n;
 		n = b_to_q(P.p_base, MIN(P.p_count, MAXCOPYSIZE), &G.audio.q);
 		P.p_base += n;
 		P.p_count -= n;
@@ -139,11 +149,11 @@ STARTUP(void audiowrite(dev_t dev))
 			if (!G.audio.play) /* playback is halted */
 				return;
 			
-			x = spl5();
+			mask(&G.calloutlock);
 			G.audio.lowat = QSIZE - MAXCOPYSIZE;
 			
 			slp(&G.audio.q, 1);
-			splx(x);
+			unmask(&G.calloutlock);
 		}
 	}
 }

@@ -475,7 +475,8 @@ void showstatus(void)
 	/* 8           7       6    5        4     3       2   1    0    */
 	
 	int batt;
-	int x = spl7();
+	//int x = spl7();
+	mask(&G.calloutlock);
 	int mod = G.vt.key_mod | G.vt.key_mod_sticky;
 	
 	batt = G.batt_level - 3;
@@ -496,7 +497,8 @@ void showstatus(void)
 #endif
 	drawmod(7, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
 	drawmod(8, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
-	splx(x);
+	mask(&G.calloutlock);
+	//splx(x);
 }
 
 /* callback for timeout() to remove bell status */

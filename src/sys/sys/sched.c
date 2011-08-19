@@ -188,7 +188,7 @@ static void set_state(struct proc *p, int state)
 /* put the given proc on the run queue, possibly preempting the current proc */
 void sched_run(struct proc *p)
 {
-	int x= spl7();
+	mask(&G.calloutlock);
 	//kprintf("sched_run()\n");
 	if (p->p_status == P_RUNNING) {
 		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
@@ -198,25 +198,21 @@ void sched_run(struct proc *p)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
 	/* TODO: anything else? */
-	splx(x);
+	unmask(&G.calloutlock);
 }
 
 /* put the given process to sleep and take it off the run queue */
 void sched_sleep(struct proc *p)
 {
-	int x = spl7();
 	//kprintf("sched_sleep(%08lx)\n", p);
 	set_state(p, P_SLEEPING);
-	splx(x);
 }
 
 /* stop the given process and take it off the run queue */
 void sched_stop(struct proc *p)
 {
-	int x = spl7();
 	//kprintf("sched_stop(%08lx)\n", p);
 	set_state(p, P_STOPPED);
-	splx(x);
 }
 
 void sched_fork(struct proc *childp)
@@ -226,13 +222,13 @@ void sched_fork(struct proc *childp)
 	 * give the child half of our time_slice
 	 * set first_time_slice in the child
 	 */
-	int x = spl7();
+	mask(&G.calloutlock);
 	int half = current->p_time_slice / 2;
 	childp->p_time_slice = half;
 	current->p_time_slice -= half;
-	splx(x);
 	childp->p_first_time_slice = 1;
 	set_state(childp, P_RUNNING);
+	unmask(&G.calloutlock);
 }
 
 void sched_exec(void)
@@ -242,13 +238,13 @@ void sched_exec(void)
 
 void sched_exit(struct proc *p)
 {
-	int x = spl7();
+	mask(&G.calloutlock);
 	//kprintf("sched_exit(%08lx)\n", p);
 	if (p->p_first_time_slice) {
 		p->p_pptr->p_time_slice += p->p_time_slice;
 	}
 	set_state(p, P_ZOMBIE);
-	splx(x);
+	unmask(&G.calloutlock);
 }
 
 #if 0
