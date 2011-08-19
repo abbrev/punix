@@ -235,7 +235,7 @@ exception:
 	pea.l	5*4+2(%sp)
 	jbsr	handle_exception
 	addq.l	#6,%sp
-	bra	trapret
+	bra	trapret0	| we are returning to user mode (= int level 0)
 
 | Scan for the hardware to know what keys are pressed 
 Int_1:
@@ -249,10 +249,13 @@ Int_1:
 
 | common exit point for all traps
 trapret:
+	| check that we are returning to interrupt level 0 (no interrupt)
 	move	5*4(%sp),%d0
 	and	#0x0700,%d0
 	bne.b	0f
 	
+trapret0:
+	| we are returning to interuppt level 0
 	move.l	%usp,%a0
 	pea.l	(%a0)		| void *usp
 	pea.l	(%sp)		| void **usp
