@@ -318,7 +318,7 @@ error_noent: ;
 /* fill in the rusage structure from the proc */
 static void krusage_to_rusage(struct krusage *kp, struct rusage *rp)
 {
-	int x = spl7();
+	int x = splclock();
 	rp->ru_utime.tv_sec = kp->kru_utime / HZ;
 	rp->ru_utime.tv_usec = (kp->kru_utime % HZ) * 1000000L / HZ;
 	rp->ru_stime.tv_sec = kp->kru_stime / HZ;
@@ -876,7 +876,6 @@ void sys_getrusage()
 		struct rusage *r_usage;
 	} *ap = (struct a *)P.p_arg;
 	
-	int x;
 	struct rusage ru;
 	struct krusage *krup;
 	
@@ -892,9 +891,7 @@ void sys_getrusage()
 		goto error;
 	}
 	
-	x = spl1();
 	krusage_to_rusage(krup, &ru);
-	splx(x);
 	if (copyout(ap->r_usage, &ru, sizeof(ru)))
 		P.p_error = EFAULT;
 error:	;

@@ -497,7 +497,7 @@ void showstatus(void)
 #endif
 	drawmod(7, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
 	drawmod(8, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
-	mask(&G.calloutlock);
+	unmask(&G.calloutlock);
 	//splx(x);
 }
 

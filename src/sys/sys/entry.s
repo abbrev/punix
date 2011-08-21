@@ -255,7 +255,7 @@ trapret:
 	bne.b	0f
 	
 trapret0:
-	| we are returning to interuppt level 0
+	| we are returning to interrupt level 0
 	move.l	%usp,%a0
 	pea.l	(%a0)		| void *usp
 	pea.l	(%sp)		| void **usp
@@ -344,9 +344,14 @@ _syscall:
 	
 	movem.l	(%sp)+,%d3-%d7/%a1-%a7
 	move.l	%a1,%usp
-	rte
+
+	|rte
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	jbra	trapret0
 
 .global return_from_vfork
 return_from_vfork:
 	moveq	#0,%d0
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	jbra	trapret0
 	rte

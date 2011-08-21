@@ -20,7 +20,7 @@
 #define MS_TO_TICKS(t) (((long)(t) * HZ + 500) / 1000)
 
 /* RR_INTERVAL is the round-robin interval in milliseconds */
-#define RR_INTERVAL (1000L/32) //(1000L*16/HZ)
+#define RR_INTERVAL (1000L) //(1000L*16/HZ)
 /* TIME_SLICE is the same as RR_INTERVAL but measured in ticks */
 #define TIME_SLICE MS_TO_TICKS(RR_INTERVAL)
 
@@ -93,7 +93,9 @@ out:
 STARTUP(void swtch())
 {
 	struct proc *p;
-	masklock m = mask(&G.calloutlock);
+	masklock m;
+	mask(&G.calloutlock);
+	m = G.calloutlock;
 	
 	//kprintf("swtch() ");
 	
@@ -142,10 +144,16 @@ STARTUP(void swtch())
 	
 	current = p;
 	
+	// inhibit soft interrupts and clear soft interrupt mask
+	// this is needed so the mask is cleared for vfork
+	spl1();
+	setmask(&G.calloutlock, 0);
+
 	crestore(&P.p_ctx); /* jump to the csave() for this context */
 
 out:
 	setmask(&G.calloutlock, m);
+	unmask(&G.calloutlock);
 }
 #endif
 

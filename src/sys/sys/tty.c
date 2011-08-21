@@ -96,11 +96,11 @@ void ttyread(struct tty *tp)
 	
 loop:
 	/* TODO: also check for the tty closing */
-	mask(&G.calloutlock);
+	spl1();  // inhibit soft interrupts
 	while (qisempty(qp)) {
 		slp(&tp->t_rawq, 1);
 	}
-	unmask(&G.calloutlock);
+	spl0();
 	
 	while ((ch = qgetc(qp)) >= 0) {
 		if ((lflag & ICANON)) {

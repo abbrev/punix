@@ -45,6 +45,7 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 {
 	struct callout *c1, *c2;
 	long t;
+	int err = 0;
 	//int x;
 	
 	t = time;
@@ -65,8 +66,10 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 		++c2;
 	
 	/* any room to put this new entry? */
-	if (c2 >= &G.callout[NCALL-1])
-		return -1;
+	if (c2 >= &G.callout[NCALL-1]) {
+		err = -1;
+		goto out;
+	}
 	
 	if (c1->c_func)
 		c1->c_dtime -= t;
@@ -81,9 +84,10 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	c1->c_func = func;
 	c1->c_arg = arg;
 	
+out:
 	unmask(&G.calloutlock);
 	//splx(x);
-	return 0;
+	return err;
 }
 
 /*

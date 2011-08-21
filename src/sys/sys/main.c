@@ -54,6 +54,7 @@ STARTUP(void kmain())
 	loadavinit();
 	battinit();
 	usageinit();
+	G.calloutlock = 0;
 	
 #if 1
 	kprintf("%s build %s\n", uname_sysname, uname_version);
@@ -76,5 +77,4 @@ STARTUP(void kmain())
 	uptime.tv_sec = uptime.tv_nsec = 0;
 	spl0();
 	bogomips();
-	kputchar('\n');
 }

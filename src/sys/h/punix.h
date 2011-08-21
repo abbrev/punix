@@ -45,7 +45,7 @@
  *
  * mask() can be nested up to 65535 times (which should be more than enough).
  */
-typedef int masklock;
+typedef volatile int masklock;
 masklock mask(masklock *);
 void unmask(masklock *);
 void setmask(masklock *, masklock v);
