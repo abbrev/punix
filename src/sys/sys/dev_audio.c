@@ -50,8 +50,6 @@ STARTUP(static void stopaudio())
 
 STARTUP(static void dspsync())
 {
-	//int x = spl5();
-
 	mask(&G.calloutlock);
 	while (G.audio.play && (!qisempty(&G.audio.q) || G.audio.samples)) {
 		if (qused(&G.audio.q) < 4) { // XXX constant
@@ -60,13 +58,16 @@ STARTUP(static void dspsync())
 			cpuidle();
 			mask(&G.calloutlock);
 		} else {
+			int x = spl1(); // inhibit soft interrupts
+			unmask(&G.calloutlock);
 			G.audio.lowat = 0;
 			slp(&G.audio.q, 0);
+			mask(&G.calloutlock);
+			splx(x);
 		}
 	}
 out:
 	unmask(&G.calloutlock);
-	//splx(x);
 }
 
 /* produce the sound! */
@@ -85,6 +86,8 @@ STARTUP(void audiointr())
 			goto out;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
+		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+4*4);
+		*spinner = (~0L) << 32L*qfree(&G.audio.q)/QSIZE;
 	}
 	
 	/* put this sample into the lower 2 bits */
@@ -95,10 +98,8 @@ STARTUP(void audiointr())
 out:
 	if (G.audio.q.q_count <= G.audio.lowat) {
 		G.audio.lowat = -1;
-		mask(&G.calloutlock);
 		spl4();
 		defer(wakeup, &G.audio.q);
-		unmask(&G.calloutlock);
 	}
 }
 
@@ -134,28 +135,35 @@ STARTUP(void audioread(dev_t dev))
  * audio queue (we have only about 12e6/8192 = 1464 cycles between each audio
  * interrupt to copy data to the audio queue).
  */
-#define MAXCOPYSIZE 16
+#define MAXCOPYSIZE 8
+#define MAXDRAIN (QSIZE/2)
+#define MAXFILL (QSIZE - MAXCOPYSIZE) // leave some wiggle room at the top
 
 /* write audio samples to the audio queue */
 STARTUP(void audiowrite(dev_t dev))
 {
+	int x;
 	size_t n;
+	unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-6*30+4*4);
 
 	while (P.p_count) {
+		*spinner = 0xffffffff;
 		n = b_to_q(P.p_base, MIN(P.p_count, MAXCOPYSIZE), &G.audio.q);
 		P.p_base += n;
 		P.p_count -= n;
-		if (n == 0) {
+		if (n == 0 || qused(&G.audio.q) >= MAXFILL) {
 			if (!G.audio.play) /* playback is halted */
 				return;
+			*spinner = 0xffff0000;
 			
-			mask(&G.calloutlock);
-			G.audio.lowat = QSIZE - MAXCOPYSIZE;
+			x = spl1();
+			G.audio.lowat = QSIZE - MIN(P.p_count, MAXDRAIN);
 			
 			slp(&G.audio.q, 1);
-			unmask(&G.calloutlock);
+			splx(x);
 		}
 	}
+	*spinner = 0x00000000;
 }
 
 /* some OSS ioctl() codes to support:
