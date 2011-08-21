@@ -299,10 +299,10 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 			do {
 				*c1 = *c2++;
 			} while (c1++->c_func);
+			t = G.callout[0].c_dtime += c.c_dtime;
 			spl0();
 			c.c_func(c.c_arg);
 			spl7();
-			t = G.callout[0].c_dtime += c.c_dtime;
 		}
 		spl0();
 	}
