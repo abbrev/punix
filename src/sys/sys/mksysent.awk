@@ -3,7 +3,7 @@
 # Example:
 # 3    read  5      0
 
-/^[^#]/ && ! /^$/ {
+/^[^#]/ {
 	num=$1; name=$2; words=$3; flags=$4
 	if (NF < 4) {
 		printf "Warning: line %d has too few fields; skipping.\n", NR >"/dev/stderr"
