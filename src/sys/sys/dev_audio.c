@@ -135,9 +135,8 @@ STARTUP(void audioread(dev_t dev))
  * audio queue (we have only about 12e6/8192 = 1464 cycles between each audio
  * interrupt to copy data to the audio queue).
  */
-#define MAXCOPYSIZE 8
-#define MAXDRAIN (QSIZE/2)
-#define MAXFILL (QSIZE - MAXCOPYSIZE) // leave some wiggle room at the top
+#define MAXCOPYSIZE QSIZE //8
+#define MAXDRAIN (QSIZE / 2)
 
 /* write audio samples to the audio queue */
 STARTUP(void audiowrite(dev_t dev))
@@ -148,20 +147,24 @@ STARTUP(void audiowrite(dev_t dev))
 
 	while (P.p_count) {
 		*spinner = 0xffffffff;
-		n = b_to_q(P.p_base, MIN(P.p_count, MAXCOPYSIZE), &G.audio.q);
+		n = b_to_q(P.p_base, MIN(P.p_count, QSIZE), &G.audio.q);
 		P.p_base += n;
 		P.p_count -= n;
-		if (n == 0 || qused(&G.audio.q) >= MAXFILL) {
-			if (!G.audio.play) /* playback is halted */
-				return;
-			*spinner = 0xffff0000;
-			
-			x = spl1();
-			G.audio.lowat = QSIZE - MIN(P.p_count, MAXDRAIN);
-			
-			slp(&G.audio.q, 1);
-			splx(x);
-		}
+
+		if (P.p_count == 0 || !G.audio.play) /* playback is halted */
+			break;
+
+		/*
+		 * we filled the buffer practically full, so wait until it
+		 * drains low enough for us to fill it up again
+		 */
+		*spinner = 0xffff0000;
+		
+		x = spl1();
+		G.audio.lowat = QSIZE - MIN(P.p_count, MAXDRAIN);
+		
+		slp(&G.audio.q, 1);
+		splx(x);
 	}
 	*spinner = 0x00000000;
 }
