@@ -174,10 +174,12 @@ int b_to_q(char *bp, int count, struct queue *qp)
 		n = QSIZE - qp->q_count;
 	if (n == 0)
 		goto out;
+	splx(x);
 	
 	if (qp->q_head < qp->q_tail || qp->q_head + n <= QSIZE) {
 		/* easy case: one contiguous block */
 		memmove(qp->q_buf + qp->q_head, bp, n);
+		x = spl5();
 		qp->q_head = (qp->q_head + n) % QSIZE;
 	} else {
 		/* split case: two separate blocks */
@@ -185,6 +187,7 @@ int b_to_q(char *bp, int count, struct queue *qp)
 		int z = n - y; /* lower block byte count */
 		memmove(qp->q_buf + qp->q_head, bp, y); /* copy upper block */
 		memmove(qp->q_buf, bp + y, z); /* copy lower block */
+		x = spl5();
 		qp->q_head = z;
 	}
 	qp->q_count += n;
@@ -218,10 +221,12 @@ int q_to_b(struct queue *qp, char *bp, int count)
 		n = qp->q_count;
 	if (n == 0)
 		goto out;
+	splx(x);
 	
 	if (qp->q_tail < qp->q_head || qp->q_tail + n <= QSIZE) {
 		/* single block */
 		memmove(bp, qp->q_buf + qp->q_tail, n);
+		x = spl5();
 		qp->q_tail = (qp->q_tail + n) % QSIZE;
 	} else {
 		/* two blocks */
@@ -229,6 +234,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 		int z = n - y; /* lower block byte count */
 		memmove(bp, qp->q_buf + qp->q_tail, y); /* copy upper block */
 		memmove(bp + y, qp->q_buf, z); /* copy lower block */
+		x = spl5();
 		qp->q_tail = z;
 	}
 	qp->q_count -= n;
