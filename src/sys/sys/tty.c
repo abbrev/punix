@@ -156,8 +156,7 @@ void ttywakeup(struct tty *tp)
 
 #if 0
 struct queue {
-	int q_count;
-	int q_head, q_tail;
+	unsigned long q_head, q_tail;
 	char q_buf[QSIZE];
 };
 #endif
@@ -166,34 +165,29 @@ struct queue {
 #if 1
 int b_to_q(char *bp, int count, struct queue *qp)
 {
-	int x;
 	int n = count;
-	x = spl5();
+	int x = spl5();
+	unsigned long head = qp->q_head & QMASK;
+	unsigned long tail = qp->q_tail & QMASK;
 	/* limit n to the free size of our queue */
-	if (n > QSIZE - qp->q_count)
-		n = QSIZE - qp->q_count;
-	if (n == 0)
-		goto out;
+	if (n > qfree(qp))
+		n = qfree(qp);
 	splx(x);
+	if (n == 0)
+		return 0;
 	
-	if (qp->q_head < qp->q_tail || qp->q_head + n <= QSIZE) {
+	if (head < tail || head + n <= QSIZE) {
 		/* easy case: one contiguous block */
-		memmove(qp->q_buf + qp->q_head, bp, n);
-		x = spl5();
-		qp->q_head = (qp->q_head + n) % QSIZE;
+		memmove(qp->q_buf + head, bp, n);
 	} else {
 		/* split case: two separate blocks */
-		int y = QSIZE - qp->q_head; /* upper block byte count */
+		int y = QSIZE - head; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
-		memmove(qp->q_buf + qp->q_head, bp, y); /* copy upper block */
+		memmove(qp->q_buf + head, bp, y); /* copy upper block */
 		memmove(qp->q_buf, bp + y, z); /* copy lower block */
-		x = spl5();
-		qp->q_head = z;
 	}
-	qp->q_count += n;
+	qp->q_head += n;
 	
-out:
-	splx(x);
 	return n;
 }
 #else
@@ -214,33 +208,27 @@ int b_to_q(char *bp, int count, struct queue *qp)
 /* XXX: this has NOT been tested */
 int q_to_b(struct queue *qp, char *bp, int count)
 {
-	int x;
 	int n = count;
-	x = spl5();
-	if (n > qp->q_count)
-		n = qp->q_count;
+	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long used = qused(qp);
+	/* limit n to the used size of our queue */
+	if (n > used)
+		n = used;
 	if (n == 0)
-		goto out;
-	splx(x);
+		return 0;
 	
-	if (qp->q_tail < qp->q_head || qp->q_tail + n <= QSIZE) {
+	if (tail < (qp->q_head & QMASK) || tail + n <= QSIZE) {
 		/* single block */
-		memmove(bp, qp->q_buf + qp->q_tail, n);
-		x = spl5();
-		qp->q_tail = (qp->q_tail + n) % QSIZE;
+		memmove(bp, qp->q_buf + tail, n);
 	} else {
 		/* two blocks */
-		int y = QSIZE - qp->q_tail; /* upper block byte count */
+		int y = QSIZE - tail; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
-		memmove(bp, qp->q_buf + qp->q_tail, y); /* copy upper block */
+		memmove(bp, qp->q_buf + tail, y); /* copy upper block */
 		memmove(bp + y, qp->q_buf, z); /* copy lower block */
-		x = spl5();
-		qp->q_tail = z;
 	}
-	qp->q_count -= n;
+	qp->q_tail += n;
 
-out:
-	splx(x);
 	return n;
 }
 #else
