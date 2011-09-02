@@ -26,34 +26,35 @@ void ttyoutput(int ch, struct tty *tp);
 void ttyopen(dev_t dev, struct tty *tp)
 {
 	tp->t_dev = dev;
-        tp->t_state |= ISOPEN;
+	tp->t_state |= ISOPEN;
 	tp->t_numc = 0; /* number of characters after a break character */
 	/* if we're not already part of a process group, make this tty our
 	 * controlling tty and add us to the tty's process group */
-        if (P.p_pgrp == 0) {
-                P.p_ttyp = tp;
-                P.p_ttydev = dev;
-                
-                if (tp->t_pgrp == 0)
-                        tp->t_pgrp = P.p_pid;
-                P.p_pgrp = tp->t_pgrp;
-        }
+	if (P.p_pgrp == 0) {
+		P.p_ttyp = tp;
+		P.p_ttydev = dev;
+		
+		if (tp->t_pgrp == 0)
+			tp->t_pgrp = P.p_pid;
+		P.p_pgrp = tp->t_pgrp;
+	}
 	qclear(&tp->t_rawq);
 	qclear(&tp->t_canq);
 }
 
 void ttychars(struct tty *tp)
 {
-        tp->t_cc[VINTR] = CINTR;
-        tp->t_cc[VQUIT] = CQUIT;
-        tp->t_cc[VSTART] = CSTART;
-        tp->t_cc[VSTOP] = CSTOP;
-        tp->t_cc[VEOF] = CEOT;
-        tp->t_cc[VEOL] = CEOL;
-        /*tp->t_cc[VBRK] = CBRK;*/
-        tp->t_cc[VERASE] = CERASE;
+	tp->t_cc[VINTR] = CINTR;
+	tp->t_cc[VQUIT] = CQUIT;
+	tp->t_cc[VSTART] = CSTART;
+	tp->t_cc[VSTOP] = CSTOP;
+	tp->t_cc[VEOF] = CEOT;
+	tp->t_cc[VEOL] = CEOL;
+	/*tp->t_cc[VBRK] = CBRK;*/
+	tp->t_cc[VERASE] = CERASE;
 	tp->t_cc[VWERASE] = CWERASE;
-        tp->t_cc[VKILL] = CKILL;
+	tp->t_cc[VKILL] = CKILL;
+	tp->t_cc[VREPRINT] = CREPRINT;
 }
 
 void flushtty(struct tty *tp)
@@ -68,9 +69,9 @@ void wflushtty(struct tty *tp)
 
 void ttyclose(struct tty *tp)
 {
-        wflushtty(tp);
-        tp->t_pgrp = 0;
-        tp->t_state = 0;
+	wflushtty(tp);
+	tp->t_pgrp = 0;
+	tp->t_state = 0;
 }
 
 void ttyioctl(dev_t dev, int cmd, void *cmarg)
@@ -166,13 +167,11 @@ struct queue {
 int b_to_q(char *bp, int count, struct queue *qp)
 {
 	int n = count;
-	int x = spl5();
 	unsigned long head = qp->q_head & QMASK;
 	unsigned long tail = qp->q_tail & QMASK;
 	/* limit n to the free size of our queue */
 	if (n > qfree(qp))
 		n = qfree(qp);
-	splx(x);
 	if (n == 0)
 		return 0;
 	
