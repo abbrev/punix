@@ -46,7 +46,7 @@ SRC	+= lcd.c dev_tty.c keyscan.c batt.c
 # helper routines
 SRC	+= kputs.c scroll.s
 SRC	+= copy.s fio.c
-SRC	+= m68k.s trap.c queue.s flash.s bio.c # rdwri.c
+SRC	+= m68k.s trap.c flash.s bio.c # rdwri.c
 SRC	+= context.s
 SRC	+= long.s subr.c tty.c inode.c process.c pfs_alloc.c pfs_bmap.c
 SRC	+= panic.c abort.c assert.c kprintf.c printf.c clock.c #globals.c
@@ -103,7 +103,7 @@ uname.machine:
 stupiddate:
 	echo -n "$(STUPIDDATE)" >$@
 sysent.c: sysent.txt
-	$(AWK) -f mksysent.awk sysent.txt >sysent.c
+	$(AWK) -f mksysent.awk sysent.txt >sysent.c || { rm -f sysent.c; exit 1; }
 
 glyphsets/%.inc:
 	$(MAKE) -C glyphsets "`basename $@`"
