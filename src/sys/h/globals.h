@@ -119,24 +119,20 @@ struct globals {
 		unsigned char cursorvisible;
 		unsigned char tabstops[(60+7)/8];
 		struct state const *vtstate;
-		const struct glyphset *glyphset, *charsets[2];
-		unsigned char charset;
+
+		const struct glyph *designatedcharsets[4]; // G0..G3
+		struct glyph activecharset[256];
+		int activecharsets[2]; // GL, GR
+
 		unsigned char margintop, marginbottom;
 		struct pos {
 			int row, column;
 		} pos;
 #if 0
-		struct row {
-			struct cell {
-				struct attrib {
-					int bold:1;
-					int underscore:1;
-					int blink:1;
-					int reverse:1;
-				} attrib;
-				int c;
-			} cells[60];
-		} screen[20];
+		struct cell {
+			char gr;
+			char c;
+		} screen[20][60];
 #endif
 		struct tty vt[1];
 		

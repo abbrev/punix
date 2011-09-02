@@ -209,14 +209,19 @@ static void cursor(struct tty *tp)
 #define cursor(tp) do { if (cursorvisible) invertcursor(); } while (0)
 #endif
 
+static void drawgl(struct glyph *glyph, int row, int col);
+
 /* possibly scroll up or down so the cursor is visible again */
 static void scroll(struct tty *tp)
 {
+	int rows;
 	if (G.vt.pos.row < 0) {
-		scrollup(-G.vt.pos.row);
+		rows = -G.vt.pos.row;
+		scrollup(rows);
 		G.vt.pos.row = 0;
 	} else if (G.vt.pos.row > MARGINBOTTOM) {
-		scrolldown(G.vt.pos.row - MARGINBOTTOM);
+		rows = G.vt.pos.row - MARGINBOTTOM;
+		scrolldown(rows);
 		G.vt.pos.row = MARGINBOTTOM;
 	}
 }
@@ -250,6 +255,28 @@ static void cmd_ri(struct tty *tp)
 	scroll(tp);
 }
 
+// invoke charset G[from] to G[to]
+// to = 0..1 (L, R)
+// from = 0..3
+static void invokecharset(int to, int from)
+{
+	memmove(&G.vt.activecharset[32 + 128*to], G.vt.designatedcharsets[from],
+		96*sizeof(struct glyph));
+	G.vt.activecharsets[to] = from;
+}
+
+// to = 0..3
+// from = any from the glyphset repertory
+static void designatecharset(int to, int set)
+{
+	int i;
+	G.vt.designatedcharsets[to] = &glyphsets[set];
+	for (i = 0; i < 2; ++i) {
+		if (G.vt.activecharsets[i] == to)
+			invokecharset(i, to);
+	}
+}
+
 static void reset(struct tty *tp)
 {
 	int i;
@@ -265,10 +292,13 @@ static void reset(struct tty *tp)
 	
 	G.vt.pos.row = 0;
 	G.vt.pos.column = 0;
-	G.vt.charset = 0;
-	G.vt.charsets[0] = &glyphsets[GLYPHSET_US];
-	G.vt.charsets[1] = &glyphsets[GLYPHSET_SG];
-	G.vt.glyphset = G.vt.charsets[G.vt.charset];
+
+	G.vt.activecharsets[0] = 0;
+	G.vt.activecharsets[1] = 2;
+	designatecharset(0, GLYPHSET_US);
+	designatecharset(1, GLYPHSET_SG);
+	designatecharset(2, GLYPHSET_UPPER);
+	designatecharset(3, GLYPHSET_SG); // XXX
 	G.vt.cursorvisible = 1;
 	G.vt.gr = 0;
 	
@@ -339,11 +369,7 @@ static void print(int ch, struct tty *tp)
 	}
 	
 	/* draw the glyph */
-	if (ch < 0x80) {
-		drawgl(&G.vt.glyphset->glyphs[ch - 0x20], G.vt.pos.row, G.vt.pos.column);
-	} else {
-		drawgl(&glyphsets[GLYPHSET_UPPER].glyphs[ch - 0x20 - 0x80], G.vt.pos.row, G.vt.pos.column);
-	}
+	drawgl(&G.vt.activecharset[ch], G.vt.pos.row, G.vt.pos.column);
 	
 	++G.vt.pos.column;
 }
@@ -366,7 +392,7 @@ static void execute(int ch, struct tty *tp)
 		/* transmit answerback message (?) */
 		break;
 	case 0x07: /* BEL */
-		bell();
+		bell(tp);
 		break;
 	case 0x08: /* BS */
 		if (G.vt.pos.column > 0)
@@ -395,13 +421,13 @@ static void execute(int ch, struct tty *tp)
 	case 0x0e: /* SO */
 		/* invoke G1 character set, as designated by SCS control
 		 * sequence */
-		G.vt.charset = 1;
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
+		/* Invoke G1 into GL */
+		invokecharset(0, 1);
 		break;
 	case 0x0f: /* SI */
 		/* select G0 character set, as selected by ESC ( sequence */
-		G.vt.charset = 0;
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
+		/* Invoke G0 into GL */
+		invokecharset(0, 0);
 		break;
 	case 0x11: /* XON */
 		/* resume transmission */
@@ -499,6 +525,8 @@ static void esc_dispatch(int ch, struct tty *tp)
 	 * characters are available because collect() stored them as they
 	 * arrived. */
 	
+	int s, t;
+
 	if (G.vt.nullop)
 		return;
 	
@@ -555,44 +583,23 @@ static void esc_dispatch(int ch, struct tty *tp)
 		/* RIS - Reset to Initial State */
 		reset(tp);
 		break;
-	case 'A':
-		/* SCS - Select Character Set (UK) */
-		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[GLYPHSET_UK];
-		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[GLYPHSET_UK];
-		
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
-		break;
-	case 'B':
-		/* SCS - Select Character Set (ASCII) */
-		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[GLYPHSET_US];
-		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[GLYPHSET_US];
-		
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
-		break;
-	case '0':
-		/* SCS (Special Graphics) */
-		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[GLYPHSET_SG];
-		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[GLYPHSET_SG];
-		
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
-		break;
-	case '1':
-		/* SCS (Alternate Character ROM Standard Character Set) */
-		break;
-	case '2':
-		/* SCS (Alternate Character ROM Special Graphics) */
-		if (G.vt.intchars[0] == '(')
-			G.vt.charsets[0] = &glyphsets[GLYPHSET_ALTSG];
-		else if (G.vt.intchars[0] == ')')
-			G.vt.charsets[1] = &glyphsets[GLYPHSET_ALTSG];
-		
-		G.vt.glyphset = G.vt.charsets[G.vt.charset];
+	case 'A': t = GLYPHSET_UK; goto set;
+	case 'B': t = GLYPHSET_US; goto set;
+	case '0': t = GLYPHSET_SG; goto set;
+	case '1': t = GLYPHSET_US; goto set; // XXX
+	case '2': t = GLYPHSET_ALTSG; goto set;
+set:
+		/* SCS - Select Character Set */
+		s = -1;
+		switch (G.vt.intchars[0]) {
+		case '+': ++s;  // 3
+		case '*': ++s;  // 2
+		case ')': ++s;  // 1
+		case '(': ++s;  // 0
+		}
+		if (s != -1) {
+			designatecharset(s, t);
+		}
 		break;
 	}
 }
@@ -1286,21 +1293,13 @@ static void ttyoutput(int ch, struct tty *tp)
 	vtoutput(ch, tp);
 }
 
-static void printhihat(int ch, struct tty *tp)
-{
-	if (ch < 32) {
-		ttyoutput('^', tp);
-		ttyoutput(ch + 64, tp);
-	} else
-		ttyoutput(ch, tp);
-}
-
 /* from 4.4BSD-Lite: */
 /*
  * Echo a typed character to the terminal.
  */
 static void ttyecho(int c, struct tty *tp)
 {
+	c &= 0xff;
 #if 0
 	if (!tp->t_state & TS_CNTTB)
 		tp->t_lflag &= ~FLUSHO;
@@ -1310,10 +1309,9 @@ static void ttyecho(int c, struct tty *tp)
 	    (tp->t_lflag & EXTPROC)*/)
 		return;
 	if ((tp->t_lflag & ECHOCTL) &&
-	    (((c & 0xff) <= 037 && c != '\t' && c != '\n') ||
-	    (c & 0xff) == 0177)) {
+	    ((c <= 0x1f && c != '\n') ||
+	    c == 0x7f)) {
 		(void)ttyoutput('^', tp);
-		c &= 0xff;
 		if (c == 0177)
 			c = '?';
 		else
@@ -1357,6 +1355,13 @@ void ttyrub(int ch, struct tty *tp)
 
 }
 
+void ttyretype(struct tty *tp)
+{
+	ttyoutput('\r', tp);
+	ttyoutput('\n', tp);
+	/* TODO */
+}
+
 extern void ttywakeup(struct tty *tp);
 /*
  * ttyinput is implemented here because it calls ttyoutput which has an
@@ -1397,11 +1402,12 @@ static void ttyinput(int ch, struct tty *tp)
 		return;
 	}
 	if (ch == cc[VINTR] || ch == cc[VQUIT]) {
-		printhihat(ch, tp);
+		ttyecho(ch, tp);
 		if (lflag & ISIG) {
 			gsignal(tp->t_pgrp,
 				ch == cc[VQUIT] ? SIGQUIT : SIGINT);
-			flushtty(tp);
+			if (!(lflag & NOFLSH))
+				flushtty(tp);
 			return;
 		}
 	}
@@ -1409,17 +1415,7 @@ static void ttyinput(int ch, struct tty *tp)
 		tp->t_state &= ~TTSTOP;
 		/*ttstart(tp);*/
 	}
-#if 0 /* bad/old */
-	if (lflag & ECHO || (lflag & ECHONL && ch == '\n')) {
-		if (lflag & ECHOE && ch == cc[VERASE]) {
-			ttyoutput('\b', tp);
-			ttyoutput(' ', tp);
-			ttyoutput('\b', tp);
-			return;
-		}
-		//ttyoutput(ch, tp);
-	}
-#endif
+
 	if (lflag & ICANON) {
 		if (ch == cc[VERASE]) {
 			if (!qisempty(&tp->t_rawq))
@@ -1453,86 +1449,38 @@ static void ttyinput(int ch, struct tty *tp)
 				qputc(ch, &tp->t_rawq);
 			goto endcase;
 		}
+		if (lflag & IEXTEN) {
+			if (ch == cc[VREPRINT]) {
+				// reprint the line
+				ttyretype(tp);
+				goto endcase;
+			}
 #if 0
-        if (!ISSET(tp->t_lflag, EXTPROC) && ISSET(lflag, ICANON)) {
-                /*
-                 * From here on down canonical mode character
-                 * processing takes place.
-                 */
-                /*
-                 * reprint line (^R)
-                 */
-                if (CCEQ(cc[VREPRINT], c)) {
-                        ttyretype(tp);
-                        goto endcase;
-                }
-                /*
-                 * ^T - kernel info and generate SIGINFO
-                 */
-                if (CCEQ(cc[VSTATUS], c)) {
-                        if (ISSET(lflag, ISIG))
-                                pgsignal(tp->t_pgrp, SIGINFO, 1);
-                        if (!ISSET(lflag, NOKERNINFO))
-                                ttyinfo(tp);
-                        goto endcase;
-                }
-        }
+			if (ch == cc[VSTATUS]) {
+				// show info
+				// TODO
+				goto endcase;
+			}
 #endif
-	}
-#if 0
-        /*
-         * Check for input buffer overflow
-         */
-	if (tp->t_rawq.q_count + tp->t_canq.q_count >= TTYHOG) {
-		if (iflag & IMAXBEL) {
-			//if (tp->t_outq.c_count < tp->t_hiwat)
-				ttyoutput(CTRL('g'), tp);
-		} else
-			ttyflush(tp, FREAD | FWRITE);
-		goto endcase;
-	}
-#endif
+		}
 
-
-	if (qputc(ch, &tp->t_rawq) < 0) {
-		flushtty(tp);
-		return;
-	}
-#if 0 /* from 4.4BSD-Lite (clean) */
-        if (qputc(c, &tp->t_rawq) >= 0) {
-                if (!ISSET(lflag, ICANON)) {
-                        defer(ttywakeup, tp);
-                        ttyecho(c, tp);
-                        goto endcase;
-                }
-                if (TTBREAKC(c)) {
-                        tp->t_rocount = 0;
-                        catq(&tp->t_rawq, &tp->t_canq);
-                        defer(ttywakeup, tp);
-                } else if (tp->t_rocount++ == 0)
-                        tp->t_rocol = tp->t_column;
-                if (ISSET(tp->t_state, TS_ERASE)) {
-                        /*
-                         * end of prterase \.../
-                         */
-                        CLR(tp->t_state, TS_ERASE);
-                        (void)ttyoutput('/', tp);
-                }
-                i = tp->t_column;
-                ttyecho(c, tp);
-                if (CCEQ(cc[VEOF], c) && ISSET(lflag, ECHO)) {
-                        /*
-                         * Place the cursor over the '^' of the ^D.
-                         */
-                        i = min(2, tp->t_column - i);
-                        while (i > 0) {
-                                (void)ttyoutput('\b', tp);
-                                i--;
-                        }
-                }
-        }
-#endif
-	if (lflag & ICANON) {
+		/*
+		 * put the character on the character queue
+		 */
+		TRACE();
+		if (TTBREAKC(ch) ||
+		    !(iflag & IMAXBEL) ||
+		    qused(&tp->t_rawq) < qfree(&tp->t_canq)) {
+		TRACE();
+			if (qputc(ch, &tp->t_rawq) < 0) {
+				flushtty(tp);
+				return;
+			}
+			ttyecho(ch, tp);
+		} else {
+			ttyoutput('\a', tp);  // bell
+		}
+		TRACE();
 		if (TTBREAKC(ch)) {
 			//tp->t_rocount = 0;
 			catq(&tp->t_rawq, &tp->t_canq);
@@ -1547,7 +1495,6 @@ static void ttyinput(int ch, struct tty *tp)
 		}
 #endif
 		/*i = tp->t_column;*/
-		ttyecho(ch, tp);
 #if 1
 		if (ch == cc[VEOF] && (lflag & ECHO)) {
 			/* Place the cursor over the '^' of the ^D. */
@@ -1567,6 +1514,10 @@ static void ttyinput(int ch, struct tty *tp)
 		}
 */
 	} else {
+		if (qputc(ch, &tp->t_rawq) < 0) {
+			flushtty(tp);
+			return;
+		}
 		defer(ttywakeup, tp);
 		ttyecho(ch, tp);
 	}
