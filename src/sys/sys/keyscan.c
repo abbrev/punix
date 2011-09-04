@@ -501,10 +501,12 @@ void showstatus(void)
 	//splx(x);
 }
 
+#define BELLTIMEOUT HZ
+
 /* callback for timeout() to remove bell status */
 void unbell(void *arg)
 {
-	struct tty *ttyp = (struct tty *)arg;
+	//struct tty *ttyp = (struct tty *)arg;
 	G.vt.bell = 0;
 	showstatus();
 }
@@ -516,7 +518,7 @@ void bell(struct tty *ttyp)
 	untimeout(unbell, ttyp);
 	G.vt.bell = 1;
 	showstatus();
-	timeout(unbell, ttyp, 1 * HZ); /* XXX: constant */
+	timeout(unbell, ttyp, BELLTIMEOUT);
 }
 
 static void addkey(unsigned short key)
