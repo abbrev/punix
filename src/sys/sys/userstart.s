@@ -39,6 +39,7 @@ SYS_execve       = 59
 SYS_pause        = 63
 SYS_vfork        = 66
 SYS_getgroups    = 79
+SYS_getpgrp      = 81
 SYS_setitimer    = 83
 SYS_wait         = 87
 SYS_getpriority  = 96
@@ -86,6 +87,7 @@ mksyscall	read
 mksyscall	write
 mksyscall	execve
 mksyscall	setitimer
+mksyscall	getpgrp
 mksyscall	gettimeofday
 mksyscall	settimeofday
 mksyscall	getrusage
