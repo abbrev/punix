@@ -672,6 +672,11 @@ void sys_getpid()
 	P.p_retval = P.p_pid;
 }
 
+void sys_getpgrp()
+{
+	P.p_retval = P.p_pgrp;
+}
+
 void sys_getppid()
 {
 	P.p_retval = P.p_pptr->p_pid;
