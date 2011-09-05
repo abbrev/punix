@@ -2119,7 +2119,6 @@ int sh_main(int argc, char **argv, char **envp)
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);
 	sigaction(SIGTSTP, &sa, NULL);
-	sigaction(SIGSTOP, &sa, NULL);
 
 	printf("stupid shell v0.2\n");
 	
@@ -2288,8 +2287,6 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		sa.sa_flags = 0;
 		sigaction(SIGINT, &sa, NULL);
 		sigaction(SIGQUIT, &sa, NULL);
-		sigaction(SIGTSTP, &sa, NULL);
-		sigaction(SIGSTOP, &sa, NULL);
 
 		execve(cmd, argv, envp);
 		switch (errno) {
