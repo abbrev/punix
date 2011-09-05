@@ -51,24 +51,18 @@ STARTUP(static void stopaudio())
 
 STARTUP(static void dspsync())
 {
-	mask(&G.calloutlock);
-	while (G.audio.play && (!qisempty(&G.audio.q) || G.audio.samples)) {
+	int x = spl1();  // inhibit soft interrupts
+	while (G.audio.play && !qisempty(&G.audio.q)) {
 		if (qused(&G.audio.q) < 4) { // XXX constant
 			// samples will be played before slp() would even finish
-			unmask(&G.calloutlock);
 			cpuidle();
-			mask(&G.calloutlock);
 		} else {
-			int x = spl1(); // inhibit soft interrupts
-			unmask(&G.calloutlock);
 			G.audio.lowat = 0;
 			slp(&G.audio.q, 0);
-			mask(&G.calloutlock);
-			splx(x);
 		}
 	}
 out:
-	unmask(&G.calloutlock);
+	splx(x);
 }
 
 /* produce the sound! */
