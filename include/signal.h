@@ -77,7 +77,7 @@ typedef unsigned long sigset_t;
 
 /* typedef int signal_t; */
 
-#define sigmask(n) ((unsigned long)1<<((n) - 1))  /* convert signal number to mask */
+#define sigmask(n) ((sigset_t)1<<((n)-1))  /* convert signal number to mask */
 
 /* values for `how' argument in `sigprocmask' */
 #define SIG_BLOCK   0 /* add signals in set to current set */
