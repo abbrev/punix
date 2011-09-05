@@ -29,7 +29,7 @@ STARTUP(static int killpg1(int sig, pid_t pgrp, int all))
 		}
 		++found;
 		if (sig)
-			psignal(p, sig);
+			procsignal(p, sig);
 	}
 	return error ? error : (found ? 0 : ESRCH);
 }
@@ -57,7 +57,7 @@ STARTUP(void sys_kill())
 		if (!cansignal(p, ap->sig))
 			error = EPERM;
 		else if (ap->sig)
-			psignal(p, ap->sig);
+			procsignal(p, ap->sig);
 		goto out;
 	}
 	switch (ap->pid) {
@@ -100,7 +100,7 @@ void sys_sigaction()
 	
 	struct sigaction sa;
 	
-	if (ap->signum >= NSIG) {
+	if ((unsigned)ap->signum >= NSIG) {
 		P.p_error = EINVAL;
 		return;
 	}
@@ -113,12 +113,25 @@ void sys_sigaction()
 		P.p_error = copyin(&sa, ap->act, sizeof(sa));
 		if (P.p_error)
 			return;
-		P.p_signal[ap->signum] = sa.sa_sigaction;
-		if (sa.sa_flags & SA_RESTART) {
-			P.p_sigintr &= ~sigmask(ap->signum);
-		} else {
-			P.p_sigintr |= sigmask(ap->signum);
+		if ((ap->signum == SIGKILL || ap->signum == SIGSTOP) &&
+		    sa.sa_sigaction != SIG_DFL) {
+			P.p_error = EINVAL;
+			return;
 		}
+		sigset_t mask = sigmask(ap->signum);
+
+		P.p_signals.sig_actions[ap->signum] = sa.sa_sigaction;
+#define EQUMASK(x, v)  ((x) = ((x) & ~(mask)) | ((mask) & -!!(v)))
+		EQUMASK(P.p_signals.sig_ignore,    sa.sa_sigaction == SIG_IGN);
+		EQUMASK(P.p_signals.sig_restart,   sa.sa_flags&SA_RESTART);
+		EQUMASK(P.p_signals.sig_nocldstop, sa.sa_flags&SA_NOCLDSTOP);
+		EQUMASK(P.p_signals.sig_nocldwait, sa.sa_flags&SA_NOCLDWAIT);
+		EQUMASK(P.p_signals.sig_nodefer,   sa.sa_flags&SA_NODEFER);
+		EQUMASK(P.p_signals.sig_onstack,   sa.sa_flags&SA_ONSTACK);
+		EQUMASK(P.p_signals.sig_resethand, sa.sa_flags&SA_RESETHAND);
+		EQUMASK(P.p_signals.sig_restart,   sa.sa_flags&SA_RESTART);
+		EQUMASK(P.p_signals.sig_siginfo,   sa.sa_flags&SA_SIGINFO);
+#undef EQUMASK
 	}
 }
 

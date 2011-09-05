@@ -119,7 +119,7 @@ STARTUP(void sendsig(struct proc *p, int sig, sigset_t returnmask))
 	P.p_sigmask = returnmask;
 }
 
-STARTUP(void psignal(struct proc *p, int sig))
+STARTUP(void procsignal(struct proc *p, int sig))
 {
 #if 0 /* not ready yet (some of these fields don't exist in struct proc) */
 	if ((unsigned)sig >= NSIG)
@@ -191,7 +191,7 @@ STARTUP(void psignal(struct proc *p, int sig))
 			p->p_sig &= ~mask;
 			p->p_ptracesig = sig;
 			if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
-				psignal(p->p_pptr, SIGCHLD);
+				procsignal(p->p_pptr, SIGCHLD);
 			stop(p);
 			goto out;
 		}
@@ -225,7 +225,7 @@ STARTUP(void psignal(struct proc *p, int sig))
 run:
 	//if (p->p_pri > PUSER)
 		//p->p_pri = PUSER;
-	//kprintf("psignal(): gonna run setrun()\n");
+	//kprintf("procsignal(): gonna run setrun()\n");
 	setrun(p);
 out:
 	splx(s);
@@ -238,11 +238,11 @@ STARTUP(void gsignal(int pgrp, int sig))
 	
 	if (pgrp == 0)
 		return;
-	x = spl7();
+	mask(&G.calloutlock);
 	list_for_each_entry(p, &G.proc_list, p_list)
 		if (p->p_pgrp == pgrp)
-			psignal(p, sig);
-	splx(x);
+			procsignal(p, sig);
+	unmask(&G.calloutlock);
 }
 
 /* see 2.11BSD */
@@ -270,7 +270,7 @@ STARTUP(int issignal(struct proc *p))
 		if (p->p_flag & P_TRACED && (p->p_flag & P_VFORK) == 0) {
 			p->p_sig &= ~mask;
 			p->p_ptracesig = sig;
-			psignal(p->p_pptr, SIGCHLD);
+			procsignal(p->p_pptr, SIGCHLD);
 			do {
 				stop(p);
 				swtch();
@@ -304,7 +304,7 @@ STARTUP(int issignal(struct proc *p))
 					break;
 				p->p_ptracesig = sig;
 				if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
-					psignal(p->p_pptr, SIGCHLD);
+					procsignal(p->p_pptr, SIGCHLD);
 				stop(p);
 				swtch();
 				break;
@@ -313,8 +313,10 @@ STARTUP(int issignal(struct proc *p))
 			} else
 				return sig;
 		case (intptr_t)SIG_IGN:
+#if 0
 			if ((prop & SA_CONT) == 0 && (p->p_flag & P_TRACED) == 0)
 				kprintf("issig\n");
+#endif
 			break;
 		default:
 			return sig;
@@ -344,10 +346,12 @@ STARTUP(void postsig(int sig))
 #endif
 		
 		int x = spl7();
+#if 0
 		if (P.p_psflags & SAS_OLDMASK) {
 			returnmask = P.p_oldmask;
 			P.p_psflags &= ~SAS_OLDMASK;
 		} else
+#endif
 			returnmask = P.p_sigmask;
 		P.p_sigmask |= P.p_sigmasks[sig] | mask;
 		splx(x);

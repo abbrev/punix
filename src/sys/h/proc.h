@@ -220,6 +220,39 @@ struct proc {
 	 * p_sigcatch   => p_sigcatch
 	 */
 	jmp_buf p_sigjmp;	/* for interrupting syscalls */
+#if 1
+	struct {
+		sigset_t sig_pending;
+		sigset_t sig_mask;
+		sigset_t sig_oldmask;
+		sigset_t sig_ignore;
+		sigset_t sig_catch;
+		int sig_ptracesig;
+		struct sigaltstack sig_stack;
+
+		void (*sig_actions[NSIG])();
+		sigset_t sig_masks[NSIG];
+
+		sigset_t sig_nocldstop;
+		sigset_t sig_nocldwait;
+		sigset_t sig_nodefer;
+		sigset_t sig_onstack;
+		sigset_t sig_resethand;
+		sigset_t sig_restart;
+		sigset_t sig_siginfo;
+	} p_signals;
+
+/* temporary macros for compatibility with existing kernel code */
+#define p_sig       p_signals.sig_pending
+#define p_sigmask   p_signals.sig_mask
+#define p_oldmask   p_signals.sig_oldmask
+#define p_sigignore p_signals.sig_ignore
+#define p_sigcatch  p_signals.sig_catch
+#define p_signal    p_signals.sig_actions
+#define p_sigmasks  p_signals.sig_masks
+#define p_ptracesig  p_signals.sig_ptracesig
+
+#else
 	sigset_t p_sig;		/* currently posted signals */
 	sigset_t p_sigmask;	/* current signal mask */
 	sigset_t p_oldmask;	/* saved mask from before sigpause */
@@ -236,6 +269,7 @@ struct proc {
 	sigset_t p_sigonstack;		/* signals to run on alternate stack */
 	sigset_t p_sigintr;		/* signals that interrupt syscalls */
 	sigset_t p_signocldwait;
+#endif
 	
 	/* file descriptors */
 	struct file *p_ofile[NOFILE];	/* file structures for open files */

@@ -149,10 +149,10 @@ resume:
 	} else if (timo)
 		untimeout(endtsleep, (void *)p);
 	if (intr && (sig != 0 || (sig = CURSIG(p)))) {
-		if (P.p_sigintr & sigmask(sig)) {
-			err = EINTR;
-		} else {
+		if (sigismember(&P.p_signals.sig_restart, sig)) {
 			err = ERESTART;
+		} else {
+			err = EINTR;
 		}
 	}
 out:

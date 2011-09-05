@@ -114,7 +114,7 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 	}
 	if (!USERMODE(sr))
 		panic("exception in kernel");
-	psignal(current, esp->signal);
+	procsignal(current, esp->signal);
 }
 
 
@@ -186,7 +186,7 @@ STARTUP(void hardclock(unsigned short ps))
 	if (current) {
 		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
-			psignal(current, SIGPROF);
+			procsignal(current, SIGPROF);
 		++current->p_cputime;
 	}
 
@@ -194,7 +194,7 @@ STARTUP(void hardclock(unsigned short ps))
 		++current->p_kru.kru_utime;
 		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
-			psignal(current, SIGVTALRM);
+			procsignal(current, SIGVTALRM);
 	} else {
 		if (current)
 			++current->p_kru.kru_stime;

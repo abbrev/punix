@@ -187,18 +187,53 @@ int kill(pid_t __pid, int __sig);
 int raise(int __sig);
 int sigaction(int __signum, const struct sigaction *__act,
               struct sigaction *__oldact);
-int sigaddset(sigset_t *__set, int __signum);
 int sigaltstack(const stack_t *__ss, stack_t *__oss);
-int sigdelset(sigset_t *__set, int __signum);
-int sigemptyset(sigset_t *__set);
-int sigfillset(sigset_t *__set);
-int sigismember(const sigset_t *__set, int __signum);
 sighandler_t signal(int __signum, sighandler_t __handler);
 int sigpending(sigset_t *__set);
 int sigprocmask(int __how, const sigset_t *__set, sigset_t *__oldset);
 int sigsuspend(const sigset_t *__mask);
 int sigwait(const sigset_t *__set, int *__signum);
 
+static inline int sigaddset(sigset_t *__set, int __signum)
+{
+	if ((unsigned)__signum >= NSIG) {
+		//errno = EINVAL;
+		return -1;
+	}
+	*__set |= sigmask(__signum);
+	return 0;
+}
+static inline int sigdelset(sigset_t *__set, int __signum)
+{
+	if ((unsigned)__signum >= NSIG) {
+		//errno = EINVAL;
+		return -1;
+	}
+	*__set &= ~sigmask(__signum);
+	return 0;
+}
+static inline int sigemptyset(sigset_t *__set)
+{
+	*__set = 0;
+	return 0;
+}
+static inline int sigfillset(sigset_t *__set)
+{
+	*__set = ~0;
+	return 0;
+}
+static inline int sigismember(const sigset_t *__set, int __signum)
+{
+	if ((unsigned)__signum >= NSIG) {
+		//errno = EINVAL;
+		return -1;
+	}
+	return (*__set & sigmask(__signum)) != 0;
+}
+
+/* BSD symbols */
 extern char *sys_siglist[];
+extern char *sys_signame[];
+void psignal(unsigned sig, const char *s);
 
 #endif /* _SIGNAL_H_ */

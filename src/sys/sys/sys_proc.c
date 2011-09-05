@@ -394,10 +394,10 @@ void doexit(int status)
 			wakeup(&G.proclist);
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
-				psignal(q, SIGKILL);
+				procsignal(q, SIGKILL);
 			} else if (q->p_status == P_STOPPED) {
-				psignal(q, SIGHUP);
-				psignal(q, SIGCONT);
+				procsignal(q, SIGHUP);
+				procsignal(q, SIGCONT);
 			}
 		}
 	}
@@ -428,7 +428,7 @@ void doexit(int status)
 	
 	sched_exit(current);
 
-	psignal(P.p_pptr, SIGCHLD);
+	procsignal(P.p_pptr, SIGCHLD);
 	swtch();
 }
 
