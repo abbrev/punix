@@ -4,45 +4,79 @@
 
 #include "param.h"
 #include "punix.h"
-#include "signal.h"
 #include "globals.h"
 #include "wait.h"
 
-/* FIXME! make sure these signals match those in <signal.h> */
+#define SAS_OLDMASK  0x01 /* need to restore mask before pause */
+#define SAS_ALTSTACK 0x02 /* have alternate signal stack */
+
+#define SIG_CATCH ((sighandler_t)2)
+
+#define CONTSIGMASK     (sigmask(SIGCONT))
+#define STOPSIGMASK     (sigmask(SIGSTOP) | sigmask(SIGTSTP) | \
+                         sigmask(SIGTTIN) | sigmask(SIGTTOU))
+#define SIGCANTMASK     (sigmask(SIGKILL) | sigmask(SIGSTOP))
+
+/*
+ * Signal properties and actions.
+ * The array below categorizes the signals and their default actions
+ * according to the following properties:
+ */
+#define SA_KILL    0x01 /* terminates process by default */
+#define SA_CORE    0x02 /* ditto and coredumps */
+#define SA_STOP    0x04 /* suspend process */
+#define SA_TTYSTOP 0x08 /* ditto, from tty */
+#define SA_IGNORE  0x10 /* ignore by default */
+#define SA_CONT    0x20 /* continue if suspended */
+
+#define T (SA_KILL)
+#define A (SA_KILL|SA_CORE)
+#define I (SA_IGNORE)
+#define S (SA_STOP)
+#define C (SA_CONT|SA_IGNORE)
+
 static const char sigprop[NSIG + 1] = {
-	0,                      /* unused */
-	SA_KILL,                /* SIGHUP */
-	SA_KILL,                /* SIGINT */
-	SA_KILL|SA_CORE,        /* SIGQUIT */
-	SA_KILL|SA_CORE,        /* SIGILL */
-	SA_KILL|SA_CORE,        /* SIGTRAP */
-	SA_KILL|SA_CORE,        /* SIGABRT */
-	SA_KILL|SA_CORE,        /* SIGEMT */
-	SA_KILL|SA_CORE,        /* SIGFPE */
-	SA_KILL,                /* SIGKILL */
-	SA_KILL|SA_CORE,        /* SIGBUS */
-	SA_KILL|SA_CORE,        /* SIGSEGV */
-	SA_KILL|SA_CORE,        /* SIGSYS */
-	SA_KILL,                /* SIGPIPE */
-	SA_KILL,                /* SIGALRM */
-	SA_KILL,                /* SIGTERM */
-	SA_IGNORE,              /* SIGURG */
-	SA_STOP,                /* SIGSTOP */
-	SA_STOP|SA_TTYSTOP,     /* SIGTSTP */
-	SA_IGNORE|SA_CONT,      /* SIGCONT */
-	SA_IGNORE,              /* SIGCHLD */
-	SA_STOP|SA_TTYSTOP,     /* SIGTTIN */
-	SA_STOP|SA_TTYSTOP,     /* SIGTTOU */
-	SA_IGNORE,              /* SIGIO */
-	SA_KILL,                /* SIGXCPU */
-	SA_KILL,                /* SIGXFSZ */
-	SA_KILL,                /* SIGVTALRM */
-	SA_KILL,                /* SIGPROF */
-	SA_IGNORE,              /* SIGWINCH  */
-	SA_IGNORE,              /* SIGINFO */
-	SA_KILL,                /* SIGUSR1 */
-	SA_KILL,                /* SIGUSR2 */
+	[0]         = I, /* null signal */
+	[SIGABRT]   = A,
+	[SIGALRM]   = T,
+	[SIGBUS]    = A,
+	[SIGCHLD]   = I,
+	[SIGCONT]   = C,
+	[SIGFPE]    = A,
+	[SIGHUP]    = T,
+	[SIGILL]    = A,
+	[SIGINT]    = T,
+	[SIGKILL]   = T,
+	[SIGPIPE]   = T,
+	[SIGQUIT]   = A,
+	[SIGSEGV]   = A,
+	[SIGSTOP]   = S,
+	[SIGTERM]   = T,
+	[SIGTSTP]   = S|SA_TTYSTOP,
+	[SIGTTIN]   = S|SA_TTYSTOP,
+	[SIGTTOU]   = S|SA_TTYSTOP,
+	[SIGUSR1]   = T,
+	[SIGUSR2]   = T,
+	[SIGPOLL]   = T,
+	[SIGPROF]   = T,
+	[SIGSYS]    = A,
+	[SIGTRAP]   = A,
+	[SIGURG]    = I,
+	[SIGVTALRM] = T,
+	[SIGXCPU]   = A,
+	[SIGXFSZ]   = A,
+
+	/* following are not defined by POSIX */
+	[SIGEMT]    = A,
+	[SIGWINCH]  = I,
+	[SIGINFO]   = I,
 };
+
+#undef T
+#undef A
+#undef I
+#undef S
+#undef C
 
 STARTUP(void stop(struct proc *p))
 {
