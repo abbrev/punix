@@ -11,7 +11,6 @@
 #include "globals.h"
 #include "process.h"
 
-/* one-shot routine on system startup */
 STARTUP(void linkinit())
 {
 	qclear(&G.link.readq);
@@ -19,6 +18,8 @@ STARTUP(void linkinit())
 	G.link.lowat = G.link.hiwat = -1;
 	G.link.readoverflow = 0;
 	ioport = 0;
+	G.link.open = 0;
+	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
 }
 
 STARTUP(static void rxon())
@@ -78,6 +79,7 @@ STARTUP(void linkintr())
 	
 	status = LINK_STATUS;
 	
+	//kprintf("[ ");
 	if (status & LS_ACTIVITY) {
 #if 0
 	++*(short *)(0x4c00+0xf00-30*2);
@@ -103,18 +105,29 @@ STARTUP(void linkintr())
 		/* return; */
 	}
 	
-	if ((G.link.control & LC_TRIGRX) && (status & LS_RXBYTE)) {
+	if ((status & LS_RXBYTE)) {
 #if 0
 	++*(short *)(0x4c00+0xf00-30*4);
 #endif
-		if (qisfull(&G.link.readq)) { /* no room for this byte */
+		int x = qfree(&G.link.readq);
+		//kprintf("Rx ");
+		if (!G.link.open) {
+			//kprintf("not-open ");
+			rxoff();
+			ch = LINK_BUFFER; /* discard it */
+		} else if (x == 0) { /* no room for this byte */
 			//kprintf("<.. ");
-			G.link.readoverflow = 1;
+			//kprintf("full ");
 			rxoff();
 		} else {
+			if (x == 1) {
+				//kprintf("almost-full ");
+				rxoff();
+			}
 			recvbyte();
 			
-			if (G.link.hiwat >= 0 && G.link.readq.q_count >= G.link.hiwat) {
+			if (G.link.hiwat >= 0 &&
+			    qused(&G.link.readq) >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
 				defer(wakeup, &G.link.readq);
 				G.link.hiwat = -1;
@@ -122,26 +135,32 @@ STARTUP(void linkintr())
 		}
 	}
 	
-	if ((G.link.control & LC_TRIGTX) && (status & LS_TXEMPTY)) {
+	if ((status & LS_TXEMPTY)) {
 #if 0
 	++*(short *)(0x4c00+0xf00-30*5);
 #endif
 		/* send the next byte from the send queue */
 		
-		if ((ch = qgetc(&G.link.writeq)) < 0) { /* nothing to send */
+		//kprintf("Tx ");
+		if (!G.link.open) {
+			//kprintf("not-open ");
+			txoff();
+		} else if ((ch = qgetc(&G.link.writeq)) < 0) { /* nothing to send */
 			//kprintf(">.. ");
+			//kprintf("empty ");
 			txoff();
 		} else {
 			LINK_BUFFER = ch;
 			//kprintf(">0x%02x ", ch);
 			
-			if (G.link.writeq.q_count <= G.link.lowat) {
+			if (qused(&G.link.writeq) <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
 				defer(wakeup, &G.link.writeq);
 				G.link.lowat = -1;
 			}
 		}
 	}
+	//kprintf("] ");
 }
 
 STARTUP(void linkopen(dev_t dev, int rw))
@@ -151,20 +170,18 @@ STARTUP(void linkopen(dev_t dev, int rw))
 		return;
 	}
 	
-	++ioport; /* block other uses of the IO port */
-	
 	qclear(&G.link.readq);
 	qclear(&G.link.writeq);
-	
+	G.link.lowat = G.link.hiwat = -1;
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
-	/* XXX: anything more? */
+	++ioport; /* block other uses of the IO port */
+	G.link.open = 1;
 }
 
 STARTUP(void linkclose(dev_t dev, int flag))
 {
 	flush();
-	qclear(&G.link.readq); /* discard any unread data */
-	ioport = 0; /* free the IO port for other uses */
+	linkinit();
 }
 
 STARTUP(void linkread(dev_t dev))
@@ -175,19 +192,24 @@ STARTUP(void linkread(dev_t dev))
 	size_t count = P.p_count;
 	
 	while (P.p_count) {
-		x = spl5();
+		x = spl4();
+		rxon();
 		while ((ch = qgetc(&G.link.readq)) < 0) {
 			rxon();
+#if 0
 			if (G.link.readoverflow) {
 				G.link.readoverflow = 0;
 				recvbyte();
 				continue;
 			}
+#endif
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
 				slp(&G.link.readq, 1);
-			} else /* we got some data already, so just return */
+			} else {
+				/* we got some data already, so just return */
 				return;
+			}
 		}
 		splx(x);
 		*P.p_base++ = ch;
@@ -202,7 +224,7 @@ STARTUP(void linkwrite(dev_t dev))
 	
 	for (; P.p_count; --P.p_count) {
 		ch = *P.p_base++;
-		x = spl5();
+		x = spl4();
 		txon();
 		while (qputc(ch, &G.link.writeq) < 0) {
 			txon();
