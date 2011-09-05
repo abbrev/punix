@@ -1406,6 +1406,7 @@ static void ttyinput(int ch, struct tty *tp)
 		if (lflag & ISIG) {
 			gsignal(tp->t_pgrp,
 				ch == cc[VQUIT] ? SIGQUIT : SIGINT);
+			gsignal(tp->t_pgrp, SIGCONT);
 			if (!(lflag & NOFLSH))
 				flushtty(tp);
 			return;
@@ -1470,7 +1471,7 @@ static void ttyinput(int ch, struct tty *tp)
 		TRACE();
 		if (TTBREAKC(ch) ||
 		    !(iflag & IMAXBEL) ||
-		    qused(&tp->t_rawq) < qfree(&tp->t_canq)) {
+		    (qused(&tp->t_rawq) + 1) < qfree(&tp->t_canq)) {
 		TRACE();
 			if (qputc(ch, &tp->t_rawq) < 0) {
 				flushtty(tp);
@@ -1569,7 +1570,7 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 
 		tp->t_state = ISOPEN;
 		/* should I put these in tty.c? */
-		tp->t_iflag = /*BRKINT|*/ ICRNL|IXANY;
+		tp->t_iflag = /*BRKINT|*/ ICRNL|IXANY|IMAXBEL;
 		tp->t_oflag = OPOST|ONLCR;
 		tp->t_cflag = CREAD;
 		tp->t_lflag = ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK|ECHOCTL|ECHOKE;
