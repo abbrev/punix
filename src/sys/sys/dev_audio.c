@@ -24,6 +24,7 @@
 STARTUP(void audioinit())
 {
 	qclear(&G.audio.q);
+	kprintf("&G.audio.q=%p\n", &G.audio.q);
 	ioport = 0;
 }
 
@@ -82,7 +83,7 @@ STARTUP(void audiointr())
 	
 	if (!G.audio.samples) {
 		int c;
-		if ((c = qgetc(&G.audio.q)) < 0)
+		if ((c = qgetc_no_lock(&G.audio.q)) < 0)
 			goto out;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
@@ -96,7 +97,9 @@ STARTUP(void audiointr())
 	
 	++G.audio.optr;
 out:
-	if (G.audio.q.q_count <= G.audio.lowat) {
+	if (qused(&G.audio.q) <= G.audio.lowat) {
+		if (G.audio.lowat != 0 && qisempty(&G.audio.q))
+			kprintf("audio buffer underrun!\n");
 		G.audio.lowat = -1;
 		spl4();
 		defer(wakeup, &G.audio.q);
