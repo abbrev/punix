@@ -181,6 +181,7 @@ void sys_execve()
 	/* XXX */
 	void sh_start(), init_start(), bittybox_start(), time_start();
 	void getty_start(), login_start(), uterm_start();
+	void tests_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
@@ -207,6 +208,8 @@ void sys_execve()
 		text = login_start;
 	else if (!strcmp(pathname, "uterm"))
 		text = uterm_start;
+	else if (!strcmp(pathname, "tests"))
+		text = tests_start;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;

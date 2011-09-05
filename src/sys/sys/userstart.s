@@ -159,6 +159,7 @@ mkstart time
 mkstart getty
 mkstart login
 mkstart uterm
+mkstart tests
 
 	.global fadd
 | float fadd(float a, float b);

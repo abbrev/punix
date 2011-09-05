@@ -1216,7 +1216,7 @@ static int times_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
-static int tests_main(int argc, char **argv, char **envp)
+int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
 	int match = 0;
@@ -2113,6 +2113,14 @@ int sh_main(int argc, char **argv, char **envp)
 	char **aargv;
 	int laststatus = 0;
 	
+	struct sigaction sa;
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGTSTP, &sa, NULL);
+	sigaction(SIGSTOP, &sa, NULL);
+
 	printf("stupid shell v0.2\n");
 	
 	/*
@@ -2212,7 +2220,7 @@ nextline:
 }
 
 static struct applet applets[] = {
-	{ "tests", tests_main },
+	{ "tests", NULL },
 	{ "top", top_main },
 	{ "cat", cat_main },
 	{ "echo", echo_main },
@@ -2275,6 +2283,14 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		printf("sh: cannot vfork: %s\n", strerror(errno));
 		return 127;
 	} else if (pid == 0) {
+		struct sigaction sa;
+		sa.sa_handler = SIG_DFL;
+		sa.sa_flags = 0;
+		sigaction(SIGINT, &sa, NULL);
+		sigaction(SIGQUIT, &sa, NULL);
+		sigaction(SIGTSTP, &sa, NULL);
+		sigaction(SIGSTOP, &sa, NULL);
+
 		execve(cmd, argv, envp);
 		switch (errno) {
 		case ENOENT:
@@ -2294,10 +2310,15 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		status = WEXITSTATUS(status);
 	} else if (WIFSIGNALED(status)) {
 		status = WTERMSIG(status);
-		printf("sh: terminated with signal %d\n", status);
+		if (status != SIGINT)
+			printf("sh: terminated with signal %d\n", status);
+		else
+			printf("\n");
+		status += 128;
 	} else if (WIFSTOPPED(status)) {
 		status = WSTOPSIG(status);
 		printf("sh: stopped with signal %d\n", status);
+		status += 128;
 	} else {
 		printf("sh: unknown status %d\n", status);
 	}
