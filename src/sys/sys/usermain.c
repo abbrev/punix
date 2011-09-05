@@ -905,8 +905,9 @@ static int ps_main(int argc, char **argv, char **envp)
 		s %= 3600;
 		m = s / 60;
 		s %= 60;
-		printf("%5d %04x %02d:%02d:%02ld %s\n",
-		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd);
+		printf("%5d %04x %02d:%02d:%02ld %s%s\n",
+		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd,
+		       kp->kp_state == PZOMBIE ? " <defunct>" : "");
 	}
 out_free:
 	free(allproc);
@@ -2087,6 +2088,10 @@ eol:
 	return token;
 }
 
+void sh_empty_sig_handler(int x)
+{
+}
+
 #define MAXARGC (BUFSIZE/2+1)
 int sh_main(int argc, char **argv, char **envp)
 {
@@ -2114,7 +2119,7 @@ int sh_main(int argc, char **argv, char **envp)
 	int laststatus = 0;
 	
 	struct sigaction sa;
-	sa.sa_handler = SIG_IGN;
+	sa.sa_handler = sh_empty_sig_handler;
 	sa.sa_flags = 0;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);
@@ -2149,8 +2154,8 @@ int sh_main(int argc, char **argv, char **envp)
 			       uid ? '$' : '#');
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
-			printf("read error\n");
-			return 1;
+			putchar('\n');
+			continue;
 		}
 		len += n;
 		bp += n;
@@ -2302,22 +2307,32 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	}
 	
 	/* parent process. we chill here until the child dies */
-	pid = wait(&status);
-	if (WIFEXITED(status)) {
-		status = WEXITSTATUS(status);
-	} else if (WIFSIGNALED(status)) {
-		status = WTERMSIG(status);
-		if (status != SIGINT)
-			printf("sh: terminated with signal %d\n", status);
-		else
-			printf("\n");
-		status += 128;
-	} else if (WIFSTOPPED(status)) {
-		status = WSTOPSIG(status);
-		printf("sh: stopped with signal %d\n", status);
-		status += 128;
-	} else {
-		printf("sh: unknown status %d\n", status);
+	for (;;) {
+		pid = wait(&status);
+		if (pid < 0) {
+			if (errno == EINTR)
+				continue;
+		}
+		if (WIFEXITED(status)) {
+			status = WEXITSTATUS(status);
+			break;
+		} else if (WIFSIGNALED(status)) {
+			status = WTERMSIG(status);
+			if (status != SIGINT)
+				printf("sh: terminated with signal %d\n", status);
+			else
+				printf("\n");
+			status += 128;
+			break;
+		} else if (WIFSTOPPED(status)) {
+			status = WSTOPSIG(status);
+			printf("sh: stopped with signal %d\n", status);
+			status += 128;
+			break;
+		} else {
+			printf("sh: unknown status %d\n", status);
+			break;
+		}
 	}
 	
 	return status;
