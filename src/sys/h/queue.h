@@ -6,13 +6,6 @@
 #define QSIZE 1024
 #define QMASK (QSIZE - 1)
 
-#if 0
-struct queue {
-	int q_count;
-	char *q_head, *q_tail; /* write to the head, read from the tail */
-	char q_buf[QSIZE];
-};
-#else
 /*
  * q_head%QSIZE points to the next available slot for a byte
  * q_tail%QSIZE points to the next available byte
@@ -23,7 +16,6 @@ struct queue {
 	unsigned long q_head, q_tail;
 	char q_buf[QSIZE];
 };
-#endif
 
 static inline int qused(struct queue *q) { return ((q)->q_head - (q)->q_tail); }
 static inline int qfree(struct queue *q) { return (QSIZE - qused(q)); }
