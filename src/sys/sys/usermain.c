@@ -824,7 +824,11 @@ out:
 
 static int banner(const char *s)
 {
+#ifdef TI92P
 	static const char stars[] = "*****************************";
+#else
+	static const char stars[] = "*******************";
+#endif
 	int h;
 	int l = strlen(s);
 	h = l / 2;
@@ -838,9 +842,9 @@ struct test {
 
 static const struct test tests[] = {
 	{ "clock", testclock },
-	{ "/dev/random", testrandom },
-	{ "/dev/link", testlink },
-	{ "/dev/audio", testaudio },
+	{ "random", testrandom },
+	{ "link", testlink },
+	{ "audio", testaudio },
 	{ "", NULL }
 };
 
@@ -1215,9 +1219,18 @@ static int times_main(int argc, char **argv, char **envp)
 static int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
+	int match = 0;
 	for (testp = &tests[0]; testp->func; ++testp) {
+		if (argc > 1 && strcmp(argv[1], testp->name))
+			continue;
+
+		match = 1;
 		banner(testp->name);
 		testp->func(argc, argv, envp);
+	}
+	if (!match) {
+		printf("error: no test named %s\n", argv[1]);
+		return 1;
 	}
 	printf("done!\n");
 	return 0;
@@ -1427,6 +1440,12 @@ static int pid_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+static int pgrp_main(int argc, char **argv, char **envp)
+{
+	printf("%d\n", getpgrp());
+	return 0;
+}
+
 int atoi(const char *a)
 {
 	int i = 0;
@@ -1455,13 +1474,14 @@ static int kill_main(int argc, char **argv, char **envp)
  * kill [-signal_number] pid ...
  */
 	static const char *const names[] = {
+		[0] = NULL,
 		[SIGHUP] = "SIGHUP",
 		[SIGINT] = "SIGINT",
 		[SIGQUIT] = "SIGQUIT",
 		[SIGILL] = "SIGILL",
 		[SIGTRAP] = "SIGTRAP",
 		[SIGABRT] = "SIGABRT",
-		[SIGBUS] = "SIGBUS",
+		[7] = NULL,
 		[SIGFPE] = "SIGFPE",
 		[SIGKILL] = "SIGKILL",
 		[SIGBUS] = "SIGBUS",
@@ -1477,14 +1497,20 @@ static int kill_main(int argc, char **argv, char **envp)
 		[SIGCHLD] = "SIGCHLD",
 		[SIGTTIN] = "SIGTTIN",
 		[SIGTTOU] = "SIGTTOU",
+#ifdef SIGIO
 		[SIGIO] = "SIGIO",
+#elif defined(SIGPOLL)
+		[SIGPOLL] = "SIGPOLL",
+#endif
 		[SIGXCPU] = "SIGXCPU",
 		[SIGXFSZ] = "SIGXFSZ",
 		[SIGVTALRM] = "SIGVTALRM",
 		[SIGPROF] = "SIGPROF",
 		[SIGWINCH] = "SIGWINCH",
+		[29] = NULL,
 		[SIGUSR1] = "SIGUSR1",
 		[SIGUSR2] = "SIGUSR2",
+		[32] = NULL,
 	};
 #define SIZEOF_NAMES (sizeof(names)/sizeof(names[0]))
 	void usage() {
@@ -1546,9 +1572,11 @@ static int kill_main(int argc, char **argv, char **envp)
 				printf("%s\n", names[sig]);
 				return 0;
 			}
-			for (i = 1; i <= SIZEOF_NAMES; ++i) {
-				printf("%2d %-13s", i, names[i]);
+			for (i = 1; i < SIZEOF_NAMES; ++i) {
+				if (!names[i]) continue;
+				printf("%2d %-12s", i, names[i]);
 			}
+			printf("\n");
 			return 0;
 		} else {
 			/* kill -signal_name pid ... */
@@ -1717,6 +1745,7 @@ static int updatetop(struct topinfo *info)
 	struct kinfo_proc **allprocp = NULL;
 	struct kinfo_proc *kp;
 	struct kinfo_proc **kpp;
+	long cpu_user = 0, cpu_sys = 0, cpu_nice = 0, cpu_idle = 0;
 	int upmib[] = { CTL_KERN, KERN_UPTIME };
 	unsigned upmiblen = sizeof(upmib) / sizeof(*upmib);
 	time_t up = 0;
@@ -1777,7 +1806,14 @@ static int updatetop(struct topinfo *info)
 		/* count users by tty, excluding tty 0 (= no tty) */
 		if ((*kpp)->kp_tty != lasttty) ++nusers;
 		lasttty = (*kpp)->kp_tty;
+		/* accumulate cpu usage */
+		if ((*kpp)->kp_nice <= 0)
+			cpu_user += (*kpp)->kp_pcpu;
+		else
+			cpu_nice += (*kpp)->kp_pcpu;
+		/* TODO: count system time here */
 	}
+	cpu_idle = 100L * 256 - cpu_user - cpu_sys - cpu_nice;
 
 	/* sort the array by cpu usage */
 	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
@@ -1812,7 +1848,11 @@ static int updatetop(struct topinfo *info)
 	       nprocs, nrun, nslp, nstop, nzomb);
 	cleareol();
 	/* line 3 */
-	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -1, -1, -1, -1, -1, -1, -1);
+	printf("\nCpu: %3ld.%ld%%us, %3ld.%ld%%sy, %3ld.%ld%%ni, %3ld.%ld%%id",
+	       cpu_user / 256, (cpu_user % 256) * 10 / 256,
+	       cpu_sys  / 256, (cpu_sys  % 256) * 10 / 256,
+	       cpu_nice / 256, (cpu_nice % 256) * 10 / 256,
+	       cpu_idle / 256, (cpu_idle % 256) * 10 / 256);
 	cleareol();
 	/* line 4 */
 	printf("\nMem: %ldk total, %ldk used, %ldk free, %ldk buffers",
@@ -1861,7 +1901,11 @@ static int updatetop(struct topinfo *info)
 	       nprocs, nrun, nslp, nstop, nzomb);
 	cleareol();
 	/* line 3 */
-	printf("\n%3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -0, -1, -0, -1, -0, -1, -0);
+	printf("\n%3ld.%ld%%us, %3ld.%ld%%sy, %3ld.%ld%%ni, %3ld.%ld%%id",
+	       cpu_user / 256, (cpu_user % 256) * 10 / 256,
+	       cpu_sys  / 256, (cpu_sys  % 256) * 10 / 256,
+	       cpu_nice / 256, (cpu_nice % 256) * 10 / 256,
+	       cpu_idle / 256, (cpu_idle % 256) * 10 / 256);
 	cleareol();
 	/* line 4 */
 	printf("\n%ldk ttl, %ldk used, %ldk free, %ldk buf",
@@ -2184,6 +2228,7 @@ static struct applet applets[] = {
 	{ "adjtime", adjtime_main },
 	{ "malloc", malloc_main },
 	{ "pid", pid_main },
+	{ "pgrp", pgrp_main },
 	{ "poweroff", poweroff_main },
 	{ "times", times_main },
 	{ "sysctltest", sysctltest_main },
@@ -2307,14 +2352,16 @@ prompt:
 	count = GETTYBUFSIZE;
 	printf("\n%s login: ", uts.nodename);
 	for (;;) {
-		if (count == 0) return 1;
+		if (count == 0) break;
 		n = read(0, bp, count);
-		if (n < 0) return 1;
+		if (n < 0) break;
 		if (n == 0) return 1;
-		if (bp[n-1] != '\n') {
+		count -= n;
+		bp += n;
+		if (bp[-1] != '\n') {
 			continue;
 		}
-		bp[n-1] = '\0';
+		bp[-1] = '\0';
 		if (strlen(line) == 0)
 			goto prompt;
 		argv[0] = "login";
