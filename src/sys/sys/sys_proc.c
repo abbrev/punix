@@ -286,6 +286,8 @@ void sys_execve()
 	P.p_syscall_ctx->fp = 0; // clear out the frame pointer
 	// XXX: we ought to clear out all registers here while we're at it
 	
+	sigemptyset(&P.p_signals.sig_catch);
+	
 	return;
 	
 	/*
@@ -346,10 +348,9 @@ void doexit(int status)
 	int i;
 	
 	spl7();
-	//kprintf("doexit(%04x) pid=%d ", status, current->p_pid);
 	P.p_flag &= ~P_TRACED;
-	P.p_sigignore = ~0;
-	P.p_sig = 0;
+	sigemptyset(&P.p_signals.sig_ignore);
+	sigemptyset(&P.p_signals.sig_pending);
 #if 0
 	ilock(P.p_cdir);
 	i_unref(P.p_cdir);
@@ -563,6 +564,7 @@ static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 	int nfound = 0;
 	int error;
 	
+	mask(&G.calloutlock);
 loop:
 	list_for_each_entry(p, &G.proc_list, p_list)
 	if (p->p_pptr == current) {
@@ -593,15 +595,15 @@ loop:
 	
 	if (!nfound) {
 		P.p_error = ECHILD;
-		return;
+		goto out;
 	}
 	if (options & WNOHANG) {
-		return;
+		goto out;
 	}
 	error = tsleep(current, PWAIT|PCATCH, 0);
 	if (!error) goto loop;
 	P.p_error = error;
-	return;
+	goto out;
 	
 found:
 	P.p_retval = p->p_pid;
@@ -622,6 +624,8 @@ found:
 		list_del(&p->p_list);
 		pfree(p);
 	}
+out:
+	unmask(&G.calloutlock);
 }
 
 /* first arg is the same as wait */

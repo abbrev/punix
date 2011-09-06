@@ -243,7 +243,6 @@ struct proc {
 	} p_signals;
 
 /* temporary macros for compatibility with existing kernel code */
-#define p_sig       p_signals.sig_pending
 #define p_sigmask   p_signals.sig_mask
 #define p_oldmask   p_signals.sig_oldmask
 #define p_sigignore p_signals.sig_ignore

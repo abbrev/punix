@@ -10,7 +10,7 @@
 #define SAS_OLDMASK  0x01 /* need to restore mask before pause */
 #define SAS_ALTSTACK 0x02 /* have alternate signal stack */
 
-#define SIG_CATCH ((sighandler_t)2)
+#define SIG_CATCH ((sighandler_t)3)
 
 #define CONTSIGMASK     (sigmask(SIGCONT))
 #define STOPSIGMASK     (sigmask(SIGSTOP) | sigmask(SIGTSTP) | \
@@ -87,8 +87,9 @@ STARTUP(void stop(struct proc *p))
 
 STARTUP(int CURSIG(struct proc *p))
 {
-	if (p->p_sig == 0
-	    || (!(p->p_flag & P_TRACED) && !(p->p_sig & ~p->p_sigmask))) {
+	if (p->p_signals.sig_pending == 0 ||
+	    (!(p->p_flag & P_TRACED) &&
+	     !(p->p_signals.sig_pending & ~p->p_sigmask))) {
 		return 0;
 	} else {
 		return issignal(p);
@@ -125,7 +126,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 	if ((unsigned)sig >= NSIG)
 	return;
 	if (sig)
-	p->p_sig |= 1 << (sig-1);
+	p->p_signals.sig_pending |= 1 << (sig-1);
 	if (p->p_pri > PUSER)
 	p->p_pri = PUSER;
 	if (p->p_stat == P_SLEEPING && p->p_pri > PZERO)
@@ -142,14 +143,16 @@ STARTUP(void procsignal(struct proc *p, int sig))
 	if (p->p_flag & P_TRACED)
 		action = SIG_DFL;
 	else {
-		if (p->p_sigignore & mask)
+		if (p->p_sigignore & mask) {
 			return;
-		if (p->p_sigmask & mask)
+		}
+		if (p->p_sigmask & mask) {
 			action = SIG_HOLD;
-		else if (p->p_sigcatch & mask)
+		} else if (p->p_sigcatch & mask) {
 			action = SIG_CATCH;
-		else
+		} else {
 			action = SIG_DFL;
+		}
 	}
 	
 	if (p->p_nice > NZERO && action == SIG_DFL && (prop & SA_KILL)
@@ -157,15 +160,15 @@ STARTUP(void procsignal(struct proc *p, int sig))
 		p->p_nice = NZERO;
 	
 	if (prop & SA_CONT)
-		p->p_sig &= ~STOPSIGMASK;
+		p->p_signals.sig_pending &= ~STOPSIGMASK;
 	
 	if (prop & SA_STOP) {
 		if (prop & SA_TTYSTOP && (p->p_pptr == G.initproc)
 		    && action == SIG_DFL)
 			return;
-		p->p_sig &= ~CONTSIGMASK;
+		p->p_signals.sig_pending &= ~CONTSIGMASK;
 	}
-	p->p_sig |= mask;
+	p->p_signals.sig_pending |= mask;
 	
 	if (action == SIG_HOLD && (!(prop & SA_CONT) || p->p_status != P_STOPPED))
 		return;
@@ -179,7 +182,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 			goto run;
 		
 		if ((prop & SA_CONT) && action == SIG_DFL) {
-			p->p_sig &= ~mask;
+			p->p_signals.sig_pending &= ~mask;
 			goto out;
 		}
 		
@@ -188,7 +191,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 				goto run;
 			if (p->p_flag & P_VFORK)
 				goto out;
-			p->p_sig &= ~mask;
+			p->p_signals.sig_pending &= ~mask;
 			p->p_ptracesig = sig;
 			if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
 				procsignal(p->p_pptr, SIGCHLD);
@@ -203,7 +206,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 			goto run;
 		if (prop & SA_CONT) {
 			if (action == SIG_DFL)
-				p->p_sig &= ~mask;
+				p->p_signals.sig_pending &= ~mask;
 			if (action == SIG_CATCH || p->p_waitchan == 0)
 				goto run;
 			/* p->p_status = P_SLEEPING; */
@@ -212,7 +215,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 		}
 		
 		if (prop & SA_STOP) {
-			p->p_sig &= ~mask;
+			p->p_signals.sig_pending &= ~mask;
 			goto out;
 		}
 		
@@ -253,7 +256,7 @@ STARTUP(int issignal(struct proc *p))
 	int prop;
 	
 	for (;;) {
-		mask = p->p_sig & ~p->p_sigmask;
+		mask = p->p_signals.sig_pending & ~p->p_sigmask;
 		if (p->p_flag & P_VFORK)
 			mask &= ~STOPSIGMASK;
 		if (mask == 0)
@@ -263,12 +266,12 @@ STARTUP(int issignal(struct proc *p))
 		prop = sigprop[sig];
 		
 		if (mask & p->p_sigignore && (p->p_flag & P_TRACED) == 0) {
-			p->p_sig &= ~mask;
+			p->p_signals.sig_pending &= ~mask;
 			continue;
 		}
 #if 0
 		if (p->p_flag & P_TRACED && (p->p_flag & P_VFORK) == 0) {
-			p->p_sig &= ~mask;
+			p->p_signals.sig_pending &= ~mask;
 			p->p_ptracesig = sig;
 			procsignal(p->p_pptr, SIGCHLD);
 			do {
@@ -281,7 +284,7 @@ STARTUP(int issignal(struct proc *p))
 				continue;
 			
 			mask = sigmask(sig);
-			p->p_sig |= mask;
+			p->p_signals.sig_pending |= mask;
 			if (p->p_sigmask & mask)
 				continue;
 			
@@ -291,8 +294,16 @@ STARTUP(int issignal(struct proc *p))
 		}
 #endif
 		
-		switch ((intptr_t)P.p_signal[sig]) {
-		case (intptr_t)SIG_DFL:
+		if (P.p_signals.sig_catch & mask) {
+			return sig;
+		} else if (P.p_signals.sig_ignore & mask) {
+			/* this signal is ignored */
+#if 0
+			if ((prop & SA_CONT) == 0 && (p->p_flag & P_TRACED) == 0)
+				kprintf("issig\n");
+#endif
+		} else {
+			/* default signal handler */
 #if 0 /* for testing (but why would a sane init process leave any of its signal handlers at their default?) */
 			if (p->p_pid <= 1) {
 				break;
@@ -300,28 +311,22 @@ STARTUP(int issignal(struct proc *p))
 #endif
 			if (prop & SA_STOP) {
 				if ((p->p_pptr==G.initproc && prop&SA_TTYSTOP)
-				   || (p->p_flag&P_TRACED))
-					break;
-				p->p_ptracesig = sig;
-				if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
-					procsignal(p->p_pptr, SIGCHLD);
-				stop(p);
-				swtch();
-				break;
+				   || (p->p_flag&P_TRACED)) {
+					/* nothing */
+				} else {
+					p->p_ptracesig = sig;
+					if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
+						procsignal(p->p_pptr, SIGCHLD);
+					stop(p);
+					swtch();
+				}
 			} else if (prop & SA_IGNORE) {
-				break;
-			} else
+				/* ignore this signal by default */
+			} else {
 				return sig;
-		case (intptr_t)SIG_IGN:
-#if 0
-			if ((prop & SA_CONT) == 0 && (p->p_flag & P_TRACED) == 0)
-				kprintf("issig\n");
-#endif
-			break;
-		default:
-			return sig;
+			}
 		}
-		p->p_sig &= ~mask;
+		p->p_signals.sig_pending &= ~mask;
 	}
 }
 
@@ -335,7 +340,7 @@ STARTUP(void postsig(int sig))
 		P.p_fpsaved = 1;
 	}
 	
-	P.p_sig &= ~mask;
+	P.p_signals.sig_pending &= ~mask;
 	action = P.p_signal[sig];
 	
 	//kprintf("postsig\n");

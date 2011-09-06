@@ -99,14 +99,33 @@ void sys_sigaction()
 	} *ap = (struct a *)P.p_arg;
 	
 	struct sigaction sa;
+	sigset_t mask;
 	
 	if ((unsigned)ap->signum >= NSIG) {
 		P.p_error = EINVAL;
 		return;
 	}
 	
+	mask = sigmask(ap->signum);
+
 	if (ap->oldact) {
-		/* XXX */
+		sa.sa_flags = 0;
+		sa.sa_sigaction = P.p_signals.sig_actions[ap->signum];
+		if (mask & P.p_signals.sig_ignore)
+			sa.sa_sigaction = SIG_IGN;
+		sa.sa_mask = P.p_signals.sig_masks[ap->signum];
+#define SETFLAG(a, b) if (mask & P.p_signals.sig_ ## a) sa.sa_flags |= b
+		SETFLAG(nocldstop, SA_NOCLDSTOP);
+		SETFLAG(nocldwait, SA_NOCLDWAIT);
+		SETFLAG(nodefer, SA_NODEFER);
+		SETFLAG(onstack, SA_ONSTACK);
+		SETFLAG(resethand, SA_RESETHAND);
+		SETFLAG(restart, SA_RESTART);
+		SETFLAG(siginfo, SA_SIGINFO);
+#undef SETFLAG
+		P.p_error = copyout(ap->act, &sa, sizeof(sa));
+		if (P.p_error)
+			return;
 	}
 	
 	if (ap->act) {
@@ -118,12 +137,12 @@ void sys_sigaction()
 			P.p_error = EINVAL;
 			return;
 		}
-		sigset_t mask = sigmask(ap->signum);
 
 		P.p_signals.sig_actions[ap->signum] = sa.sa_sigaction;
 #define EQUMASK(x, v)  ((x) = ((x) & ~(mask)) | ((mask) & -!!(v)))
 		EQUMASK(P.p_signals.sig_ignore,    sa.sa_sigaction == SIG_IGN);
-		EQUMASK(P.p_signals.sig_restart,   sa.sa_flags&SA_RESTART);
+		EQUMASK(P.p_signals.sig_catch,     sa.sa_sigaction > 0x100);
+
 		EQUMASK(P.p_signals.sig_nocldstop, sa.sa_flags&SA_NOCLDSTOP);
 		EQUMASK(P.p_signals.sig_nocldwait, sa.sa_flags&SA_NOCLDWAIT);
 		EQUMASK(P.p_signals.sig_nodefer,   sa.sa_flags&SA_NODEFER);
