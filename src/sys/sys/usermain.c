@@ -2124,6 +2124,8 @@ int sh_main(int argc, char **argv, char **envp)
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);
 	sigaction(SIGTSTP, &sa, NULL);
+	sigaction(SIGTTIN, &sa, NULL);
+	sigaction(SIGTTOU, &sa, NULL);
 
 	printf("stupid shell v0.2\n");
 	
@@ -2154,8 +2156,10 @@ int sh_main(int argc, char **argv, char **envp)
 			       uid ? '$' : '#');
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
-			putchar('\n');
-			continue;
+			if (errno == EINTR)
+				continue;
+			else
+				break;
 		}
 		len += n;
 		bp += n;
@@ -2292,6 +2296,10 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		sa.sa_flags = 0;
 		sigaction(SIGINT, &sa, NULL);
 		sigaction(SIGQUIT, &sa, NULL);
+		sa.sa_handler = SIG_IGN;
+		sigaction(SIGTSTP, &sa, NULL);
+		sigaction(SIGTTIN, &sa, NULL);
+		sigaction(SIGTTOU, &sa, NULL);
 
 		execve(cmd, argv, envp);
 		switch (errno) {
@@ -2320,8 +2328,6 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 			status = WTERMSIG(status);
 			if (status != SIGINT)
 				printf("sh: terminated with signal %d\n", status);
-			else
-				printf("\n");
 			status += 128;
 			break;
 		} else if (WIFSTOPPED(status)) {

@@ -1401,8 +1401,23 @@ static void ttyinput(int ch, struct tty *tp)
 		}
 		return;
 	}
+	if (ch == cc[VSUSP]) {
+		ttyecho(ch, tp);
+		if (lflag & ECHO) {
+			ttyoutput('\n', tp);
+		}
+		if (lflag & ISIG) {
+			gsignal(tp->t_pgrp, SIGTSTP);
+			if (!(lflag & NOFLSH))
+				flushtty(tp);
+			return;
+		}
+	}
 	if (ch == cc[VINTR] || ch == cc[VQUIT]) {
 		ttyecho(ch, tp);
+		if (lflag & ECHO) {
+			ttyoutput('\n', tp);
+		}
 		if (lflag & ISIG) {
 			gsignal(tp->t_pgrp,
 				ch == cc[VQUIT] ? SIGQUIT : SIGINT);

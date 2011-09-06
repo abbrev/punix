@@ -46,6 +46,7 @@ void ttychars(struct tty *tp)
 {
 	tp->t_cc[VINTR] = CINTR;
 	tp->t_cc[VQUIT] = CQUIT;
+	tp->t_cc[VSUSP] = CSUSP;
 	tp->t_cc[VSTART] = CSTART;
 	tp->t_cc[VSTOP] = CSTOP;
 	tp->t_cc[VEOF] = CEOT;
@@ -60,6 +61,8 @@ void ttychars(struct tty *tp)
 void flushtty(struct tty *tp)
 {
 	/* FIXME */
+	qclear(&tp->t_rawq);
+	qclear(&tp->t_canq);
 }
 
 void wflushtty(struct tty *tp)
