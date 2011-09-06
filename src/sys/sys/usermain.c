@@ -40,6 +40,7 @@
 #include <sys/sysctl.h>
 //#include <sys/ioctl.h>
 
+#define _exit _Exit
 
 /*
  * XXX: The following includes should not be needed in a real user progam.
@@ -66,64 +67,6 @@ void kfree(void *ptr);
 void seterrno(int e)
 {
 	errno = e;
-}
-
-const int sys_nerr = 41;
-const char *sys_errlist[] = {
-	"Success",                     /* 0 */
-	"Operation not permitted",     /* 1 */
-	"No such file or directory",
-	"No such process",
-	"Interrupted system call",
-	"I/O error",
-	"No such device or address",
-	"Argument list too long",
-	"Exec format error",
-	"Bad file number",
-	"No child processes",          /* 10 */
-	"Try again",
-	"Out of memory",
-	"Permission denied",
-	"Bad address",
-	"Block device required",
-	"Device or resource busy",
-	"File exists",
-	"Cross-device link",
-	"No such device",
-	"Not a directory",             /* 20 */
-	"Is a directory",
-	"Invalid argument",
-	"File table overflow",
-	"Too many open files",
-	"Not a typewriter",
-	"Text file busy",
-	"File too large",
-	"No space left on device",
-	"Illegal seek",
-	"Read-only file system",       /* 30 */
-	"Too many links",
-	"Broken pipe",
-	"Math argument out of domain",
-	"Math result not representable",
-	"Resource deadlock would occur",
-	"File name too long",
-	"No record locks available",
-	"Syscall not implemented",
-	"Directory not empty",
-	"Too many symbolic links"      /* 40 */
-};
-
-#define ERRSTRLEN 20
-char *strerror(int e)
-{
-	//static char errstr[ERRSTRLEN+1];
-	
-	if (e < 0 || e >= sizeof(sys_errlist) / sizeof(sys_errlist[0])) {
-		//sprintf("Unknown error %d", e);
-		//return errstr;
-		return "Unknown error";
-	}
-	return (char *)sys_errlist[e];
 }
 
 /* XXX: this prints to stdout instead of stderr */
@@ -1475,14 +1418,13 @@ static int kill_main(int argc, char **argv, char **envp)
  * kill [-signal_number] pid ...
  */
 	static const char *const names[] = {
-		[0] = NULL,
 		[SIGHUP] = "SIGHUP",
 		[SIGINT] = "SIGINT",
 		[SIGQUIT] = "SIGQUIT",
 		[SIGILL] = "SIGILL",
 		[SIGTRAP] = "SIGTRAP",
 		[SIGABRT] = "SIGABRT",
-		[7] = NULL,
+		[SIGEMT] = "SIGEMT",
 		[SIGFPE] = "SIGFPE",
 		[SIGKILL] = "SIGKILL",
 		[SIGBUS] = "SIGBUS",
@@ -1508,10 +1450,9 @@ static int kill_main(int argc, char **argv, char **envp)
 		[SIGVTALRM] = "SIGVTALRM",
 		[SIGPROF] = "SIGPROF",
 		[SIGWINCH] = "SIGWINCH",
-		[29] = NULL,
+		[SIGINFO] = "SIGINFO",
 		[SIGUSR1] = "SIGUSR1",
 		[SIGUSR2] = "SIGUSR2",
-		[32] = NULL,
 	};
 #define SIZEOF_NAMES (sizeof(names)/sizeof(names[0]))
 	void usage() {
