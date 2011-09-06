@@ -43,7 +43,14 @@ void printheaplist()
 {
 	int i;
 	for (i = 0; i < G.heap.heapsize; ++i) {
-		kprintf("%5d: %5d %5d %5d (%5d) (0x%06lx)\n", i, (int)G.heap.heaplist[i].pid, (int)G.heap.heaplist[i].start, (int)G.heap.heaplist[i].end, (int)G.heap.heaplist[i].end-G.heap.heaplist[i].start, (void *)&G.heap.heap[G.heap.heaplist[i].start]);
+		kprintf("%5d: %p %5d %5d %5d (%5d) (0x%06lx)\n",
+		        i,
+			&G.heap.heaplist[i],
+			(int)G.heap.heaplist[i].pid,
+			(int)G.heap.heaplist[i].start,
+			(int)G.heap.heaplist[i].end,
+			(int)G.heap.heaplist[i].end-G.heap.heaplist[i].start,
+			(void *)&G.heap.heap[G.heap.heaplist[i].start]);
 	}
 }
 #endif
@@ -75,6 +82,18 @@ static size_t largest_unallocated_chunk_size()
 	return (size_t)size * HEAPBLOCKSIZE;
 }
 
+void printmemstats(void *unused)
+{
+	(void)unused;
+	kprintf("%lu total, ",
+	        heap_get_total());
+	kprintf("%lu used, ",
+	        heap_get_used());
+	kprintf("%lu free\n",
+	        heap_get_free());
+	timeout(printmemstats, NULL, HZ*5L);
+}
+
 void meminit()
 {
 	struct heapentry *hp = &G.heap.heaplist[0];
@@ -85,9 +104,10 @@ void meminit()
 	hp->pid = -1;
 	++hp;
 	hp->start = ((void *)0x40000 - (void *)G.heap.heap[0]) / HEAPBLOCKSIZE;
-	hp->end = 0;
+	hp->end = hp->start;
 	hp->pid = -1;
 	G.heap.heapsize = 2;
+	//printmemstats(NULL);
 	
 #if 0
 	struct var {
@@ -196,7 +216,7 @@ static struct heapentry *allocentry(int size, pid_t pid)
 	if (G.heap.heapsize >= HEAPSIZE) return NULL;
 	
 loop:
-#define SIZETHRESHOLD 32768L
+#define SIZETHRESHOLD 8192L
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heap.heaplist[G.heap.heapsize-1].start;
 		for (hp = &G.heap.heaplist[G.heap.heapsize-2]; hp >= &G.heap.heaplist[0]; --hp) {
@@ -427,6 +447,31 @@ void memfree(void *ptr, pid_t pid)
 		removeentry(hp);
 	else
 		P.p_error = EFAULT;
+}
+
+size_t heap_get_total()
+{
+	return (size_t)HEAPBLOCKSIZE *
+	       (G.heap.heaplist[G.heap.heapsize-1].start -
+	        G.heap.heaplist[0].start);
+}
+
+size_t heap_get_used()
+{
+	size_t s = 0;
+	struct heapentry *hp;
+
+	for (hp = &G.heap.heaplist[0];
+	     hp < &G.heap.heaplist[G.heap.heapsize];
+	     ++hp) {
+		s += hp->end - hp->start;
+	}
+	return s * HEAPBLOCKSIZE;
+}
+
+size_t heap_get_free()
+{
+	return heap_get_total() - heap_get_used();
 }
 
 void sys_kmalloc()
