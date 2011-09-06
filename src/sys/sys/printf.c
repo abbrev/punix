@@ -178,7 +178,7 @@ STARTUP(static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
 		
 			/* pointer */
 		case 'p':
-			u = va_arg(argp, void *);
+			u = (unsigned long)va_arg(argp, void *);
 			if (u) {
 				/* leading zeroes */
 				fill = '0';
@@ -293,7 +293,7 @@ STARTUP(int printf(const char *fmt, ...))
 STARTUP(int sputc(int c, void *a))
 {
 	char **s = (char **)a;
-	*(*s++) = c;
+	*(*s)++ = c;
 	return (unsigned char)c;
 }
 
