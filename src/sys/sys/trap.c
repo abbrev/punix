@@ -84,40 +84,45 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 		panic("invalid exception number");
 
 	esp = &exception_signals[num];
-	kprintf("%s exception\n", esp->name);
 	if (esp->type == EX_BUS) {
-		kprintf("       function code: 0x%04x\n"
-			"      access address: %p\n"
-			"instruction register: 0x%04x\n"
-			"     status register: 0x%04x\n"
-			"     program counter: %p\n"
-			"\n",
-			eip->bus_error.function_code,
-			eip->bus_error.access_address,
-			eip->bus_error.instruction_register,
-			eip->bus_error.status_register,
-			eip->bus_error.program_counter
-		);
 		sr = eip->bus_error.status_register;
+		if (!USERMODE(sr)) {
+			kprintf("%s exception\n"
+			        "       function code: 0x%04x\n"
+				"      access address: %p\n"
+				"instruction register: 0x%04x\n"
+				"     status register: 0x%04x\n"
+				"     program counter: %p\n"
+				"\n",
+			        esp->name,
+				eip->bus_error.function_code,
+				eip->bus_error.access_address,
+				eip->bus_error.instruction_register,
+				eip->bus_error.status_register,
+				eip->bus_error.program_counter
+			);
+		}
 	} else {
-		kprintf("     status register: 0x%04x\n"
-			"     program counter: %p\n"
-			"       vector offset: 0x%04x\n"
-			"             address: %p\n"
-			"\n",
-			eip->other.status_register,
-			eip->other.program_counter,
-			eip->other.vector_offset,
-			eip->other.address
-		);
 		sr = eip->other.status_register;
+		if (!USERMODE(sr)) {
+			kprintf("%s exception\n"
+			        "     status register: 0x%04x\n"
+				"     program counter: %p\n"
+				"       vector offset: 0x%04x\n"
+				"             address: %p\n"
+				"\n",
+			        esp->name,
+				eip->other.status_register,
+				eip->other.program_counter,
+				eip->other.vector_offset,
+				eip->other.address
+			);
+		}
 	}
 	if (!USERMODE(sr))
 		panic("exception in kernel");
 	procsignal(current, esp->signal);
 }
-
-
 
 #define BUMPNTIME(tv, nsec) do { \
 	(tv)->tv_nsec += (nsec); \
