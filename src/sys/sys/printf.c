@@ -8,17 +8,23 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "punix.h"
 #include "globals.h"
 
 #undef fflush
 
+void seterrno(int e)
+{
+	errno = e;
+}
+
 /* el-cheapo buffered output */
 int fflush(FILE *stream)
 {
-	char *b = G.user.charbuf;
-	ssize_t s = G.user.charbufsize;
+	char *b = P.user.charbuf;
+	ssize_t s = P.user.charbufsize;
 	while (s > 0) {
 		ssize_t n = write(1, b, s);
 		if (n < 0) break;
@@ -26,7 +32,7 @@ int fflush(FILE *stream)
 		s -= n;
 	}
 		
-	G.user.charbufsize = 0;
+	P.user.charbufsize = 0;
 	return 0;
 }
 
@@ -37,8 +43,8 @@ STARTUP(int fputc(int c, FILE *stream))
 
 STARTUP(int putchar(int c))
 {
-	G.user.charbuf[G.user.charbufsize++] = c;
-	if (G.user.charbufsize >= 128 || c == '\n')
+	P.user.charbuf[P.user.charbufsize++] = c;
+	if (P.user.charbufsize >= 128 || c == '\n')
 		fflush(NULL);
 	return (unsigned char)c;
 }
@@ -285,7 +291,7 @@ STARTUP(int printf(const char *fmt, ...))
 	
 	n = vcbnprintf((vcbnprintf_callback_t)putchar, NULL,
 	               (size_t)-1, fmt, argp);
-	fflush(NULL); // only needed because we lack a proper stdio
+	fflush(NULL);
 	va_end(argp);
 	return n;
 }
