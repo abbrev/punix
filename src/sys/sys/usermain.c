@@ -25,6 +25,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
@@ -196,11 +197,9 @@ static const char _mtab[12][3] = {
 };
 char *asctime_r(const struct tm *tm, char *buf)
 {
-	/* XXX: this should be sprintf(), but that isn't implemented yet */
-	printf("%3.3s %3.3s %2d %02d:%02d:%02d %4.4d\n",
+	sprintf(buf, "%3.3s %3.3s %2d %02d:%02d:%02d %4.4d\n",
 	        _wtab[tm->tm_wday], _mtab[tm->tm_mon], tm->tm_mday,
 	        tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_year + 1900);
-	return NULL;
 	return buf;
 }
 
@@ -411,7 +410,7 @@ struct pkthead {
 
 static const struct machinfo {
 	int id;
-	char desc[80];
+	char *desc;
 } machinfo[] = {
 	{ 0x08, "PC -> 89/92+/V200" },
 	{ 0x88, "92+/V200 -> PC or 92+/V200 -> 92+/V200" },
@@ -478,7 +477,7 @@ ssize_t getcalcread(int fd, void *buf, size_t count)
 		setitimer(ITIMER_REAL, &it, NULL);
 		n = read(fd, buf, count);
 		setitimer(ITIMER_REAL, NULL, NULL); /* clear timer */
-		if (n < 0) longjmp(G.user.getcalcjmp, 1);
+		if (n < 0) longjmp(P.user.getcalcjmp, 1);
 		count -= n;
 		buf += n;
 	};
@@ -611,7 +610,7 @@ static ssize_t getcalc(int fd, char *buf, size_t size)
 	sa.sa_flags = 0;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	
-	if (setjmp(G.user.getcalcjmp))
+	if (setjmp(P.user.getcalcjmp))
 	{
 		printf("TIMEOUT\n");
 		return -1;
@@ -1187,7 +1186,8 @@ static int docat(int fd)
 	for (;;) {
 		n = read(fd, buf, BUFSIZE);
 		if (n <= 0) break;
-		write(1, buf, n);
+		n = write(1, buf, n);
+		if (n <= 0) break;
 	}
 	return (n < 0);
 }
@@ -1418,21 +1418,22 @@ static int kill_main(int argc, char **argv, char **envp)
  * kill [-signal_number] pid ...
  */
 	static const char *const names[] = {
-		[SIGHUP] = "SIGHUP",
-		[SIGINT] = "SIGINT",
-		[SIGQUIT] = "SIGQUIT",
+		[0] = "0",
+		[SIGHUP] = "SIGHUP",      // 1
+		[SIGINT] = "SIGINT",      // 2
+		[SIGQUIT] = "SIGQUIT",    // 3
 		[SIGILL] = "SIGILL",
 		[SIGTRAP] = "SIGTRAP",
-		[SIGABRT] = "SIGABRT",
+		[SIGABRT] = "SIGABRT",    // 6
 		[SIGEMT] = "SIGEMT",
 		[SIGFPE] = "SIGFPE",
-		[SIGKILL] = "SIGKILL",
+		[SIGKILL] = "SIGKILL",    // 9
 		[SIGBUS] = "SIGBUS",
 		[SIGSEGV] = "SIGSEGV",
 		[SIGSYS] = "SIGSYS",
 		[SIGPIPE] = "SIGPIPE",
-		[SIGALRM] = "SIGALRM",
-		[SIGTERM] = "SIGTERM",
+		[SIGALRM] = "SIGALRM",    // 14
+		[SIGTERM] = "SIGTERM",    // 15
 		[SIGURG] = "SIGURG",
 		[SIGSTOP] = "SIGSTOP",
 		[SIGTSTP] = "SIGTSTP",
@@ -1470,7 +1471,7 @@ static int kill_main(int argc, char **argv, char **envp)
 				return i;
 			}
 		}
-		return 0;
+		return -1;
 	}
 
 	int sig = SIGTERM;
@@ -1488,7 +1489,7 @@ static int kill_main(int argc, char **argv, char **envp)
 				return 1;
 			}
 			sig = signum(argv[2]);
-			if (sig == 0) {
+			if (sig < 0) {
 				printf("kill: unknown signal \"%s\"\n",
 				       argv[2]);
 				return 1;
@@ -1506,13 +1507,15 @@ static int kill_main(int argc, char **argv, char **envp)
 			else
 				sig = -1;
 			if (sig > 0) {
-				if (sig > SIZEOF_NAMES) {
-					printf("kill: unknown signal %d\n",
-					       sig);
-					return 1;
+				int s = sig;
+				if (128 < s && s < SIZEOF_NAMES + 128)
+					s -= 128;
+				if (0 < s && s < SIZEOF_NAMES && names[s]) {
+					printf("%s\n", names[s] + 3);
+					return 0;
 				}
-				printf("%s\n", names[sig]);
-				return 0;
+				printf("kill: unknown signal %d\n", sig);
+				return 1;
 			}
 			for (i = 1; i < SIZEOF_NAMES; ++i) {
 				if (!names[i]) continue;
@@ -1520,6 +1523,8 @@ static int kill_main(int argc, char **argv, char **envp)
 			}
 			printf("\n");
 			return 0;
+		} else if (!strcmp(argv[1], "--")) {
+			pidarg = 2;
 		} else {
 			/* kill -signal_name pid ... */
 			/* kill -signal_number pid ... */
@@ -1527,7 +1532,7 @@ static int kill_main(int argc, char **argv, char **envp)
 			if (sig == 0) {
 				sig = signum(&argv[1][1]);
 			}
-			if (sig == 0) {
+			if (sig < 0) {
 				printf("kill: unknown signal \"%s\"\n",
 				       &argv[1][1]);
 				return 1;
@@ -2060,10 +2065,16 @@ int sh_main(int argc, char **argv, char **envp)
 	int laststatus = 0;
 	
 	struct sigaction sa;
-	sa.sa_handler = sh_empty_sig_handler;
 	sa.sa_flags = 0;
+
+	/* handle SIGINT and SIGQUIT with an empty handler */
+	sa.sa_handler = sh_empty_sig_handler;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);
+
+	/* ignore some other kill signals */
+	sa.sa_handler = SIG_IGN;
+	sigaction(SIGTERM, &sa, NULL);
 	sigaction(SIGTSTP, &sa, NULL);
 	sigaction(SIGTTIN, &sa, NULL);
 	sigaction(SIGTTOU, &sa, NULL);
@@ -2092,9 +2103,10 @@ int sh_main(int argc, char **argv, char **envp)
 	bp = buf;
 	for (;;) {
 		setitimer(ITIMER_REAL, &it, NULL);
-		if (len == 0)
+		if (len == 0) {
 			printf("%s@%s:%s%c ", username, hostname, "~",
 			       uid ? '$' : '#');
+		}
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
 			if (errno == EINTR)
@@ -2235,6 +2247,7 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		struct sigaction sa;
 		sa.sa_handler = SIG_DFL;
 		sa.sa_flags = 0;
+		sigaction(SIGTERM, &sa, NULL);
 		sigaction(SIGINT, &sa, NULL);
 		sigaction(SIGQUIT, &sa, NULL);
 		sa.sa_handler = SIG_IGN;
