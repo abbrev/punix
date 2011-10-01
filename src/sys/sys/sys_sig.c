@@ -90,7 +90,7 @@ STARTUP(void sys_killpg())
 	P.p_error = error;
 }
 
-void sys_sigaction()
+STARTUP(void sys_sigaction())
 {
 	struct a {
 		int signum;
