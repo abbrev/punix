@@ -141,7 +141,7 @@ zero_start = 0x5c00+4+8
 	|bsr	boot_loader
 	
 	bsr	kmain
-	
+
 	| set up a trap frame and "return" to icode
 	lea	-512(%sp),%a0	| XXX constant
 	move.l	%a0,%usp	| set initial stack for icode
@@ -160,10 +160,10 @@ icode:
 	pea	_env(%pc)	| env (empty)
 	pea	_argv(%pc)	| argv ("/etc/init", "-00000")
 	pea	_argv0(%pc)	| path ("/etc/init")
-	bsr	execve
+	jbsr	execve
 	
 	move	#-1,-(%sp)	| status
-	bsr	_exit
+	jbsr	_Exit
 
 	pea	1f(%pc)
 	jbsr	panic
