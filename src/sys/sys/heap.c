@@ -439,14 +439,16 @@ void memfree(void *ptr, pid_t pid)
 	struct heapentry *hp;
 	
 	if (ptr == NULL) {
-		freeall(pid);
+		if (pid > 0)
+			freeall(pid);
 		return;
 	}
 	hp = findentry(ptr);
-	if (hp && (!pid || pid == hp->pid))
-		removeentry(hp);
-	else
+	if (!hp || (pid && pid != hp->pid)) {
 		P.p_error = EFAULT;
+		return;
+	}
+	removeentry(hp);
 }
 
 size_t heap_get_total()
