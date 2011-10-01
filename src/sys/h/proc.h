@@ -189,8 +189,9 @@ struct proc {
 	int p_fpsaved;	/* floating-point state is saved? */
 	/* ??? p_fps; -- floating-point state */
 	
+	/* kernel stack */
+	void *p_kstack;
 	/* segments of user memory (note: the heap is global) */
-	void *p_ustack;
 	void *p_stack;
 	void *p_text;
 	void *p_data;
@@ -308,6 +309,14 @@ struct proc {
 		ino_t nc_inumber;	/* inum of cached directory  */
 		dev_t nc_dev;		/* dev of cached directory */
 	} p_ncache;
+	/* user data (won't be needed once processes get their
+	 * own data and bss sections) */
+	struct {
+		int u_errno;
+		char charbuf[128];
+		int charbufsize;
+		jmp_buf getcalcjmp;
+	} user;
 };
 
 /* states for p_status */

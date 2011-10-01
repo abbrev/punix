@@ -11,6 +11,15 @@
 #include "globals.h"
 #include "process.h"
 
+#define UPDATE_TIMEOUT (HZ/8)
+
+void updaterxtx(void *unused)
+{
+	(void)unused;
+	G.link.rxtx = 0;
+	timeout(updaterxtx, NULL, UPDATE_TIMEOUT);
+}
+
 STARTUP(void linkinit())
 {
 	qclear(&G.link.readq);
@@ -20,6 +29,7 @@ STARTUP(void linkinit())
 	ioport = 0;
 	G.link.open = 0;
 	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
+	updaterxtx(NULL);
 }
 
 STARTUP(static void rxon())
@@ -125,6 +135,7 @@ STARTUP(void linkintr())
 				rxoff();
 			}
 			recvbyte();
+			G.link.rxtx |= 2;
 			
 			if (G.link.hiwat >= 0 &&
 			    qused(&G.link.readq) >= G.link.hiwat) {
@@ -151,6 +162,7 @@ STARTUP(void linkintr())
 			txoff();
 		} else {
 			LINK_BUFFER = ch;
+			G.link.rxtx |= 1;
 			//kprintf(">0x%02x ", ch);
 			
 			if (qused(&G.link.writeq) <= G.link.lowat) {

@@ -79,6 +79,7 @@ struct globals {
 		char control;
 		int readoverflow;
 		int open;
+		int rxtx;
 	} link;
 	
 	/* seed for the pseudo-random number generator */
@@ -162,12 +163,6 @@ struct globals {
 	/* temp/debugging variables */
 	int whereami;
 	int spin;
-	struct {
-		char charbuf[128];
-		int charbufsize;
-		int _errno;
-		jmp_buf getcalcjmp;
-	} user;
 	int nextinode;
 	/* end temp/debugging variables */
 	
@@ -196,7 +191,5 @@ extern int updlock;
 #define current  G._current
 #define loadavtime G._loadavtime
 #define uptime   G._uptime
-
-#define errno  G.user._errno
 
 # endif
