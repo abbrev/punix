@@ -31,7 +31,7 @@ AS	= $(TIGCC)/bin/tigcc
 ASFLAGS	= -c -Wa,-m68881,--warn,-I$(SYSINC),--defsym,$(CALC)= #-l
 
 LD	= $(TIGCC)/bin/tigcc
-LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os -lc
+LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os
 #--optimize-branches --optimize-relocs \
 #          --omit-bss-init
 
