@@ -60,7 +60,7 @@ struct globals {
 	int need_resched;
 	struct list_head runqueues[PRIO_LIMIT];
 	volatile unsigned long ticks;
-	
+
 	struct {
 		unsigned char samp; /* current samples */
 		int samples; /* number of samples within that byte */
@@ -83,13 +83,18 @@ struct globals {
 	/* seed for the pseudo-random number generator */
 	unsigned long prngseed;
 	
+	struct {
+		//struct mount mounts[NMOUNT];
+		// TODO: move all fs-related variables to here
+	} fs;
+	
 	dev_t rootdev, pipedev;
 	struct inode *rootdir;
 	
 	char canonb[CANBSIZ];
 	struct inode inode[NINODE];
-	struct inode *inodelist;
-	struct list_head inode_list;
+	//struct inode *inodelist;
+	//struct list_head inode_list;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
