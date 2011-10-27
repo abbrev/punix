@@ -1,6 +1,6 @@
-GLYPHS2C = (tail -c 1152 | ./bin2c)
-STATUS2C = (tail -c 8 | ./bin2c)
-STATUS2C89 = (tail -c 4 | ./bin2c)
+GLYPHS2C = (tail -c1152 | ./bin2c)
+STATUS2C = (tail -c8 | ./bin2c)
+STATUS2C89 = (tail -c4 | ./bin2c)
 
 GLYPHS = upper.pbm small-upper.pbm uk.pbm us.pbm small-us.pbm sg.pbm tcs.pbm
 STATUS92P = status-none.pbm status-2nd.pbm status-alpha.pbm status-bell.pbm \
