@@ -86,15 +86,13 @@ struct globals {
 	struct {
 		//struct mount mounts[NMOUNT];
 		// TODO: move all fs-related variables to here
+		struct inode *rootdir;
+		struct inode inode[NINODE];
 	} fs;
 	
 	dev_t rootdev, pipedev;
-	struct inode *rootdir;
 	
 	char canonb[CANBSIZ];
-	struct inode inode[NINODE];
-	//struct inode *inodelist;
-	//struct list_head inode_list;
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];

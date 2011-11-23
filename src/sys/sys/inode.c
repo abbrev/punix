@@ -71,7 +71,7 @@ static void delete_inode(struct inode *ip)
 void inodeinit()
 {
 	struct inode *ip;
-	for (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip) {
+	for (ip = &G.fs.inode[0]; ip < &G.fs.inode[NINODE]; ++ip) {
 		ip->i_fs = NULL;
 		ip->i_flag = 0;
 		ip->i_count = 0;
@@ -91,7 +91,7 @@ struct inode *iget(struct filesystem *fs, ino_t num)
 
 retry:
 	freeip = NULL;
-	for (ip = &G.inode[0]; ip < &G.inode[NINODE]; ++ip) {
+	for (ip = &G.fs.inode[0]; ip < &G.fs.inode[NINODE]; ++ip) {
 		if (ip->i_fs == fs && ip->i_num == num) {
 			// we found our inode in the cache
 			// follow the mount
