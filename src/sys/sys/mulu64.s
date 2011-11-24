@@ -232,7 +232,7 @@ mulu64:
 
 	lea	7*2(%sp),%a1		| second partial product
 	lea	7*2+7*2(%sp),%a0	| result
-	add.l	-(%a1),-(%a0)
+	addx.l	-(%a1),-(%a0)		| extend flag is cleared by previous add
 	addx.l	-(%a1),-(%a0)
 	addx.l	-(%a1),-(%a0)
 	addx.w	-(%a1),-(%a0)
@@ -286,7 +286,7 @@ mulu64:
 |add with carry (upper 6 words or 3 longs)
 	lea	6*2(%sp),%a1		| third partial product
 	lea	6*2+6*2(%sp),%a0	| result
-	add.l	-(%a1),-(%a0)
+	addx.l	-(%a1),-(%a0)		| extend flag is cleared by previous add
 	addx.l	-(%a1),-(%a0)
 	addx.l	-(%a1),-(%a0)
 
@@ -318,7 +318,7 @@ mulu64:
 |add with carry (upper 5 words or 2.5 longs)
 	lea	5*2(%sp),%a1		| fourth partial product
 	lea	5*2+5*2(%sp),%a0	| result
-	add.l	-(%a1),-(%a0)
+	addx.l	-(%a1),-(%a0)		| extend flag is cleared by last addx
 	addx.l	-(%a1),-(%a0)
 	addx.w	-(%a1),-(%a0)
 
