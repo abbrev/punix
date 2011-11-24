@@ -34,6 +34,8 @@ size_t	strxfrm(char *__dest, const char *__src, size_t __n);
 
 /* Other common BSD functions */
 char *strsep(char **__stringp, const char *__delim);
+size_t strlcpy(char *dst, const char *src, size_t size);
+size_t strlcat(char *dst, const char *src, size_t size);
 
 int	ffsl(long);
 

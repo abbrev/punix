@@ -12,69 +12,116 @@
 
 /* These are all called from interrupts in entry.s */
 
-STARTUP(void bus_error(union exception_info *eip))
-{
-	if (!USERMODE(eip->bus_error.status_register))
-		panic("bus error");
-	psignal(&P, SIGBUS);
-}
+enum exception_type {
+	EX_BUS,
+	EX_OTHER
+};
 
-STARTUP(void spurious(union exception_info *eip))
-{
-	panic("spurious exception");
-}
+struct exception_signal {
+	enum exception_type type;
+	int signal;
+	const char *name;
+};
 
-STARTUP(void address_error(union exception_info *eip))
+static const struct exception_signal exception_signals[] = {
+	{ EX_OTHER,       0, NULL }, /* initial SP */
+	{ EX_OTHER,       0, NULL }, /* initial PC */
+	{ EX_BUS,    SIGBUS, "access fault" },
+	{ EX_BUS,    SIGBUS, "address error" },
+	{ EX_OTHER,  SIGILL, "illegal instruction" },
+	{ EX_OTHER,  SIGFPE, "integer divide by zero" },
+	{ EX_OTHER,  SIGFPE, "chk instruction" },
+	{ EX_OTHER,  SIGFPE, "trapv instruction" },
+	{ EX_OTHER,  SIGILL, "privilege violation" },
+	{ EX_OTHER, SIGTRAP, "trace" },
+	{ EX_OTHER,  SIGILL, "line 1010" },
+	{ EX_OTHER,  SIGILL, "line 1111" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "" },
+	{ EX_OTHER,       0, "spurious interrupt" }, /* spurious interrupt */
+	{ EX_OTHER,       0, "" }, /* auto-int 1 */
+	{ EX_OTHER,       0, "" }, /* auto-int 2 */
+	{ EX_OTHER,       0, "" }, /* auto-int 3 */
+	{ EX_OTHER,       0, "" }, /* auto-int 4 */
+	{ EX_OTHER,       0, "" }, /* auto-int 5 */
+	{ EX_OTHER,       0, "" }, /* auto-int 6 */
+	{ EX_OTHER, SIGSEGV, "illegal memory access" },
+	{ EX_OTHER,       0, "" }, /* trap #0 (syscall) */
+	{ EX_OTHER, SIGTRAP, "trap #1" },
+	{ EX_OTHER, SIGTRAP, "trap #2" },
+	{ EX_OTHER, SIGTRAP, "trap #3" },
+	{ EX_OTHER, SIGTRAP, "trap #4" },
+	{ EX_OTHER, SIGTRAP, "trap #5" },
+	{ EX_OTHER, SIGTRAP, "trap #6" },
+	{ EX_OTHER, SIGTRAP, "trap #7" },
+	{ EX_OTHER, SIGTRAP, "trap #8" },
+	{ EX_OTHER, SIGTRAP, "trap #9" },
+	{ EX_OTHER, SIGTRAP, "trap #10" },
+	{ EX_OTHER, SIGTRAP, "trap #11" },
+	{ EX_OTHER, SIGTRAP, "trap #12" },
+	{ EX_OTHER, SIGTRAP, "trap #13" },
+	{ EX_OTHER, SIGTRAP, "trap #14" },
+	{ EX_OTHER, SIGTRAP, "trap #15" },
+};
+
+#define SIZEOF_SIGNALS (sizeof(exception_signals) / sizeof(exception_signals[0]))
+
+STARTUP(void handle_exception(union exception_info *eip, int num))
 {
-	if (!USERMODE(eip->address_error.status_register))
-		panic("address error");
-	else {
-		kprintf("address error at PC %06lx\n",
-		        eip->address_error.program_counter);
-		panic("address error in usermode");
+	const struct exception_signal *esp;
+	short sr;
+	if (num < 0 || SIZEOF_SIGNALS <= num)
+		panic("invalid exception number");
+
+	esp = &exception_signals[num];
+	if (esp->type == EX_BUS) {
+		sr = eip->bus_error.status_register;
+		if (!USERMODE(sr)) {
+			kprintf("%s exception\n"
+			        "       function code: 0x%04x\n"
+				"      access address: %p\n"
+				"instruction register: 0x%04x\n"
+				"     status register: 0x%04x\n"
+				"     program counter: %p\n"
+				"\n",
+			        esp->name,
+				eip->bus_error.function_code,
+				eip->bus_error.access_address,
+				eip->bus_error.instruction_register,
+				eip->bus_error.status_register,
+				eip->bus_error.program_counter
+			);
+		}
+	} else {
+		sr = eip->other.status_register;
+		if (!USERMODE(sr)) {
+			kprintf("%s exception\n"
+			        "     status register: 0x%04x\n"
+				"     program counter: %p\n"
+				"       vector offset: 0x%04x\n"
+				"             address: %p\n"
+				"\n",
+			        esp->name,
+				eip->other.status_register,
+				eip->other.program_counter,
+				eip->other.vector_offset,
+				eip->other.address
+			);
+		}
 	}
-	psignal(&P, SIGBUS);
-}
-
-STARTUP(void illegal_instr(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("illegal instruction");
-	else
-		panic("illegal instruction in usermode");
-	psignal(&P, SIGILL);
-}
-
-STARTUP(void zero_divide(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("zero divide");
-	psignal(&P, SIGFPE);
-}
-
-STARTUP(void chk_instr(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("chk instruction");
-}
-
-STARTUP(void i_trapv(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("trapv");
-}
-
-STARTUP(void privilege(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("privileged instruction");
-	psignal(&P, SIGILL);
-}
-
-STARTUP(void trace(union exception_info *eip))
-{
-	if (!USERMODE(eip->other.status_register))
-		panic("trace");
+	if (!USERMODE(sr))
+		panic("exception in kernel");
+	procsignal(current, esp->signal);
 }
 
 #define BUMPNTIME(tv, nsec) do { \
@@ -93,7 +140,6 @@ STARTUP(void trace(union exception_info *eip))
 STARTUP(void hardclock(unsigned short ps))
 {
 	int itimerdecr(struct itimerspec *itp, long nsec);
-	int sig;
 	int whereami;
 	long nsec = TICK;
 	
@@ -139,116 +185,61 @@ STARTUP(void hardclock(unsigned short ps))
 	BUMPNTIME(&realtime_mono, TICK);
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
-	++loadavtime;
-	
-	if (loadavtime >= HZ * 5) {
-#if 0
-		/* sanity check */
-		struct proc *p;
-		int i;
-		int n = 0;
-		int x = spl7();
-		for (i = 0; i < PRIO_LIMIT; ++i)
-			list_for_each_entry(p, &G.runqueues[i], p_runlist)
-				++n;
-		if (G.numrunning != n) {
-			kprintf("warning: numrunning=%d n=%d\n",
-				G.numrunning, n);
-			G.numrunning = n;
-		}
-		splx(x);
-#endif
-		loadav((unsigned long)G.cumulrunning * F_ONE / loadavtime);
-		
-		batt_check();
-		loadavtime = 0;
-		G.cumulrunning = 0;
-#if 0
-		++*(long *)(0x4c00+0xf00-26);
-#endif
-	}
 	
 	sched_tick();
 	
 	if (current) {
 		if (timespecisset(&P.p_itimer[ITIMER_PROF].it_value) &&
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
-			psignal(current, SIGPROF);
+			procsignal(current, SIGPROF);
 		++current->p_cputime;
 	}
 
+	if (USERMODE(ps)) {
+		++current->p_kru.kru_utime;
+		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
+		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
+			procsignal(current, SIGVTALRM);
+	} else {
+		if (current)
+			++current->p_kru.kru_stime;
+	}
+	
+	// decrement the first callout's count-down timer
+	if (G.callout[0].c_func)
+		--G.callout[0].c_dtime;
+	
+	scankb();
+}
+
+void calcusage(void *unused)
+{
 #define CPUTICKS (HZ/2)
 #define DECAY_NUM 3
 #define DECAY_DEN 4
 #define DECAY DECAY_NUM / DECAY_DEN
 #define UNDECAY (DECAY_DEN-DECAY_NUM) / DECAY_DEN
 
-	/* once per second, calculate percent cpu for each process */
-	if ((G.ticks % CPUTICKS) == 0) {
-		struct proc *p;
-		list_for_each_entry(p, &G.proc_list, p_list) {
-			p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
-			p->p_cputime = p->p_cputime * DECAY;
-		}
+	/* calculate percent cpu for each process */
+	struct proc *p;
+	int x;
+	list_for_each_entry(p, &G.proc_list, p_list) {
+		x = splclock();
+#if 1
+		p->p_pctcpu = 25600UL * p->p_cputime * UNDECAY / CPUTICKS;
+		p->p_cputime = p->p_cputime * DECAY;
+#else
+		p->p_pctcpu = 25600UL * p->p_cputime / CPUTICKS;
+		p->p_cputime = 0;
+#endif
+		splx(x);
 	}
-	
-	if (USERMODE(ps)) {
-		++current->p_kru.kru_utime;
-		if (timespecisset(&P.p_itimer[ITIMER_VIRTUAL].it_value) &&
-		    !itimerdecr(&P.p_itimer[ITIMER_VIRTUAL], TICK))
-			psignal(current, SIGVTALRM);
-	} else {
-		if (current)
-			++current->p_kru.kru_stime;
-	}
-	
-	/* do call-outs */
-	
-	if (G.callout[0].c_func == NULL)
-		goto out;
-	
-	--G.callout[0].c_dtime;
-	
-	if (G.calloutlock)
-		goto out;
-	
-	++G.calloutlock;
-	
-	if (G.callout[0].c_dtime <= 0) {
-		int t = 0;
-		struct callout *c1, *c2, c;
-		do {
-			int x;
-			c = G.callout[0];
-			c1 = &G.callout[0];
-			c2 = &G.callout[1];
-			/* remove the first callout before calling it */
-			do {
-				*c1 = *c2++;
-			} while (c1++->c_func);
-			x = spl0();
-			c.c_func(c.c_arg);
-			splx(x);
-			t += c.c_dtime;
-		} while (G.callout[0].c_func != NULL && t <= 0);
-	}
-	G.calloutlock = 0;
-	
-out:	//spl0();
-	
-	scankb();
-	
-	//spl1();
-	
-	if (!USERMODE(ps)) return;
-	
-	/* preempt a running user process */
-	if (G.need_resched) {
-		swtch();
-	}
-	
-	while ((sig = CURSIG(&P)))
-		postsig(sig);
+	timeout(calcusage, NULL, CPUTICKS);
+}
+
+void usageinit()
+{
+	calcusage(NULL);
 }
 
 #if 1
@@ -289,3 +280,51 @@ STARTUP(void updwalltime())
 	++G.seconds;
 }
 #endif
+
+/*
+ * return_from_int runs every time the system returns from an interrupt to the
+ * base interrupt level (0). This means returning to a kernel or user process.
+ */
+void return_from_int(unsigned short ps, void **pc, void **usp)
+{
+	int sig;
+	int x;
+	
+	/* do call-outs */
+	if (mask(&G.calloutlock) == 0) {
+		int t = 0;
+		struct callout *c1, *c2, c;
+		x = spl7();
+		t = G.callout[0].c_dtime;
+		while (G.callout[0].c_func && t <= 0) {
+			c = G.callout[0];
+			c1 = &G.callout[0];
+			c2 = &G.callout[1];
+			/* remove the first callout before calling it */
+			do {
+				*c1 = *c2++;
+			} while (c1++->c_func);
+			t = G.callout[0].c_dtime += c.c_dtime;
+			spl0();
+			c.c_func(c.c_arg);
+			spl7();
+		}
+		spl0();
+	}
+	unmask(&G.calloutlock);
+
+	if (!USERMODE(ps))
+		return;
+
+	/* preempt a running user process */
+	if (G.need_resched)
+		swtch();
+	
+	/*
+	 * TODO:
+	 * check pending signals for current process (and post one or
+	 * more signals using 'pc' and 'usp' if any are pending)
+	 */
+	while ((sig = CURSIG(&P)))
+		postsig(sig);
+}

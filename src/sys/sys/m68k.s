@@ -24,14 +24,26 @@ delay:
 	bne	0b
 	rts
 
+| stack layout:
+| arguments              ^
+| return address         |
+| saved frame pointer <+-+
+| local variables      |
+| arguments            |
+| return address       |
+| saved frame pointer -+<+
+| local variables        |
+|                        |
+| frame pointer (%fp)  --+
 | int backtrace(void **buffer, int size);
 .global backtrace
 backtrace:
-	move.l	4(%sp),%a0
-	move	8(%sp),%d0
+	link	%fp,#0
+	move.l	8(%sp),%a0	| buffer
+	move	12(%sp),%d0	| size
 	
 	move.l	%fp,%a1
-	move.l	%fp,%d2
+	|move.l	%fp,%d2
 	bra	1f
 	
 0:
@@ -41,16 +53,19 @@ backtrace:
 		bne	2f	| not a valid pointer
 		cmp.l	#0x40000,%d1	| upper limit of RAM
 		bhi	2f
-		|cmp.l	%d2,%d1
-		|blo	2f	| we went in the opposite direction
-		move.l	%d1,(%a0)+	| put it in the buffer
+.if 0
+		cmp.l	%d2,%d1
+		blo	2f	| we went in the opposite direction
+		move.l	%a1,%d2		| save this for the next round
+.endif
+		move.l	4(%a1),(%a0)+	| put return address in the buffer
 		
-		move.l	4(%a1),%d2
 		move.l	(%a1),%a1	| get the next frame
 1:		dbra	%d0,0b
-2:	sub.l	4(%sp),%a0
-	move.l	%a0,%d0
+2:	move.l	%a0,%d0
+	sub.l	8(%sp),%d0
 	lsr.l	#2,%d0
+	unlk	%fp
 	rts
 
 | int stacktrace(void **buffer, int size);
@@ -119,3 +134,64 @@ cpupoweroff:
 	move.l	%d2,realtime
 	move	%d0,%sr
 	rts
+
+| int trygetlock(char *lockp);
+| try to get a lock
+| return non-zero if we have a lock, 0 if we don't
+.global trygetlock
+trygetlock:
+	move.l	4(%sp),%a0
+	tas	(%a0)	| try to get the lock
+	seq	%d0	| set %d0=0xff if we got it, 0x00 if not
+	ext.w	%d0	| extend to word
+	rts
+
+| void unlock(char *lockp);
+.global unlock
+unlock:
+	move.l	4(%sp),%a0
+	move.b	#0,(%a0)
+	rts
+
+| masklock:
+| 1 byte atomic lock
+
+| void initmask(masklock *lockp);
+.global initmask
+initmask:
+	move.l	4(%sp),%a0
+	clr.w	(%a0)
+	rts
+
+	.long	0xb00b1e5
+| masklock mask(masklock *lockp);
+| increment *lockp atomically and return the old value
+.global mask
+mask:
+	move.l	4(%sp),%a0
+	move	%sr,%d1
+	move	#0x2700,%sr
+	move.w	(%a0),%d0
+	addq.w	#1,(%a0)
+	move	%d1,%sr
+	rts
+
+/*
+| note: these are defined as macros in ../h/punix.h
+
+| void unmask(masklock *lockp);
+| decrement *lockp atomically
+.global unmask
+unmask:
+	move.l	4(%sp),%a0
+	subq.w	#1,(%a0)
+	rts
+
+| void setmask(masklock *lockp, masklock value);
+| set *lockp to value atomically
+.global setmask
+setmask:
+	move.l	4(%sp),%a0
+	move.w	8(%sp),(%a0)
+	rts
+*/

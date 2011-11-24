@@ -129,7 +129,7 @@ loop:
 	if (ip->i_count < 2) {
 		i_unlock(ip);
 		P.p_error = EPIPE;
-		psignal(&P, SIGPIPE);
+		procsignal(&P, SIGPIPE);
 		return;
 	}
 	

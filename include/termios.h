@@ -53,6 +53,7 @@ struct termios {
 #define IXON    0001000  /* Enable start/stop output control */
 #define IXANY   0002000  /* Enable any character to restart output. */
 #define IXOFF   0004000  /* Enable start/stop input control */
+#define IMAXBEL 0010000  /* Beep and do not flush a full input buffer on a character. */
 
 /* c_oflag bits */
 #define OPOST   0000001  /* Post-process output. */

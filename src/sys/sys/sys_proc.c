@@ -106,14 +106,12 @@ static void release_resources()
 	/* free our resources */
 #if 1
 	memfree(NULL, P.p_pid); /* free all user allocations */
-	if (P.p_ustack) {
-		memfree(P.p_ustack, 0);
-		P.p_ustack = NULL;
+	if (P.p_stack) {
+		memfree(P.p_stack, 0);
+		P.p_stack = NULL;
 	}
-	/*
 	if (P.p_text)
 		memfree(P.p_text, 0);
-	*/
 	if (P.p_data) {
 		memfree(P.p_data, 0);
 		P.p_data = NULL;
@@ -127,9 +125,9 @@ static void release_resources()
 #define PUSHB(stack, value) (*--((char *)(stack)) = (value))
 
 /* XXX: these values need to be loaded from the binary file */
-#define STACKSIZE 1024
-#define USTACKSIZE 2048
-#define UDATASIZE 1
+#define KSTACKSIZE 1024
+#define STACKSIZE 2048
+#define DATASIZE 16
 
 /* the following are inherited by the child from the parent (this list comes from execve(2) man page in FreeBSD 6.2):
 	process ID           see getpid(2)
@@ -147,6 +145,24 @@ static void release_resources()
 Essentially, don't touch those (except for things like signals set to be caught
 are set to default in the new image).
 */
+#define FLAT_MAGIC "bflt"
+
+struct flat_hdr {
+	char magic[4];
+	unsigned long rev;
+	unsigned long text_start;  /* aka entry */
+	unsigned long data_start;
+	unsigned long bss_start;   /* aka data_end */
+	unsigned long bss_end;
+	unsigned long stack_size;
+	unsigned long reloc_start; /* not used yet */
+	unsigned long reloc_count; /* not used yet */
+	unsigned long flags;       /* not used yet */
+	unsigned long filler[6];   /* not used yet */
+};
+
+extern struct flat_hdr bflt_header;
+
 void sys_execve()
 {
 	struct a {
@@ -166,11 +182,13 @@ void sys_execve()
 	
 	void *text = NULL;
 	char *data = NULL;
-	char *ustack = NULL;
-	char *ustackstart = NULL;
-	size_t textsize;
-	size_t datasize;
-	size_t ustacksize;
+	char *stack = NULL;
+	char *stacktop = NULL;
+	ssize_t textsize = 0;
+	ssize_t datasize = DATASIZE;
+	ssize_t stacksize = STACKSIZE;
+
+	struct flat_hdr *bflt = NULL;
 	
 	long size = 0;
 	char **ap;
@@ -181,6 +199,7 @@ void sys_execve()
 	/* XXX */
 	void sh_start(), init_start(), bittybox_start(), time_start();
 	void getty_start(), login_start(), uterm_start();
+	void tests_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
@@ -207,9 +226,47 @@ void sys_execve()
 		text = login_start;
 	else if (!strcmp(pathname, "uterm"))
 		text = uterm_start;
+	else if (!strcmp(pathname, "tests"))
+		text = tests_start;
+	else if (!strcmp(pathname, "bflt"))
+		bflt = &bflt_header;
 	else {
 		P.p_error = ENOENT;
 		goto error_noent;
+	}
+	
+	if (bflt) {
+		int noexec = 0;
+		/* TODO: more validation */
+		if (memcmp(bflt->magic, FLAT_MAGIC, sizeof(bflt->magic))) {
+			kprintf("bad magic\n");
+			noexec = 1;
+		}
+		if (bflt->rev != 4) {
+			kprintf("bad rev (%ld)\n", bflt->rev);
+			noexec = 1;
+		}
+		textsize = bflt->data_start - bflt->text_start;
+		stacksize = bflt->stack_size;
+		/* data is data + bss */
+		datasize = bflt->bss_end - bflt->data_start;
+		if (textsize < 0 || textsize & 1) {
+			kprintf("invalid textsize (%ld)\n", textsize);
+			noexec = 1;
+		}
+		if (stacksize < 0 || stacksize & 1) {
+			kprintf("invalid stacksize (%ld)\n", stacksize);
+			noexec = 1;
+		}
+		if (datasize < 0 || datasize & 1) {
+			kprintf("invalid datasize (%ld)\n", datasize);
+			noexec = 1;
+		}
+		if (noexec) {
+			P.p_error = ENOEXEC;
+			return;
+		}
+
 	}
 	
 	/* set up the user's stack (argc, argv, and env) */
@@ -228,21 +285,35 @@ void sys_execve()
 	size += (envc+1)*sizeof(char *);
 
 	size += sizeof(int); /* for argc */
+
+	if (size > ARG_MAX) {
+		P.p_error = E2BIG;
+		return;
+	}
 	
 	/* allocate the user stack */
-	ustacksize = USTACKSIZE + size;
-	ustack = stackalloc(&ustacksize);
-	if (!ustack) {
-		goto error_ustack;
+	stacksize += size;
+	stacktop = stackalloc(&stacksize);
+	if (!stacktop) {
+		goto error_stack;
 	}
-	//kprintf("execve(): ustack=%08lx\n", ustack);
-	ustackstart = ustack - ustacksize;
+	//kprintf("execve(): stack=%08lx\n", stacktop);
+	stack = stacktop - stacksize;
 	
 	/* allocate the data section */
-	datasize = UDATASIZE;
-	data = memalloc(&datasize, 0);
-	if (!data) {
-		goto error_data;
+	if (datasize) {
+		data = memalloc(&datasize, 0);
+		if (!data) {
+			goto error_data;
+		}
+	}
+
+	/* allocate the text section */
+	if (textsize) {
+		text = memalloc(&textsize, 0);
+		if (!text) {
+			goto error_text;
+		}
 	}
 	//kprintf("execve():   data=%08lx\n", data);
 	//printheaplist();
@@ -256,31 +327,28 @@ void sys_execve()
 	strncpy(current->p_name, argp[0], P_NAMELEN - 1);
 	current->p_name[P_NAMELEN-1] = '\0';
 
-	/* increment reference counts on all open files */
-	if (P.p_flag & P_VFORK) {
-		for (i = 0; i < NOFILE; ++i) {
-			struct file *fp;
-			fp = P.p_ofile[i];
-			if (!fp) continue;
-			++fp->f_count;
-		}
-	}
-
 	size = (size + 1) & ~1; /* size must be even */
-	s = ustack - size; /* start of strings */
+	s = stacktop - size; /* start of strings */
 	v = (char **)s - (argc + envc + 2); /* start of vectors */
 	
-	ustack = (char *)v;
-	PUSHW(ustack, argc);
+	stacktop = (char *)v;
+	PUSHW(stacktop, argc);
 	
 	/* copy arguments and environment */
 	copyenv(&v, &s, argp);
 	copyenv(&v, &s, envp);
 	
-	/* free our old user stack and data segment */
+	/* copy text to RAM if it's BFLT */
+	if (bflt && textsize) {
+		memmove(text, ((void *)bflt) + bflt->text_start, textsize);
+	}
+
+	/* free our old user memory */
 	release_resources();
-	P.p_ustack = ustackstart;
-	P.p_text = text;
+
+	P.p_stack = stack;
+	if (textsize)
+		P.p_text = text;
 	P.p_data = data;
 	
 	//P.p_datasize = datasize;
@@ -289,7 +357,11 @@ void sys_execve()
 	
 	/* go to the new user context */
 	P.p_syscall_ctx->pc = text;
-	P.p_syscall_ctx->usp = ustack;
+	P.p_syscall_ctx->usp = stacktop;
+	P.p_syscall_ctx->fp = 0; // clear out the frame pointer
+	// XXX: we ought to clear out all registers here while we're at it
+	
+	sigemptyset(&P.p_signals.sig_catch);
 	
 	return;
 	
@@ -317,16 +389,18 @@ void sys_execve()
 	 * free memory for user stack
 	 * return
 	 */
+error_text:
+	memfree(text, 0);
 error_data:
-	memfree(ustackstart, 0);
-error_ustack: ;
+	memfree(stack, 0);
+error_stack: ;
 error_noent: ;
 }
 
 /* fill in the rusage structure from the proc */
 static void krusage_to_rusage(struct krusage *kp, struct rusage *rp)
 {
-	int x = spl7();
+	int x = splclock();
 	rp->ru_utime.tv_sec = kp->kru_utime / HZ;
 	rp->ru_utime.tv_usec = (kp->kru_utime % HZ) * 1000000L / HZ;
 	rp->ru_stime.tv_sec = kp->kru_stime / HZ;
@@ -352,8 +426,8 @@ void doexit(int status)
 	
 	spl7();
 	P.p_flag &= ~P_TRACED;
-	P.p_sigignore = ~0;
-	P.p_sig = 0;
+	sigemptyset(&P.p_signals.sig_ignore);
+	sigemptyset(&P.p_signals.sig_pending);
 #if 0
 	ilock(P.p_cdir);
 	i_unref(P.p_cdir);
@@ -391,34 +465,34 @@ void doexit(int status)
 	P.p_waitstat = status;
 	/* add our children's rusage to our own so our parent can retrieve it */
 	kruadd(&P.p_kru, &P.p_ckru);
+	mask(&G.calloutlock);
 	list_for_each_entry(q, &G.proc_list, p_list) {
 		if (q->p_pptr == current) {
 			q->p_pptr = G.initproc;
 			wakeup(&G.proclist);
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
-				psignal(q, SIGKILL);
+				procsignal(q, SIGKILL);
 			} else if (q->p_status == P_STOPPED) {
-				psignal(q, SIGHUP);
-				psignal(q, SIGCONT);
+				procsignal(q, SIGHUP);
+				procsignal(q, SIGCONT);
 			}
 		}
 	}
+	unmask(&G.calloutlock);
 	
 	/* close all open files */
-	if (!(P.p_flag & P_VFORK)) {
-		for (i = 0; i < NOFILE; ++i) {
-			struct file *fp;
-			fp = P.p_ofile[i];
-			if (!fp) continue;
-			P.p_ofile[i] = NULL;
-			fdflags_to_oflag(i, 0L);
-			closef(fp);
-		}
+	for (i = 0; i < NOFILE; ++i) {
+		struct file *fp;
+		fp = P.p_ofile[i];
+		if (!fp) continue;
+		P.p_ofile[i] = NULL;
+		fdflags_to_oflag(i, 0L);
+		closef(fp);
 	}
 	release_resources();
-	memfree(P.p_stack, 0);
-	P.p_stack = NULL;
+	memfree(P.p_kstack, 0);
+	P.p_kstack = NULL;
 	
 	void realitexpire(void *);
 	/* remove pending ITIMER_REAL timeouts */
@@ -432,7 +506,7 @@ void doexit(int status)
 	
 	sched_exit(current);
 
-	psignal(P.p_pptr, SIGCHLD);
+	procsignal(P.p_pptr, SIGCHLD);
 	swtch();
 }
 
@@ -478,15 +552,10 @@ void sys_vfork()
 #if 1
 	struct proc *cp = NULL;
 	pid_t pid;
-	void *stack = NULL;
-	size_t stacksize = STACKSIZE;
+	void *kstack = NULL;
+	size_t kstacksize = KSTACKSIZE;
+	int i;
 	void setup_env(struct context *, struct syscallframe *sfp, long *sp);
-	
-	/* XXX: remove this block once vfork is completely written */
-	if (0) {
-		P.p_error = ENOMEM;
-		return;
-	}
 	
 	/* spl7(); */
 	
@@ -505,16 +574,24 @@ void sys_vfork()
 	cp->p_pctcpu = 0;
 	
 	/* allocate a kernel stack for the child */
-	stack = stackalloc(&stacksize);
-	if (!stack)
-		goto stackp;
+	kstack = stackalloc(&kstacksize);
+	if (!kstack)
+		goto kstackp;
 	//kprintf("vfork(): stack=%08lx\n", stack);
 	
 	/* At this point there's no turning back! */
 	
+	/* increment reference counts on all open files */
+	for (i = 0; i < NOFILE; ++i) {
+		struct file *fp;
+		fp = P.p_ofile[i];
+		if (!fp) continue;
+		++fp->f_count;
+	}
+
 	list_add_tail(&cp->p_list, &G.proc_list);
 	
-	cp->p_stack = stack - stacksize;
+	cp->p_kstack = kstack - kstacksize;
 	cp->p_flag |= P_VFORK;
 	cp->p_status = P_VFORKING;
 
@@ -523,12 +600,12 @@ void sys_vfork()
 	//kprintf("vfork(): ctx.pc =%08lx\n", cp->p_ctx.pc);
 
 	/* push return address and SR onto the stack */
-	PUSHL(stack, (long)cp->p_ctx.pc);
-	PUSHW(stack, 0x0000); /* user mode SR */
-	PUSHL(stack, 0); /* dummy return address */
+	PUSHL(kstack, (long)cp->p_ctx.pc);
+	PUSHW(kstack, 0x0000); /* user mode SR */
+	PUSHL(kstack, 0); /* dummy return address */
 	
 	cp->p_ctx.pc = return_from_vfork;
-	cp->p_ctx.sp = stack;
+	cp->p_ctx.sp = kstack;
 	cp->p_ctx.sr = 0x2000; /* supervisor mode SR */
 	sched_fork(cp);
 
@@ -542,7 +619,7 @@ void sys_vfork()
 	wakeup(current); /* ??? */
 #endif
 	return;
-stackp:
+kstackp:
 	pfree(cp);
 nomem:
 #endif
@@ -564,6 +641,7 @@ static void dowait4(pid_t pid, int *status, int options, struct rusage *rusage)
 	int nfound = 0;
 	int error;
 	
+	mask(&G.calloutlock);
 loop:
 	list_for_each_entry(p, &G.proc_list, p_list)
 	if (p->p_pptr == current) {
@@ -594,15 +672,15 @@ loop:
 	
 	if (!nfound) {
 		P.p_error = ECHILD;
-		return;
+		goto out;
 	}
 	if (options & WNOHANG) {
-		return;
+		goto out;
 	}
 	error = tsleep(current, PWAIT|PCATCH, 0);
 	if (!error) goto loop;
 	P.p_error = error;
-	return;
+	goto out;
 	
 found:
 	P.p_retval = p->p_pid;
@@ -623,6 +701,8 @@ found:
 		list_del(&p->p_list);
 		pfree(p);
 	}
+out:
+	unmask(&G.calloutlock);
 }
 
 /* first arg is the same as wait */
@@ -674,6 +754,11 @@ STARTUP(void sys_wait4())
 void sys_getpid()
 {
 	P.p_retval = P.p_pid;
+}
+
+void sys_getpgrp()
+{
+	P.p_retval = P.p_pgrp;
 }
 
 void sys_getppid()
@@ -880,7 +965,6 @@ void sys_getrusage()
 		struct rusage *r_usage;
 	} *ap = (struct a *)P.p_arg;
 	
-	int x;
 	struct rusage ru;
 	struct krusage *krup;
 	
@@ -896,15 +980,13 @@ void sys_getrusage()
 		goto error;
 	}
 	
-	x = spl1();
 	krusage_to_rusage(krup, &ru);
-	splx(x);
 	if (copyout(ap->r_usage, &ru, sizeof(ru)))
 		P.p_error = EFAULT;
 error:	;
 }
 
-void sys_uname()
+STARTUP(void sys_uname())
 {
 	struct a {
 		struct utsname *name;

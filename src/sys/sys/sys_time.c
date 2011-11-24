@@ -229,7 +229,7 @@ STARTUP(void realitexpire(void *vp))
 	 */
 	if (!timespeccmp(&tp->it_value, &rt, >)) {
 		//kprintf("SIGALRM\n");
-		psignal(p, SIGALRM);
+		procsignal(p, SIGALRM);
 		
 		if (!timespecisset(&tp->it_interval)) {
 			timespecclear(&tp->it_value);
@@ -290,6 +290,12 @@ STARTUP(void sys_setitimer())
 	
 	} else {
 		/* treat it as a zero timer (interval=value=0) */
+		/*
+		 * NB: This is the behavior of Linux. The IEEE1003.1 and SuS
+		 * standards do not specify what to do when the value argument
+		 * is NULL. Another logical course of action would be to
+		 * return -1 and set errno to EINVAL or EFAULT.
+		 */
 		memset(&itv, 0, sizeof(itv));
 	}
 	

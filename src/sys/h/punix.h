@@ -14,6 +14,47 @@
 
 extern int badbuffer(void *base, size_t size);
 
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
+
+#define TRACE2(f, l) do { *(long *)(0x4c00+0xf00-22) = f " (" STRING(l) ")"; } while (0)
+#define TRACE() TRACE2(__FILE__, __LINE__)
+
+/*
+ * masklock is used for soft interrupts (see trap.c).
+ * Critical sections which must not be interrupted by a soft interrupt, but
+ * can be interrupted by hard interrupts, should use a masklock. The typical
+ * usage of a masklock in a soft interrupt is like this:
+ *
+ * if (mask(&lock) == 0) {
+ *   // ...
+ * }
+ * unmask(&lock);
+ *
+ * In a critical section it can be used like this:
+ * mask(&lock);
+ * // critical section
+ * unmask(&lock);
+ *
+ * OR like this:
+ * int m = mask(&lock);
+ * mask(&lock);
+ * ...
+ * setmask(&lock, m);
+ *
+ * setmask() atomically sets a mask to the given value, which can be used to
+ * restore a masklock after incrementing it an arbitrary number of times.
+ *
+ * mask() can be nested up to 65535 times (which should be more than enough).
+ */
+typedef volatile int masklock;
+masklock mask(masklock *);
+void unmask(masklock *);
+void setmask(masklock *, masklock v);
+
+#define unmask(m) (void)(--*m)
+#define setmask(m, v) (void)(*m = v)
+
 extern const char
 uname_sysname[],
 uname_nodename[],

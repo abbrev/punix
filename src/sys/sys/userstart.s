@@ -18,116 +18,6 @@
  */
 
 .section _st1,"x"
-SYS_exit         = 1	/* put these in a header please */
-SYS_read         = 3
-SYS_write        = 4
-SYS_open         = 5
-SYS_close        = 6
-SYS_kmalloc      = 17
-SYS_kfree        = 18
-SYS_getpid       = 20
-SYS_uname        = 23
-SYS_getuid       = 24
-SYS_getppid      = 27
-SYS_sysctl       = 30
-SYS_sigaction    = 31
-SYS_dup          = 41
-SYS_getgid       = 47
-SYS_ioctl        = 54
-SYS_execve       = 59
-SYS_pause        = 63
-SYS_vfork        = 66
-SYS_getgroups    = 79
-SYS_setitimer    = 83
-SYS_wait         = 87
-SYS_getpriority  = 96
-SYS_gettimeofday = 116
-SYS_getrusage    = 117
-SYS_settimeofday = 122
-SYS_adjtime      = 140
-SYS_getloadavg1  = 160
-SYS_poweroff = 69
-
-.macro	sys call
-	move	#SYS_\call,%d0
-	trap	#0
-.endm
-
-.macro	mksyscall name
-	.global \name
-\name:
-	sys	\name
-	bcs	cerror
-	rts
-.endm
-
-.macro	mksyscalla name
-	.global \name
-\name:
-	sys	\name
-	bcs	caerror
-	move.l	%d0,%a0
-	rts
-.endm
-
-.even
-	.long	0xbeef0001	| for debugging ;)
-	
-	.global _exit
-_exit:
-	sys	exit
-0:	nop
-	bra.s	0b
-
-mksyscall	open
-mksyscall	close
-mksyscall	read
-mksyscall	write
-mksyscall	execve
-mksyscall	setitimer
-mksyscall	gettimeofday
-mksyscall	settimeofday
-mksyscall	getrusage
-mksyscall	getpid
-mksyscall	uname
-mksyscall	getppid
-mksyscall	sigaction
-mksyscall	dup
-mksyscall	getpriority
-mksyscall	getloadavg1
-mksyscalla	kmalloc
-mksyscall	kfree
-mksyscall	ioctl
-mksyscall	getuid
-mksyscall	getgid
-mksyscall	getgroups
-mksyscall	wait
-|mksyscall	vfork
-mksyscall	pause
-mksyscall	adjtime
-mksyscall	poweroff
-mksyscall	sysctl
-
-.global cerror, caerror
-/*
- * common routine to handle errors from system calls: set errno appropriately
- * and return -1.
- */
-cerror:
-	| move	%d0,errno
-	move	%d0,-(%sp)
-	jbsr	seterrno
-	lea.l	(2,%sp),%sp
-	moveq.l	#-1,%d0
-	rts
-
-caerror:
-	| move	%d0,errno
-	move	%d0,-(%sp)
-	jbsr	seterrno
-	lea.l	(2,%sp),%sp
-	sub.l	%a0,%a0
-	rts
 
 .macro mkstart name
 .global \name\()_start
@@ -144,7 +34,7 @@ caerror:
 	jbsr	\name\()_main	| \name\()_main(argc, argv, env)
 	
 	move	%d0,-(%sp)
-	bsr	_exit
+	jbsr	exit
 	bra	.
 .endm
 
@@ -155,6 +45,37 @@ mkstart time
 mkstart getty
 mkstart login
 mkstart uterm
+mkstart tests
+
+.global bflt_header
+bflt_header:
+	.ascii "bflt"
+	.long 4
+	.long bflt_text_start-bflt_header
+	.long bflt_data_start-bflt_header | data_start
+	.long bflt_bss_start-bflt_header | data_end
+	.long bflt_bss_end-bflt_header | bss_end
+	.long 1024 | stack_size
+	.long bflt_reloc_start-bflt_header | reloc_start
+	.long 0 | reloc_count
+	.long 1 | flags
+bflt_text_start:
+	move.l	#1f-0f,-(%sp)
+	pea.l	0f
+	move	#1,-(%sp)
+	jbsr	write
+	lea.l	10(%sp),%sp
+
+	move	#69,-(%sp)
+	jbsr	_Exit
+0:	.ascii "Hello world from bflt!\n"
+1:
+	.even
+bflt_data_start:
+bflt_bss_start:
+bflt_bss_end:
+bflt_reloc_start:
+
 
 	.global fadd
 | float fadd(float a, float b);

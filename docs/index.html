@@ -28,36 +28,29 @@ dt {
 
 <p>The Punix kernel is a standard monolithic kernel design, similar to the BSD's and clones. I'm using a lot of code from 2.11BSD, 4.4BSD-Lite, V6/V7 UNIX, Linux, UZIX, and Minix (in that order of amount of code, it seems), and I'm structuring the source tree somewhat similar to BSD, so if you understand that you probably can understand my kernel.</p>
 
-<p>Currently the kernel is very incomplete. It boots, shows the boot-up screen, and then execv's a user program. Since the kernel still does not have a filesystem, the execv() function is hard-coded to run a specific function in user mode. This user program is used only to test the virtual terminal and various system calls at the moment.</p>
-
-<p>The preemptive scheduler currently uses nice values and processor usage history to calculate a process's priority level, which in turn determines how much processor time the process will receive on average. This results in good process response times and is much how other Unix-like systems work.</p>
+<p>The kernel is nearly complete as of this writing. Preemptive scheduling works fairly well, and the terminal is usable. Processes can spawn new processes using the <code>vfork()</code> and <code>execve()</code> system calls. The file system is the last major feature that is still largely incomplete. Because of the missing file system, <code>execve()</code> currently understands a few hard-coded command names (eg, "sh" and "top"). Work is underway to develop the file system and remove this final obstacle.</p>
 
 <h2>Building Punix</h2>
 
-<p>To build Punix you will need <a href="http://tigcc.ticalc.org/">TIGCC</a> and <a href="http://members.chello.at/gerhard.kofler/kevin/ti89prog/flashosa.zip">flashos.a</a>. Just put unzip flashosa.zip in the directory $TIGCC/lib after installing TIGCC and TIGCC will find it there. Also a Unix-like environment is preferable because of the use of makefiles and the Netpbm image utilities.</p>
+<p>To build Punix you will need <a href="http://trac.godzil.net/gcc4ti/">GCC4TI</a> (last I checked, TIGCC has unfixed bugs in the official release which renders Punix unusable) and <a href="http://members.chello.at/gerhard.kofler/kevin/ti89prog/flashosa.zip">flashos.a</a>. Just unzip flashosa.zip into the directory $TIGCC/lib after installing GCC4TI, and GCC4TI will automatically find it there. Also, a Unix-like environment is prefered because of the use of makefiles and the Netpbm image utilities. You may have luck using MSYS or Cygwin, but these are not supported.</p>
 
-<p>To compile and link Punix, go to the directory src/sys/sys and run the command 'make'. If everything compiles and links properly, you will have a file named punix-9x.tib which you can use in an emulator like <a href="http://lpg.ticalc.org/prj_tiemu/">TiEmu</a>.</p>
+<p>To build Punix, go to the Punix root directory (the one that contains the src and tools directories, among others) in a shell and run <code>make</code>. This will build the kernel for all supported platforms (currently TI-92+ and TI-89) and the libraries. Once built, the kernels will be named punix-89.tib and punix-9x.tib. These files can be used in an emulator like <a href="http://lpg.ticalc.org/prj_tiemu/">TiEmu</a>.</p>
 
-<h3>When things go wrong</h3>
+<h2>Issues</h2>
 
-<p>Occasionally you might get a revision of the source code that will not compile correctly. This is normal and should be expected because the code is still alpha quality. If you can fix the issue yourself, feel free to do so, and please let me know about this issue by email; also let me know which revision you are using too.</p>
+<p>You will likely encounter problems while trying to build Punix. If you can't solve them problem yourself, feel free to contact me, including as much detail about the problem as you can. It may be an issue I'm familiar with. Good luck!</p>
 
-<p>Common errors and their fixes:</p>
+<h2>Roadmap</h2>
 
-<dl>
-<dt>/usr/local/tigcc/lib/flashos.a: Warning: Section size of xxxxx bytes is larger than requested size of 24576.</dt>
+<p>Here is a general roadmap of work to be done on Punix.</p>
 
-<dd>This is because the machine code is too large in the "startup" section, which is only 24 kilobytes large on the TI-89/TI-92+. To fix this, you can remove the "STARTUP()" that surrounds some functions, particularly large functions. This will move the code to the non-startup section but does not otherwise affect the code's behavior.</dd>
+<ul>
+<li>Complete the file system in the kernel</li>
+<li>Complete the floating-point emulator in the kernel (a non-essential feature)</li>
+<li>Port Punix to the TI-89Ti (and add other features like USB)</li>
+<li>Build a userland development environment (ie, cross compiler and tools)</li>
+<li>Port libraries, tools, applications, and games to Punix</li>
+</ul>
 
-<dt>xxxxx.o: Error: Unresolved reference to `yyyyy'.</dt>
-
-<dd>This is probably because I added a function or changed a function's name and then made an incomplete commit to the repository. That would be my fault. If it's simply a name change, you may be able to figure out which function it's supposed to be and rename it yourself. If not, you can just check out a different revision in the meantime.</dd>
-</dl>
-
-<p>For any other problem, please let me know about it and I will probably add it to this list (and also fix the code while I'm at it :) ).
-
-<h2>Other issues</h2>
-
-<p>There is a bug in the linker (ld-tigcc) that comes with the current release of TIGCC that causes part of the vector table to be overwritten with bogus values (it's the certificate header or something like that). You can get a bug-fixed version from the TIGCC project's CVS repository, which I recommend you do if you plan to do any serious development on Punix. You can even try asking TIGCC's maintainer,  Kevin Kofler (kevin.kofler@chello.at), to send you a pre-built binary for Fedora 8 or 9 if you have one of those systems.</p>
 </body>
 </html>

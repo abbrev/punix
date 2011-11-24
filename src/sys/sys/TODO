@@ -1,5 +1,10 @@
 Punix kernel TODO, in roughly chronological order:
 
+* add soft interrupts
+	* can use existing "callout" mechanism with few changes
+	* return from kernel to userspace through a common routine; this routine will handle callouts, pending signals, etc
+	* this will allow us to remove interrupt masks in functions like wakeup() as they will not be called from an interrupt context. the result of this is device drivers will run smoother, which is especially important for the audio device (ie, no more stutters)
+
 * finish writing process management
 	* signals (somewhat working but needs to be finished)
 	* vfork (basic functionality works; needs to handle memory, file descriptors, etc.)

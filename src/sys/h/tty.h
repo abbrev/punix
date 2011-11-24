@@ -41,8 +41,10 @@ struct tty {
 #define CKILL   CTRL('U')
 #define CQUIT   CTRL('X')
 #define CINTR   CTRL('C')
+#define CSUSP   CTRL('Z')
 #define CSTOP   CTRL('S')
 #define CSTART  CTRL('Q')
+#define CREPRINT CTRL('R')
 
 #define ISOPEN 04
 #define TTSTOP 0400

@@ -78,6 +78,8 @@ struct globals {
 		struct queue readq, writeq;
 		char control;
 		int readoverflow;
+		int open;
+		int rxtx;
 	} link;
 	
 	/* seed for the pseudo-random number generator */
@@ -96,7 +98,7 @@ struct globals {
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
-	int calloutlock;
+	masklock calloutlock;
 	
 	struct buf avbuflist; /* list of buf */
 	struct list_head avbuf_list; /* list of available buf */
@@ -121,24 +123,20 @@ struct globals {
 		unsigned char cursorvisible;
 		unsigned char tabstops[(60+7)/8];
 		struct state const *vtstate;
-		const struct glyphset *glyphset, *charsets[2];
-		unsigned char charset;
+
+		const struct glyph *designatedcharsets[4]; // G0..G3
+		struct glyph activecharset[256];
+		int activecharsets[2]; // GL, GR
+
 		unsigned char margintop, marginbottom;
 		struct pos {
 			int row, column;
 		} pos;
 #if 0
-		struct row {
-			struct cell {
-				struct attrib {
-					int bold:1;
-					int underscore:1;
-					int blink:1;
-					int reverse:1;
-				} attrib;
-				int c;
-			} cells[60];
-		} screen[20];
+		struct cell {
+			char gr;
+			char c;
+		} screen[20][60];
 #endif
 		struct tty vt[1];
 		
@@ -168,12 +166,6 @@ struct globals {
 	/* temp/debugging variables */
 	int whereami;
 	int spin;
-	struct {
-		char charbuf[128];
-		int charbufsize;
-		int _errno;
-		jmp_buf getcalcjmp;
-	} user;
 	/* end temp/debugging variables */
 	
 	/* heap static variables (this must be last!) */
@@ -201,7 +193,5 @@ extern int updlock;
 #define current  G._current
 #define loadavtime G._loadavtime
 #define uptime   G._uptime
-
-#define errno  G.user._errno
 
 # endif

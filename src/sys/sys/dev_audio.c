@@ -10,6 +10,7 @@
 #include "queue.h"
 #include "inode.h"
 #include "globals.h"
+#include "process.h"
 
 #define SAMPLESPERSEC 8192
 #define SAMPLESPERBYTE 4
@@ -23,12 +24,13 @@
 STARTUP(void audioinit())
 {
 	qclear(&G.audio.q);
+	kprintf("&G.audio.q=%p\n", &G.audio.q);
 	ioport = 0;
 }
 
 STARTUP(static void startaudio())
 {
-	LINK_CONTROL = 0;
+	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
 	LINK_DIRECT = 0xfc;
 	INT5RATE &= ~0x30; /* set rate to OSC2 / 2^5 */
 	INT5VAL = 257 - 2; /* 16384 / 2 = 8192 */
@@ -43,18 +45,23 @@ STARTUP(static void stopaudio())
 {
 	G.audio.play = 0;
 	
-	LINK_CONTROL = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX; /* XXX should we just let dev_link set these flags? */
 	INT5RATE |= 0x30;
 	INT5VAL = 0x00;
 }
 
 STARTUP(static void dspsync())
 {
-	int x = spl5();
-	while (!qisempty(&G.audio.q) || G.audio.samples) {
-		G.audio.lowat = 0; /* wait until the audio queue is empty */
-		slp(&G.audio.q, 0);
+	int x = spl1();  // inhibit soft interrupts
+	while (G.audio.play && !qisempty(&G.audio.q)) {
+		if (qused(&G.audio.q) < 4) { // XXX constant
+			// samples will be played before slp() would even finish
+			cpuidle();
+		} else {
+			G.audio.lowat = 0;
+			slp(&G.audio.q, 0);
+		}
 	}
+out:
 	splx(x);
 }
 
@@ -70,14 +77,12 @@ STARTUP(void audiointr())
 	
 	if (!G.audio.samples) {
 		int c;
-		if (G.audio.q.q_count <= G.audio.lowat) {
-			G.audio.lowat = -1;
-			wakeup(&G.audio.q);
-		}
-		if ((c = qgetc(&G.audio.q)) < 0)
-			return;
+		if ((c = qgetc_no_lock(&G.audio.q)) < 0)
+			goto out;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
+		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+4*4);
+		*spinner = (~0L) << 32L*qfree(&G.audio.q)/QSIZE;
 	}
 	
 	/* put this sample into the lower 2 bits */
@@ -85,6 +90,14 @@ STARTUP(void audiointr())
 	--G.audio.samples;
 	
 	++G.audio.optr;
+out:
+	if (qused(&G.audio.q) <= G.audio.lowat) {
+		if (G.audio.lowat != 0 && qisempty(&G.audio.q))
+			kprintf("audio buffer underrun!\n");
+		G.audio.lowat = -1;
+		spl4();
+		defer(wakeup, &G.audio.q);
+	}
 }
 
 STARTUP(int audio_open(struct file *fp, struct inode *ip))
@@ -124,32 +137,38 @@ STARTUP(ssize_t audio_read(struct file *fp, void *buf, size_t count, off_t *pos)
  * audio queue (we have only about 12e6/8192 = 1464 cycles between each audio
  * interrupt to copy data to the audio queue).
  */
-#define MAXCOPYSIZE 16
+#define MAXCOPYSIZE QSIZE //8
+#define MAXDRAIN (QSIZE / 2)
 
 /* write audio samples to the audio queue */
 STARTUP(ssize_t audio_write(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	int x;
 	size_t oldcount = count;
+	size_t n;
+	unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-6*30+4*4);
 
 	while (count) {
-	
-		size_t n;
+		*spinner = 0xffffffff;
 		n = b_to_q(buf, MIN(count, MAXCOPYSIZE), &G.audio.q);
 		buf += n;
 		count -= n;
-		if (n == 0) {
-			if (!G.audio.play) /* playback is halted */
-				return oldcount - count;
+		if (count == 0 || !G.audio.play) /* playback is halted */
+			break;
 			
-			x = spl5();
-			G.audio.lowat = QSIZE - MAXCOPYSIZE;
-			
-			slp(&G.audio.q, 1);
-			splx(x);
-		}
+		/*
+		 * we filled the buffer practically full, so wait until it
+		 * drains low enough for us to fill it up again
+		 */
+		*spinner = 0xffff0000;
+	
+		x = spl1();
+		G.audio.lowat = QSIZE - MIN(count, MAXDRAIN);
+		
+		slp(&G.audio.q, 1);
+		splx(x);
 	}
-	return count;
+	return oldcount - count;
 }
 
 /* some OSS ioctl() codes to support:

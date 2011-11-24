@@ -37,6 +37,7 @@ the_beginning:
 	| XXX: isn't the %sp initialized from the vectors table??
 	
 	moveq	#0,%d0
+	move.l	%d0,%fp			| start with no frame
 	
 	| Setup IO ports
 	lea	0x600000,%a5		| Address of Port IO 6
@@ -140,7 +141,7 @@ zero_start = 0x5c00+4+8
 	|bsr	boot_loader
 	
 	bsr	kmain
-	
+
 	| set up a trap frame and "return" to icode
 	lea	-512(%sp),%a0	| XXX constant
 	move.l	%a0,%usp	| set initial stack for icode
@@ -156,13 +157,13 @@ zero_start = 0x5c00+4+8
  * stored at "/etc/init". If that fails, it prints a message and _exit()'s.
  */
 icode:
-	pea	_env(%pc)	| env ("TERM=punix")
+	pea	_env(%pc)	| env (empty)
 	pea	_argv(%pc)	| argv ("/etc/init", "-00000")
 	pea	_argv0(%pc)	| path ("/etc/init")
-	bsr	execve
+	jbsr	execve
 	
 	move	#-1,-(%sp)	| status
-	bsr	_exit
+	jbsr	_Exit
 
 	pea	1f(%pc)
 	jbsr	panic
@@ -174,17 +175,12 @@ icode:
 | strings
 _argv0:	.asciz	"/etc/init"
 _argv1:	.asciz	"-00000"	| what is this exactly?
-_env0:	.asciz	"HOME=/"
-_env1:	.asciz	"TERM=punix"
 
 | vectors
 	.even
 _argv:	.long	_argv0		| "init"
 	.long	_argv1
-	.long	0		| NULL
-_env:	.long	_env0
-	.long	_env1
-	.long	0		| NULL
+_env:	.long	0		| NULL
 
 .even
 InstallVectors:

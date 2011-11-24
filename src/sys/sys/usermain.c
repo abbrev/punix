@@ -25,6 +25,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
@@ -40,6 +41,7 @@
 #include <sys/sysctl.h>
 //#include <sys/ioctl.h>
 
+#define _exit _Exit
 
 /*
  * XXX: The following includes should not be needed in a real user progam.
@@ -66,64 +68,6 @@ void kfree(void *ptr);
 void seterrno(int e)
 {
 	errno = e;
-}
-
-const int sys_nerr = 41;
-const char *sys_errlist[] = {
-	"Success",                     /* 0 */
-	"Operation not permitted",     /* 1 */
-	"No such file or directory",
-	"No such process",
-	"Interrupted system call",
-	"I/O error",
-	"No such device or address",
-	"Argument list too long",
-	"Exec format error",
-	"Bad file number",
-	"No child processes",          /* 10 */
-	"Try again",
-	"Out of memory",
-	"Permission denied",
-	"Bad address",
-	"Block device required",
-	"Device or resource busy",
-	"File exists",
-	"Cross-device link",
-	"No such device",
-	"Not a directory",             /* 20 */
-	"Is a directory",
-	"Invalid argument",
-	"File table overflow",
-	"Too many open files",
-	"Not a typewriter",
-	"Text file busy",
-	"File too large",
-	"No space left on device",
-	"Illegal seek",
-	"Read-only file system",       /* 30 */
-	"Too many links",
-	"Broken pipe",
-	"Math argument out of domain",
-	"Math result not representable",
-	"Resource deadlock would occur",
-	"File name too long",
-	"No record locks available",
-	"Syscall not implemented",
-	"Directory not empty",
-	"Too many symbolic links"      /* 40 */
-};
-
-#define ERRSTRLEN 20
-char *strerror(int e)
-{
-	//static char errstr[ERRSTRLEN+1];
-	
-	if (e < 0 || e >= sizeof(sys_errlist) / sizeof(sys_errlist[0])) {
-		//sprintf("Unknown error %d", e);
-		//return errstr;
-		return "Unknown error";
-	}
-	return (char *)sys_errlist[e];
 }
 
 /* XXX: this prints to stdout instead of stderr */
@@ -253,11 +197,9 @@ static const char _mtab[12][3] = {
 };
 char *asctime_r(const struct tm *tm, char *buf)
 {
-	/* XXX: this should be sprintf(), but that isn't implemented yet */
-	printf("%3.3s %3.3s %2d %02d:%02d:%02d %4.4d\n",
+	sprintf(buf, "%3.3s %3.3s %2d %02d:%02d:%02d %4.4d\n",
 	        _wtab[tm->tm_wday], _mtab[tm->tm_mon], tm->tm_mday,
 	        tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_year + 1900);
-	return NULL;
 	return buf;
 }
 
@@ -311,6 +253,20 @@ clock_t times(struct tms *buf)
 	buf->tms_cutime = timeval_to_clock_t(&children.ru_utime);
 	buf->tms_cstime = timeval_to_clock_t(&children.ru_stime);
 	return timeval_to_clock_t(&tod);
+}
+
+int sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp,
+           void *newp, size_t newlen);
+int getloadavg32(long la[], int nelem)
+{
+	static int loadmib[] = { CTL_VM, VM_LOADAVG };
+	static unsigned loadmiblen = sizeof(loadmib) / sizeof(*loadmib);
+	size_t lalen = nelem * sizeof(long);
+
+	int ret = sysctl(loadmib, loadmiblen, la, &lalen, NULL, 0L);
+	if (ret)
+		return -1;
+	return lalen / sizeof(long);
 }
 
 #define ESC "\x1b"
@@ -379,7 +335,7 @@ static void testrandom(int argc, char *argv[], char *envp[])
 	userpause();
 }
 
-#define AUDIOBUFSIZE 1024
+#define AUDIOBUFSIZE 4096
 static void testaudio(int argc, char *argv[], char *envp[])
 {
 	int i;
@@ -454,7 +410,7 @@ struct pkthead {
 
 static const struct machinfo {
 	int id;
-	char desc[80];
+	char *desc;
 } machinfo[] = {
 	{ 0x08, "PC -> 89/92+/V200" },
 	{ 0x88, "92+/V200 -> PC or 92+/V200 -> 92+/V200" },
@@ -521,7 +477,7 @@ ssize_t getcalcread(int fd, void *buf, size_t count)
 		setitimer(ITIMER_REAL, &it, NULL);
 		n = read(fd, buf, count);
 		setitimer(ITIMER_REAL, NULL, NULL); /* clear timer */
-		if (n < 0) longjmp(G.user.getcalcjmp, 1);
+		if (n < 0) longjmp(P.user.getcalcjmp, 1);
 		count -= n;
 		buf += n;
 	};
@@ -654,7 +610,7 @@ static ssize_t getcalc(int fd, char *buf, size_t size)
 	sa.sa_flags = 0;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	
-	if (setjmp(G.user.getcalcjmp))
+	if (setjmp(P.user.getcalcjmp))
 	{
 		printf("TIMEOUT\n");
 		return -1;
@@ -799,24 +755,22 @@ static void testlink(int argc, char *argv[], char *envp[])
 	alarm(1);
 	pause();
 	
-	printf("sending RDY packet...\n");
-	write(linkfd, rdypkt, sizeof(rdypkt));
-	
-	printf("reading packet...\n");
-	recvpkt(&packet, buf, LINKBUFSIZE, linkfd); /* ACK */
-	free(buf);
-	
 	printf("closing link...\n");
 	close(linkfd);
 	printf("closed.\n");
 	
 out:
+	free(buf);
 	userpause();
 }
 
 static int banner(const char *s)
 {
+#ifdef TI92P
 	static const char stars[] = "*****************************";
+#else
+	static const char stars[] = "*******************";
+#endif
 	int h;
 	int l = strlen(s);
 	h = l / 2;
@@ -830,9 +784,9 @@ struct test {
 
 static const struct test tests[] = {
 	{ "clock", testclock },
-	{ "/dev/random", testrandom },
-	{ "/dev/link", testlink },
-	{ "/dev/audio", testaudio },
+	{ "random", testrandom },
+	{ "link", testlink },
+	{ "audio", testaudio },
 	{ "", NULL }
 };
 
@@ -843,9 +797,6 @@ unsigned long long sl64(unsigned long long, unsigned);
 unsigned long long sr64(unsigned long long, unsigned);
 
 #define BUFSIZE 512
-
-int sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp,
-           void *newp, size_t newlen);
 
 static int sysctltest_main(int argc, char **argv, char **envp)
 {
@@ -891,18 +842,162 @@ static int ps_main(int argc, char **argv, char **envp)
 	for (kp = &allproc[0]; kp < &allproc[allproclen]; ++kp) {
 		long s;
 		int h, m;
-		s = kp->kp_ctime;
+		s = kp->kp_ctime / CLOCKS_PER_SEC;
 		h = s / 3600;
 		s %= 3600;
 		m = s / 60;
 		s %= 60;
-		printf("%5d %04x %02d:%02d:%02ld %s\n",
-		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd);
+		printf("%5d %04x %02d:%02d:%02ld %s%s\n",
+		       kp->kp_pid, kp->kp_tty, h, m, s, kp->kp_cmd,
+		       kp->kp_state == PZOMBIE ? " <defunct>" : "");
 	}
 out_free:
 	free(allproc);
 out:
 	return status;
+}
+
+static int bt_main(int argc, char **argv, char **envp)
+{
+#define BTBUFSIZ 20
+	void *buffer[BTBUFSIZ];
+	void **p;
+	int size;
+	int backtrace(void **buffer, int size);
+	size = backtrace(&buffer[0], BTBUFSIZ);
+	printf("%d frames:\n", size);
+	for (p = &buffer[0]; size; --size, ++p)
+		printf("%p\n", *p);
+	return 0;
+}
+
+static int crash_main(int argc, char **argv, char **envp)
+{
+	/*
+.global buserr
+.global SPURIOUS
+.global ADDRESS_ERROR
+.global ILLEGAL_INSTR
+.global ZERO_DIVIDE
+.global CHK_INSTR
+.global I_TRAPV
+.global PRIVILEGE
+.global TRACE
+.global LINE_1010
+.global LINE_1111
+*/
+	char *type;
+	if (argc != 2) {
+		printf("Usage: %s type\n", argv[0]);
+		printf("where type is one of:\n"
+		       //"  bus      bus error\n"
+		       "  address  address error\n"
+		       "  illegal  illegal instruction\n"
+		       "  zerodiv  division by zero\n"
+		       "  chk      chk instruction\n"
+		       "  trapv    trap on overflow\n"
+		       "  priv     privileged instruction\n"
+		       //"  trace    instruction tracing\n"
+		       "  1010     line 1010 emulator\n"
+		       "  1111     line 1111 emulator\n"
+		       "  segv     invalid memory access\n");
+		return 1;
+	}
+
+	type = argv[1];
+	//if (!strcasecmp(type, "buserr")) {
+		//asm(" jsr 0x4321 "); // FIXME
+	//} else
+	if (!strcasecmp(type, "address")) {
+		asm(" move #42,0x4321 ");
+	} else if (!strcasecmp(type, "illegal")) {
+		asm(" illegal ");
+	} else if (!strcasecmp(type, "zerodiv")) {
+		asm(" divu #0,%d0 ");
+	} else if (!strcasecmp(type, "chk")) {
+		asm(" move #5,%d0; chk #4,%d0 ");
+	} else if (!strcasecmp(type, "trapv")) {
+		asm(" move #0x7fff,%d0; add #1,%d0; trapv ");
+	} else if (!strcasecmp(type, "priv")) {
+		asm(" move #0x2700,%sr ");
+	//} else if (!strcasecmp(type, "trace")) {
+		//asm(" trace ");
+	} else if (!strcasecmp(type, "1010")) {
+		asm(" .word 0xa000 ");
+	} else if (!strcasecmp(type, "1111")) {
+		// this won't crash if fpuemu is enabled
+		asm(" .word 0xf000; nop; nop ");
+	} else if (!strcasecmp(type, "segv")) {
+		*(long *)2 = 42;
+	} else {
+		printf("%s: unknown crash type %s\n", argv[0], type);
+		return 1;
+	}
+
+	printf("Look at that! We didn't crash!\n");
+	return 0;
+}
+
+typedef unsigned long int64[2];
+typedef unsigned long int128[4];
+
+static void test_mul(int64 a, int64 b)
+{
+	int128 r;
+	
+	void mul64(int64 a, int64 b, int128 result);
+	mul64(a, b, r);
+
+	printf("%08lx%08lx * %08lx%08lx =\n"
+	       "%08lx%08lx%08lx%08lx\n",
+	       a[0], a[1], b[0], b[1],
+	       r[0], r[1], r[2], r[3]);
+}
+
+static int mul_main(int argc, char **argv, char **envp)
+{
+
+	int64 tests[][2] = {
+		{ { 0x000000E8,0xD4A51000 }, { 0x00000000,0x0280DE80 } },
+		{ { 0xDEADFACE,0xBEEFF00D }, { 0xCAFEBABE,0x0B00B1E5 } },
+		{ { 0xB504F333,0xf9de6484 }, { 0xB504F333,0xf9de6484 } },
+	};
+	int i;
+
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i)
+		test_mul(tests[i][0], tests[i][1]);
+
+	return 0;
+}
+
+static void test_div(int64 a, int64 b)
+{
+	int64 r;
+	
+	void div64(int64 a, int64 b, int64 result);
+	div64(a, b, r);
+
+	printf("%08lx%08lx / %08lx%08lx =\n"
+	       "%08lx%08lx\n",
+	       a[0], a[1], b[0], b[1],
+	       r[0], r[1]);
+}
+
+static int div_main(int argc, char **argv, char **envp)
+{
+	int64 tests[][2] = {
+		{ { 0x80000000,0x00000000 }, { 0x80000000,0x00000000 }, },
+		{ { 0x80000000,0x00000000 }, { 0xffffffff,0xffffffff }, },
+		{ { 0xffffffff,0xffffffff }, { 0xffffffff,0xffffffff }, },
+		{ { 0xffffffff,0xffffffff }, { 0x80000000,0x00000000 }, },
+		{ { 0xC90FDAA2,0x20000000 }, { 0xA0000000,0x00000000 }, },
+	};
+	int i;
+
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i)
+		test_div(tests[i][0], tests[i][1]);
+
+	return 0;
 }
 
 static int fdtofd(int fromfd, int tofd)
@@ -1008,9 +1103,14 @@ int time_main(int argc, char **argv, char **envp)
 	} else if (pid > 0) {
 		int status;
 		for (;;) {
-			wait(&status);
-			if (WIFEXITED(status)) {
+			if (wait(&status) < 0) {
+				err = 1;
+				break;
+			} else if (WIFEXITED(status)) {
 				err = WEXITSTATUS(status);
+				break;
+			} else if (WIFSIGNALED(status)) {
+				err = WTERMSIG(status);
 				break;
 			}
 		}
@@ -1059,12 +1159,21 @@ static int times_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
-static int tests_main(int argc, char **argv, char **envp)
+int tests_main(int argc, char **argv, char **envp)
 {
 	const struct test *testp;
+	int match = 0;
 	for (testp = &tests[0]; testp->func; ++testp) {
+		if (argc > 1 && strcmp(argv[1], testp->name))
+			continue;
+
+		match = 1;
 		banner(testp->name);
 		testp->func(argc, argv, envp);
+	}
+	if (!match) {
+		printf("error: no test named %s\n", argv[1]);
+		return 1;
 	}
 	printf("done!\n");
 	return 0;
@@ -1077,7 +1186,8 @@ static int docat(int fd)
 	for (;;) {
 		n = read(fd, buf, BUFSIZE);
 		if (n <= 0) break;
-		write(1, buf, n);
+		n = write(1, buf, n);
+		if (n <= 0) break;
 	}
 	return (n < 0);
 }
@@ -1274,6 +1384,176 @@ static int pid_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+static int pgrp_main(int argc, char **argv, char **envp)
+{
+	printf("%d\n", getpgrp());
+	return 0;
+}
+
+int atoi(const char *a)
+{
+	int i = 0;
+	int neg = 0;
+	while (isspace(*a)) {
+		++a;
+	}
+	switch (*a) {
+	case '-': neg = 1;
+	case '+': ++a;
+	}
+	while (isdigit(*a)) {
+		i = 10 * i + (*a++ - '0');
+	}
+	if (neg)
+		i = -i;
+	return i;
+}
+
+static int kill_main(int argc, char **argv, char **envp)
+{
+/*
+ * kill -s signal_name pid ...
+ * kill -l [exit_status]
+ * kill [-signal_name] pid ...
+ * kill [-signal_number] pid ...
+ */
+	static const char *const names[] = {
+		[0] = "0",
+		[SIGHUP] = "SIGHUP",      // 1
+		[SIGINT] = "SIGINT",      // 2
+		[SIGQUIT] = "SIGQUIT",    // 3
+		[SIGILL] = "SIGILL",
+		[SIGTRAP] = "SIGTRAP",
+		[SIGABRT] = "SIGABRT",    // 6
+		[SIGEMT] = "SIGEMT",
+		[SIGFPE] = "SIGFPE",
+		[SIGKILL] = "SIGKILL",    // 9
+		[SIGBUS] = "SIGBUS",
+		[SIGSEGV] = "SIGSEGV",
+		[SIGSYS] = "SIGSYS",
+		[SIGPIPE] = "SIGPIPE",
+		[SIGALRM] = "SIGALRM",    // 14
+		[SIGTERM] = "SIGTERM",    // 15
+		[SIGURG] = "SIGURG",
+		[SIGSTOP] = "SIGSTOP",
+		[SIGTSTP] = "SIGTSTP",
+		[SIGCONT] = "SIGCONT",
+		[SIGCHLD] = "SIGCHLD",
+		[SIGTTIN] = "SIGTTIN",
+		[SIGTTOU] = "SIGTTOU",
+#ifdef SIGIO
+		[SIGIO] = "SIGIO",
+#elif defined(SIGPOLL)
+		[SIGPOLL] = "SIGPOLL",
+#endif
+		[SIGXCPU] = "SIGXCPU",
+		[SIGXFSZ] = "SIGXFSZ",
+		[SIGVTALRM] = "SIGVTALRM",
+		[SIGPROF] = "SIGPROF",
+		[SIGWINCH] = "SIGWINCH",
+		[SIGINFO] = "SIGINFO",
+		[SIGUSR1] = "SIGUSR1",
+		[SIGUSR2] = "SIGUSR2",
+	};
+#define SIZEOF_NAMES (sizeof(names)/sizeof(names[0]))
+	void usage() {
+		printf("Usage: kill -s signal_name pid ...\n"
+		       "       kill -l [exit_status]\n"
+		       "       kill [-signal_name] pid ...\n"
+		       "       kill [-signal_number] pid ...\n");
+	}
+	int signum(const char *signame) {
+		int i;
+		for (i = 0; i < SIZEOF_NAMES; ++i) {
+			if (!names[i]) continue;
+			if (!strcmp(signame, names[i]) ||
+			    !strcmp(signame, names[i]+3)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	int sig = SIGTERM;
+	int pidarg = 1;
+	pid_t pid = -1;
+	int i;
+	int err = 0;
+
+	if (argv[1][0] == '-') {
+		if (!strcmp(argv[1], "-s")) {
+			/* kill -s signal_name pid ... */
+			if (argc < 4) {
+				printf("kill: not enough arguments\n");
+				usage();
+				return 1;
+			}
+			sig = signum(argv[2]);
+			if (sig < 0) {
+				printf("kill: unknown signal \"%s\"\n",
+				       argv[2]);
+				return 1;
+			}
+			pidarg = 3;
+		} else if (!strcmp(argv[1], "-l")) {
+			/* kill -l [exit_status] */
+			if (argc > 3) {
+				printf("kill: too many arguments\n");
+				usage();
+				return 1;
+			}
+			if (argc == 3)
+				sig = atoi(argv[2]);
+			else
+				sig = -1;
+			if (sig > 0) {
+				int s = sig;
+				if (128 < s && s < SIZEOF_NAMES + 128)
+					s -= 128;
+				if (0 < s && s < SIZEOF_NAMES && names[s]) {
+					printf("%s\n", names[s] + 3);
+					return 0;
+				}
+				printf("kill: unknown signal %d\n", sig);
+				return 1;
+			}
+			for (i = 1; i < SIZEOF_NAMES; ++i) {
+				if (!names[i]) continue;
+				printf("%2d %-12s", i, names[i]);
+			}
+			printf("\n");
+			return 0;
+		} else if (!strcmp(argv[1], "--")) {
+			pidarg = 2;
+		} else {
+			/* kill -signal_name pid ... */
+			/* kill -signal_number pid ... */
+			sig = atoi(&argv[1][1]);
+			if (sig == 0) {
+				sig = signum(&argv[1][1]);
+			}
+			if (sig < 0) {
+				printf("kill: unknown signal \"%s\"\n",
+				       &argv[1][1]);
+				return 1;
+			}
+			pidarg = 2;
+		}
+	}
+	if (pidarg >= argc) {
+		usage();
+		return 1;
+	}
+	for (; pidarg < argc; ++pidarg) {
+		pid = atoi(argv[pidarg]);
+		if (kill(pid, sig)) {
+			err = 1;
+			perror("kill");
+		}
+	}
+	return err;
+}
+
 static int exec_command(int ch)
 {
 	switch (ch) {
@@ -1412,6 +1692,7 @@ static int updatetop(struct topinfo *info)
 	struct kinfo_proc **allprocp = NULL;
 	struct kinfo_proc *kp;
 	struct kinfo_proc **kpp;
+	long cpu_user = 0, cpu_sys = 0, cpu_nice = 0, cpu_idle = 0;
 	int upmib[] = { CTL_KERN, KERN_UPTIME };
 	unsigned upmiblen = sizeof(upmib) / sizeof(*upmib);
 	time_t up = 0;
@@ -1419,7 +1700,6 @@ static int updatetop(struct topinfo *info)
 	struct timeval tv;
 	int i;
 	long la[3];
-	int getloadavg1(long loadavg[], int nelem);
 	static const char procstates[] = "RSDTZ";
 	int nprocs, nrun, nslp, nstop, nzomb;
 	int nusers;
@@ -1429,7 +1709,7 @@ static int updatetop(struct topinfo *info)
 
 	sysctl(upmib, upmiblen, &up, &uplen, NULL, 0L);
 	gettimeofday(&tv, NULL);
-	getloadavg1(la, 3);
+	getloadavg32(la, 3);
 	
 	if (sysctl(mib, miblen, NULL, &allproclen, NULL, 0L)) {
 		perror("top: sysctl 1");
@@ -1473,11 +1753,19 @@ static int updatetop(struct topinfo *info)
 		/* count users by tty, excluding tty 0 (= no tty) */
 		if ((*kpp)->kp_tty != lasttty) ++nusers;
 		lasttty = (*kpp)->kp_tty;
+		/* accumulate cpu usage */
+		if ((*kpp)->kp_nice <= 0)
+			cpu_user += (*kpp)->kp_pcpu;
+		else
+			cpu_nice += (*kpp)->kp_pcpu;
+		/* TODO: count system time here */
 	}
+	cpu_idle = 100L * 256 - cpu_user - cpu_sys - cpu_nice;
 
 	/* sort the array by cpu usage */
 	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
 	
+#ifdef TI92P
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;
@@ -1507,7 +1795,11 @@ static int updatetop(struct topinfo *info)
 	       nprocs, nrun, nslp, nstop, nzomb);
 	cleareol();
 	/* line 3 */
-	printf("\nCpu(s): %3d.%01d%%us, %3d.%01d%%sy, %3d.%01d%%ni, %3d.%01d%%id", -1, -1, -1, -1, -1, -1, -1, -1);
+	printf("\nCpu: %3ld.%ld%%us, %3ld.%ld%%sy, %3ld.%ld%%ni, %3ld.%ld%%id",
+	       cpu_user / 256, (cpu_user % 256) * 10 / 256,
+	       cpu_sys  / 256, (cpu_sys  % 256) * 10 / 256,
+	       cpu_nice / 256, (cpu_nice % 256) * 10 / 256,
+	       cpu_idle / 256, (cpu_idle % 256) * 10 / 256);
 	cleareol();
 	/* line 4 */
 	printf("\nMem: %ldk total, %ldk used, %ldk free, %ldk buffers",
@@ -1522,15 +1814,70 @@ static int updatetop(struct topinfo *info)
 	/* line 7- */
 	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
 	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
-		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3d:%02d %.12s",
+		long s = (*kpp)->kp_ctime / CLOCKS_PER_SEC;
+		long m = s / 60;
+		s %= 60;
+		printf("\n%5d %-8d %3d %3d %3ldk %3ldk %c %3d.%01d %3ld:%02ld %.12s",
 		       (*kpp)->kp_pid, (*kpp)->kp_euid, 0,
 		       (*kpp)->kp_nice, 0L, 0L, procstates[(*kpp)->kp_state],
 		       (*kpp)->kp_pcpu / 256, ((*kpp)->kp_pcpu % 256) * 10 / 256,
-		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) / 60),
-		       (int)(((*kpp)->kp_ctime / CLOCKS_PER_SEC) % 60),
+		       m, s, (*kpp)->kp_cmd);
+		cleareol();
+	}
+#else
+	/* line 1 */
+	t = up;
+	second = t % 60; t /= 60;
+	minute = t % 60; t /= 60;
+	hour = t % 24;   t /= 24;
+	day = t;
+	printf(ESC "[H");
+	if (day) {
+		printf("%d+", day);
+	}
+	printf("%02d:%02d, %d user%s, load:",
+	       hour, minute, nusers, nusers == 1 ? "" : "s");
+	for (i = 0; i < 3; ++i) {
+		if (i > 0) putchar(',');
+		printf(" %ld.%02ld", la[i] >> 16,
+		       (100 * la[i] >> 16) % 100);
+	}
+	cleareol();
+	/* line 2 */
+	printf("\n%d tasks, %d run, %d slp, %d stop, %d zomb",
+	       nprocs, nrun, nslp, nstop, nzomb);
+	cleareol();
+	/* line 3 */
+	printf("\n%3ld.%ld%%us, %3ld.%ld%%sy, %3ld.%ld%%ni, %3ld.%ld%%id",
+	       cpu_user / 256, (cpu_user % 256) * 10 / 256,
+	       cpu_sys  / 256, (cpu_sys  % 256) * 10 / 256,
+	       cpu_nice / 256, (cpu_nice % 256) * 10 / 256,
+	       cpu_idle / 256, (cpu_idle % 256) * 10 / 256);
+	cleareol();
+	/* line 4 */
+	printf("\n%ldk ttl, %ldk used, %ldk free, %ldk buf",
+	       -1L, -1L, -1L, -1L);
+	cleareol();
+	/* line 5 */
+	putchar('\n');
+	cleareol();
+	/* line 6 */
+	printf("\n" ESC "[7m  PID USER     RES S  %%CPU COMMAND" ESC "[m");
+	cleareol();
+	/* line 7- */
+	if (allproclen > 20 - 6) allproclen = 20 - 6; /* XXX constant */
+	for (kpp = &allprocp[0]; kpp < &allprocp[allproclen]; ++kpp) {
+		long s = (*kpp)->kp_ctime / CLOCKS_PER_SEC;
+		long m = s / 60;
+		s %= 60;
+		printf("\n%5d %-8d %3d %c %3d.%01d %.13s",
+		       (*kpp)->kp_pid, (*kpp)->kp_euid, 0,
+		       procstates[(*kpp)->kp_state],
+		       (*kpp)->kp_pcpu / 256, ((*kpp)->kp_pcpu % 256)*10 / 256,
 		       (*kpp)->kp_cmd);
 		cleareol();
 	}
+#endif
 	/* clear to the end of the screen */
 	printf(ESC "[J" ESC "[5H");
 free:
@@ -1687,6 +2034,10 @@ eol:
 	return token;
 }
 
+void sh_empty_sig_handler(int x)
+{
+}
+
 #define MAXARGC (BUFSIZE/2+1)
 int sh_main(int argc, char **argv, char **envp)
 {
@@ -1713,6 +2064,21 @@ int sh_main(int argc, char **argv, char **envp)
 	char **aargv;
 	int laststatus = 0;
 	
+	struct sigaction sa;
+	sa.sa_flags = 0;
+
+	/* handle SIGINT and SIGQUIT with an empty handler */
+	sa.sa_handler = sh_empty_sig_handler;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+
+	/* ignore some other kill signals */
+	sa.sa_handler = SIG_IGN;
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGTSTP, &sa, NULL);
+	sigaction(SIGTTIN, &sa, NULL);
+	sigaction(SIGTTOU, &sa, NULL);
+
 	printf("stupid shell v0.2\n");
 	
 	/*
@@ -1737,13 +2103,16 @@ int sh_main(int argc, char **argv, char **envp)
 	bp = buf;
 	for (;;) {
 		setitimer(ITIMER_REAL, &it, NULL);
-		if (len == 0)
+		if (len == 0) {
 			printf("%s@%s:%s%c ", username, hostname, "~",
 			       uid ? '$' : '#');
+		}
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
-			printf("read error\n");
-			return 1;
+			if (errno == EINTR)
+				continue;
+			else
+				break;
 		}
 		len += n;
 		bp += n;
@@ -1812,7 +2181,7 @@ nextline:
 }
 
 static struct applet applets[] = {
-	{ "tests", tests_main },
+	{ "tests", NULL },
 	{ "top", top_main },
 	{ "cat", cat_main },
 	{ "echo", echo_main },
@@ -1828,10 +2197,16 @@ static struct applet applets[] = {
 	{ "adjtime", adjtime_main },
 	{ "malloc", malloc_main },
 	{ "pid", pid_main },
+	{ "pgrp", pgrp_main },
 	{ "poweroff", poweroff_main },
 	{ "times", times_main },
 	{ "sysctltest", sysctltest_main },
 	{ "ps", ps_main },
+	{ "bt", bt_main },
+	{ "crash", crash_main },
+	{ "mul", mul_main },
+	{ "div", div_main },
+	{ "kill", kill_main },
 	{ "time", NULL },
 	{ "exit", NULL },
 	{ "status", NULL },
@@ -1869,6 +2244,17 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		printf("sh: cannot vfork: %s\n", strerror(errno));
 		return 127;
 	} else if (pid == 0) {
+		struct sigaction sa;
+		sa.sa_handler = SIG_DFL;
+		sa.sa_flags = 0;
+		sigaction(SIGTERM, &sa, NULL);
+		sigaction(SIGINT, &sa, NULL);
+		sigaction(SIGQUIT, &sa, NULL);
+		sa.sa_handler = SIG_IGN;
+		sigaction(SIGTSTP, &sa, NULL);
+		sigaction(SIGTTIN, &sa, NULL);
+		sigaction(SIGTTOU, &sa, NULL);
+
 		execve(cmd, argv, envp);
 		switch (errno) {
 		case ENOENT:
@@ -1883,17 +2269,30 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	}
 	
 	/* parent process. we chill here until the child dies */
-	pid = wait(&status);
-	if (WIFEXITED(status)) {
-		status = WEXITSTATUS(status);
-	} else if (WIFSIGNALED(status)) {
-		status = WTERMSIG(status);
-		printf("sh: terminated with signal %d\n", status);
-	} else if (WIFSTOPPED(status)) {
-		status = WSTOPSIG(status);
-		printf("sh: stopped with signal %d\n", status);
-	} else {
-		printf("sh: unknown status %d\n", status);
+	for (;;) {
+		pid = wait(&status);
+		if (pid < 0) {
+			if (errno == EINTR)
+				continue;
+		}
+		if (WIFEXITED(status)) {
+			status = WEXITSTATUS(status);
+			break;
+		} else if (WIFSIGNALED(status)) {
+			status = WTERMSIG(status);
+			if (status != SIGINT)
+				printf("sh: terminated with signal %d\n", status);
+			status += 128;
+			break;
+		} else if (WIFSTOPPED(status)) {
+			status = WSTOPSIG(status);
+			printf("sh: stopped with signal %d\n", status);
+			status += 128;
+			break;
+		} else {
+			printf("sh: unknown status %d\n", status);
+			break;
+		}
 	}
 	
 	return status;
@@ -1946,14 +2345,16 @@ prompt:
 	count = GETTYBUFSIZE;
 	printf("\n%s login: ", uts.nodename);
 	for (;;) {
-		if (count == 0) return 1;
+		if (count == 0) break;
 		n = read(0, bp, count);
-		if (n < 0) return 1;
+		if (n < 0) break;
 		if (n == 0) return 1;
-		if (bp[n-1] != '\n') {
+		count -= n;
+		bp += n;
+		if (bp[-1] != '\n') {
 			continue;
 		}
-		bp[n-1] = '\0';
+		bp[-1] = '\0';
 		if (strlen(line) == 0)
 			goto prompt;
 		argv[0] = "login";

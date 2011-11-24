@@ -27,39 +27,43 @@ void ttyoutput(int ch, struct tty *tp);
 void ttyopen(dev_t dev, struct tty *tp)
 {
 	tp->t_dev = dev;
-        tp->t_state |= ISOPEN;
+	tp->t_state |= ISOPEN;
 	tp->t_numc = 0; /* number of characters after a break character */
 	/* if we're not already part of a process group, make this tty our
 	 * controlling tty and add us to the tty's process group */
-        if (P.p_pgrp == 0) {
-                P.p_ttyp = tp;
-                P.p_ttydev = dev;
-                
-                if (tp->t_pgrp == 0)
-                        tp->t_pgrp = P.p_pid;
-                P.p_pgrp = tp->t_pgrp;
-        }
+	if (P.p_pgrp == 0) {
+		P.p_ttyp = tp;
+		P.p_ttydev = dev;
+		
+		if (tp->t_pgrp == 0)
+			tp->t_pgrp = P.p_pid;
+		P.p_pgrp = tp->t_pgrp;
+	}
 	qclear(&tp->t_rawq);
 	qclear(&tp->t_canq);
 }
 
 void ttychars(struct tty *tp)
 {
-        tp->t_cc[VINTR] = CINTR;
-        tp->t_cc[VQUIT] = CQUIT;
-        tp->t_cc[VSTART] = CSTART;
-        tp->t_cc[VSTOP] = CSTOP;
-        tp->t_cc[VEOF] = CEOT;
-        tp->t_cc[VEOL] = CEOL;
-        /*tp->t_cc[VBRK] = CBRK;*/
-        tp->t_cc[VERASE] = CERASE;
+	tp->t_cc[VINTR] = CINTR;
+	tp->t_cc[VQUIT] = CQUIT;
+	tp->t_cc[VSUSP] = CSUSP;
+	tp->t_cc[VSTART] = CSTART;
+	tp->t_cc[VSTOP] = CSTOP;
+	tp->t_cc[VEOF] = CEOT;
+	tp->t_cc[VEOL] = CEOL;
+	/*tp->t_cc[VBRK] = CBRK;*/
+	tp->t_cc[VERASE] = CERASE;
 	tp->t_cc[VWERASE] = CWERASE;
-        tp->t_cc[VKILL] = CKILL;
+	tp->t_cc[VKILL] = CKILL;
+	tp->t_cc[VREPRINT] = CREPRINT;
 }
 
 void flushtty(struct tty *tp)
 {
 	/* FIXME */
+	qclear(&tp->t_rawq);
+	qclear(&tp->t_canq);
 }
 
 void wflushtty(struct tty *tp)
@@ -69,9 +73,9 @@ void wflushtty(struct tty *tp)
 
 void ttyclose(struct tty *tp)
 {
-        wflushtty(tp);
-        tp->t_pgrp = 0;
-        tp->t_state = 0;
+	wflushtty(tp);
+	tp->t_pgrp = 0;
+	tp->t_state = 0;
 }
 
 void ttyioctl(dev_t dev, int cmd, void *cmarg)
@@ -141,9 +145,11 @@ void ttyread(struct tty *tp)
 	
 loop:
 	/* TODO: also check for the tty closing */
+	spl1();  // inhibit soft interrupts
 	while (qisempty(qp)) {
 		slp(&tp->t_rawq, 1);
 	}
+	spl0();
 	
 	while ((ch = qgetc(qp)) >= 0) {
 		if ((lflag & ICANON)) {
@@ -190,6 +196,7 @@ void ttywakeup(struct tty *tp)
 	if (ISSET(tp->t_state, TS_ASYNC))
 		pgsignal(tp->t_pgrp, SIGIO, 1);
 */
+	TRACE();
 	wakeup((void *)&tp->t_rawq);
 }
 
@@ -198,8 +205,7 @@ void ttywakeup(struct tty *tp)
 
 #if 0
 struct queue {
-	int q_count;
-	int q_head, q_tail;
+	unsigned long q_head, q_tail;
 	char q_buf[QSIZE];
 };
 #endif
@@ -208,31 +214,27 @@ struct queue {
 #if 1
 int b_to_q(char *bp, int count, struct queue *qp)
 {
-	int x;
 	int n = count;
-	x = spl5();
+	unsigned long head = qp->q_head & QMASK;
+	unsigned long tail = qp->q_tail & QMASK;
 	/* limit n to the free size of our queue */
-	if (n > QSIZE - qp->q_count)
-		n = QSIZE - qp->q_count;
+	if (n > qfree(qp))
+		n = qfree(qp);
 	if (n == 0)
-		goto out;
+		return 0;
 	
-	if (qp->q_head < qp->q_tail || qp->q_head + n <= QSIZE) {
+	if (head < tail || head + n <= QSIZE) {
 		/* easy case: one contiguous block */
-		memmove(qp->q_buf + qp->q_head, bp, n);
-		qp->q_head = (qp->q_head + n) % QSIZE;
+		memmove(qp->q_buf + head, bp, n);
 	} else {
 		/* split case: two separate blocks */
-		int y = QSIZE - qp->q_head; /* upper block byte count */
+		int y = QSIZE - head; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
-		memmove(qp->q_buf + qp->q_head, bp, y); /* copy upper block */
+		memmove(qp->q_buf + head, bp, y); /* copy upper block */
 		memmove(qp->q_buf, bp + y, z); /* copy lower block */
-		qp->q_head = z;
 	}
-	qp->q_count += n;
+	qp->q_head += n;
 	
-out:
-	splx(x);
 	return n;
 }
 #else
@@ -253,30 +255,27 @@ int b_to_q(char *bp, int count, struct queue *qp)
 /* XXX: this has NOT been tested */
 int q_to_b(struct queue *qp, char *bp, int count)
 {
-	int x;
 	int n = count;
-	x = spl5();
-	if (n > qp->q_count)
-		n = qp->q_count;
+	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long used = qused(qp);
+	/* limit n to the used size of our queue */
+	if (n > used)
+		n = used;
 	if (n == 0)
-		goto out;
+		return 0;
 	
-	if (qp->q_tail < qp->q_head || qp->q_tail + n <= QSIZE) {
+	if (tail < (qp->q_head & QMASK) || tail + n <= QSIZE) {
 		/* single block */
-		memmove(bp, qp->q_buf + qp->q_tail, n);
-		qp->q_tail = (qp->q_tail + n) % QSIZE;
+		memmove(bp, qp->q_buf + tail, n);
 	} else {
 		/* two blocks */
-		int y = QSIZE - qp->q_tail; /* upper block byte count */
+		int y = QSIZE - tail; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
-		memmove(bp, qp->q_buf + qp->q_tail, y); /* copy upper block */
+		memmove(bp, qp->q_buf + tail, y); /* copy upper block */
 		memmove(bp + y, qp->q_buf, z); /* copy lower block */
-		qp->q_tail = z;
 	}
-	qp->q_count -= n;
+	qp->q_tail += n;
 
-out:
-	splx(x);
 	return n;
 }
 #else

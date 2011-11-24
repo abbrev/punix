@@ -1,7 +1,7 @@
 /*
  * $Id$
  * 
- * Copyright 2005-2008 Christopher Williams
+ * Copyright 2005-2011 Christopher Williams
  * 
  * Process management core: switching, signal handling, events, preemption, etc.
  */
@@ -22,7 +22,7 @@
 /* TODO: use setrun when putting a proc in the "running" state */
 STARTUP(void setrun(struct proc *p))
 {
-	int x = spl7();
+	mask(&G.calloutlock);
 	p->p_waitchan = NULL;
 #if 0
 	if (p->p_status == P_RUNNING) {
@@ -31,7 +31,7 @@ STARTUP(void setrun(struct proc *p))
 	}
 #endif
 	sched_run(p);
-	splx(x);
+	unmask(&G.calloutlock);
 }
 
 STARTUP(void unsleep(struct proc *p))
@@ -53,16 +53,17 @@ STARTUP(static void endtsleep(void *vp))
 	struct proc *p = (struct proc *)vp;
 	int s;
 	
-	s = spl7();
+	mask(&G.calloutlock);
 	if (p->p_waitchan) {
 		if (p->p_status == P_SLEEPING) {
+			TRACE();
 			setrun(p);
 		} else {
 			unsleep(p);
 		}
 		p->p_flag |= P_TIMEOUT;
 	}
-	splx(s);
+	unmask(&G.calloutlock);
 }
 
 /* note: following comment block is outdated */
@@ -86,8 +87,9 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	struct proc *p = &P;
 	int s;
 	int sig;
+	int err = 0;
 
-	s = spl7();
+	mask(&G.calloutlock);
 #if 0
 	if (panicstr) {
 /*
@@ -137,20 +139,25 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	sched_sleep(p);
 	swtch();
 resume:
-	splx(s);
 	p->p_flag &= ~P_SINTR;
 	if (p->p_flag & P_TIMEOUT) {
 		p->p_flag &= ~P_TIMEOUT;
-		if (sig == 0)
-			return EWOULDBLOCK;
+		if (sig == 0) {
+			err = EWOULDBLOCK;
+			goto out;
+		}
 	} else if (timo)
 		untimeout(endtsleep, (void *)p);
 	if (intr && (sig != 0 || (sig = CURSIG(p)))) {
-		if (P.p_sigintr & sigmask(sig))
-			return EINTR;
-		return ERESTART;
+		if (sigismember(&P.p_signals.sig_restart, sig)) {
+			err = ERESTART;
+		} else {
+			err = EINTR;
+		}
 	}
-	return 0;
+out:
+	unmask(&G.calloutlock);
+	return err;
 }
 
 #endif
@@ -172,13 +179,14 @@ STARTUP(void wakeup(void *chan))
 {
 	struct proc *p;
 	
-	int x = spl7();
+	mask(&G.calloutlock);
 	list_for_each_entry(p, &G.proc_list, p_list) {
 		if (p->p_waitchan == chan) {
+			//TRACE();
 			setrun(p);
 		}
 	}
-	splx(x);
+	unmask(&G.calloutlock);
 }
 
 /* allocate a process structure */

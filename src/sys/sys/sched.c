@@ -20,7 +20,7 @@
 #define MS_TO_TICKS(t) (((long)(t) * HZ + 500) / 1000)
 
 /* RR_INTERVAL is the round-robin interval in milliseconds */
-#define RR_INTERVAL (1000L/32) //(1000L*16/HZ)
+#define RR_INTERVAL (1000L) //(1000L*16/HZ)
 /* TIME_SLICE is the same as RR_INTERVAL but measured in ticks */
 #define TIME_SLICE MS_TO_TICKS(RR_INTERVAL)
 
@@ -93,9 +93,11 @@ out:
 STARTUP(void swtch())
 {
 	struct proc *p;
+	masklock m;
+	mask(&G.calloutlock);
+	m = G.calloutlock;
 	
 	//kprintf("swtch() ");
-	int x = spl7();
 	
 	/* XXX: this shows the number of times this function has been called.
  	 * It draws in the bottom-left corner of the screen.
@@ -118,7 +120,9 @@ STARTUP(void swtch())
 	while (!(p = earliest_deadline_proc())) {
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
+		setmask(&G.calloutlock, 0);
 		cpuidle();
+		setmask(&G.calloutlock, m);
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */
 	}
@@ -128,7 +132,7 @@ STARTUP(void swtch())
 	G.need_resched = 0;
 	
 	if (p == current)
-		return;
+		goto out;
 	
 	if (!P.p_fpsaved) {
 		/* savefp(&P.p_fps); */
@@ -136,11 +140,20 @@ STARTUP(void swtch())
 	}
 	
 	if (csave(&P.p_ctx))
-		return; /* we get here via crestore */
+		goto out; /* we get here via crestore */
 	
 	current = p;
 	
-	crestore(&P.p_ctx);
+	// inhibit soft interrupts and clear soft interrupt mask
+	// this is needed so the mask is cleared for vfork
+	spl1();
+	setmask(&G.calloutlock, 0);
+
+	crestore(&P.p_ctx); /* jump to the csave() for this context */
+
+out:
+	setmask(&G.calloutlock, m);
+	unmask(&G.calloutlock);
 }
 #endif
 
@@ -183,13 +196,17 @@ static void set_state(struct proc *p, int state)
 /* put the given proc on the run queue, possibly preempting the current proc */
 void sched_run(struct proc *p)
 {
+	mask(&G.calloutlock);
 	//kprintf("sched_run()\n");
-	if (p->p_status == P_RUNNING)
+	if (p->p_status == P_RUNNING) {
+		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
 		panic("trying to run an already running process");
+	}
 	if (p->p_status == P_ZOMBIE)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
 	/* TODO: anything else? */
+	unmask(&G.calloutlock);
 }
 
 /* put the given process to sleep and take it off the run queue */
@@ -213,13 +230,13 @@ void sched_fork(struct proc *childp)
 	 * give the child half of our time_slice
 	 * set first_time_slice in the child
 	 */
-	int x = spl0();
+	mask(&G.calloutlock);
 	int half = current->p_time_slice / 2;
 	childp->p_time_slice = half;
 	current->p_time_slice -= half;
-	splx(x);
 	childp->p_first_time_slice = 1;
 	set_state(childp, P_RUNNING);
+	unmask(&G.calloutlock);
 }
 
 void sched_exec(void)
@@ -229,11 +246,13 @@ void sched_exec(void)
 
 void sched_exit(struct proc *p)
 {
+	mask(&G.calloutlock);
 	//kprintf("sched_exit(%08lx)\n", p);
 	if (p->p_first_time_slice) {
 		p->p_pptr->p_time_slice += p->p_time_slice;
 	}
 	set_state(p, P_ZOMBIE);
+	unmask(&G.calloutlock);
 }
 
 #if 0

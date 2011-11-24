@@ -2,10 +2,12 @@
 #define _CONTEXT_H_
 
 struct context {
-	long dreg[5];  /* %d3-%d7 */
-	long *usp;     /* %usp */
-	long areg[5];  /* %a2-%a6 */
-	long *sp;      /* %a7 */
+	void **dreg[5];  /* %d3-%d7 */
+	void **usp;     /* %usp */
+	void **areg[3];  /* %a2-%a4 */
+	void **a5;
+	void **fp;
+	void **sp;      /* %a7 */
 	/* note: the following two align with a trap stack frame */
 	short sr;      /* %sr */
 	void *pc;      /* return address */

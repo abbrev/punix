@@ -70,3 +70,16 @@ quit:
 	splx(x);
 	return G.batt_level;
 }
+
+/* timeout routine to check battery periodically */
+#define BATT_TICKS (5*HZ)
+void checkbatt(void *unused)
+{
+	batt_check();
+	timeout(checkbatt, NULL, BATT_TICKS);
+}
+
+void battinit()
+{
+	checkbatt(NULL);
+}

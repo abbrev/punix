@@ -1,7 +1,7 @@
 /*
  * Punix
  * Copyright (C) 2003 PpHd
- * Copyright 2004, 2005 Chris Williams
+ * Copyright 2004, 2005, 2010, 2011 Chris Williams
  * 
  * $Id$
  * 
@@ -39,19 +39,30 @@
 .global Int_5
 .global Int_6
 .global Int_7
+.global TRAP_1
+.global TRAP_2
+.global TRAP_3
+.global TRAP_4
+.global TRAP_5
+.global TRAP_6
+.global TRAP_7
+.global TRAP_8
+.global TRAP_9
+.global TRAP_10
+.global TRAP_11
+.global TRAP_12
+.global TRAP_13
+.global TRAP_14
+.global TRAP_15
 .global _WaitKeyboard
 .global CheckBatt
 
 .global _syscall
-.global _trap
-.global setup_env
-
-|.include "procglo.inc"
-.include "signal.inc"
 
 .section _st1,"rx"
 .even
 
+| XXX see h/globals.h
 G = 0x5c00
 seconds = G+0
 onkey = G+180
@@ -79,76 +90,152 @@ powerstate = G+182
  *       I/N (Instruction/Not): Instruction = 0, Not = 1.
  */
 
-	.long 0xbeef1001
 buserr:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	bus_error
-	bra	trapret
+	move	#2,-(%sp)
+	bra	exception
 
-	.long 0xbeef1002
-SPURIOUS:
-	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	spurious
-	bra	trapret
-
-	.long 0xbeef1003
 ADDRESS_ERROR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	address_error
-	bra	trapret
+	move	#3,-(%sp)
+	bra	exception
 
-	.long 0xbeef1004
 ILLEGAL_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	illegal_instr
-	bra	trapret
+	move	#4,-(%sp)
+	bra	exception
 
-	.long 0xbeef1005
-| send signal SIGFPE
 ZERO_DIVIDE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	zero_divide
-	bra	trapret
+	move	#5,-(%sp)
+	bra	exception
 
-	.long 0xbeef1006
 CHK_INSTR:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	chk_instr
-	bra	trapret
+	move	#6,-(%sp)
+	bra	exception
 
-	.long 0xbeef1007
 I_TRAPV:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	i_trapv
-	bra	trapret
+	move	#7,-(%sp)
+	bra	exception
 
-	.long 0xbeef1008
-| send signal SIGILL
 PRIVILEGE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	privilege
-	bra	trapret
+	move	#8,-(%sp)
+	bra	exception
 
-	.long 0xbeef1009
 TRACE:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
-	pea.l	5*4(%sp)
-	bsr	trace
-	bra	trapret
+	move	#9,-(%sp)
+	bra	exception
 
-	.long 0xbeef100a
-| I don't know (send signal SIGILL?)
+| Line 1010 emulator. Send SIGILL
 | Are there valid 68010+ instructions starting with 1010?
 LINE_1010:
-	rte
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#10,-(%sp)
+	bra	exception
+
+| Line 1111 emulator. Send SIGILL
+| use this only if fpuemu is not included in the kernel
+LINE_1111:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#11,-(%sp)
+	bra	exception
+
+SPURIOUS:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#24,-(%sp)
+	bra	exception
+
+Int_7:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#31,-(%sp)
+	bra	exception
+
+TRAP_1:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#33,-(%sp)
+	bra	exception
+
+TRAP_2:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#34,-(%sp)
+	bra	exception
+
+TRAP_3:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#35,-(%sp)
+	bra	exception
+
+TRAP_4:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#36,-(%sp)
+	bra	exception
+
+TRAP_5:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#37,-(%sp)
+	bra	exception
+
+TRAP_6:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#38,-(%sp)
+	bra	exception
+
+TRAP_7:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#39,-(%sp)
+	bra	exception
+
+TRAP_8:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#40,-(%sp)
+	bra	exception
+
+TRAP_9:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#41,-(%sp)
+	bra	exception
+
+TRAP_10:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#42,-(%sp)
+	bra	exception
+
+TRAP_11:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#43,-(%sp)
+	bra	exception
+
+TRAP_12:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#44,-(%sp)
+	bra	exception
+
+TRAP_13:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#45,-(%sp)
+	bra	exception
+
+TRAP_14:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#46,-(%sp)
+	bra	exception
+
+TRAP_15:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	move	#47,-(%sp)
+	|bra	exception
+	| fall through
+
+| common point for all exceptions
+exception:
+	pea.l	5*4+2(%sp)
+	jbsr	handle_exception
+	addq.l	#6,%sp
+	bra	trapret0	| we are returning to user mode (= int level 0)
 
 | Scan for the hardware to know what keys are pressed 
 Int_1:
@@ -159,22 +246,26 @@ Int_1:
 	move	5*4(%sp),-(%sp)		| old ps
 	bsr	hardclock
 	addq.l	#2,%sp
-	bra	2f
 
+| common exit point for all traps
 trapret:
-	addq.l	#4,%sp
-2:	move    5*4(%sp),%d0
-	and     #0x2000,%d0
-	bne.b   0f
+	| check that we are returning to interrupt level 0 (no interrupt)
+	move	5*4(%sp),%d0
+	and	#0x0700,%d0
+	bne.b	0f
 	
-	move.l  %usp,%a0
-	pea.l   (%a0)                   | void *usp
-	pea.l   (%sp)                   | void **usp
-	move.l  7*4+2(%sp),-(%sp)       | void *pc
-	| call signal handler here (prototype is dosig(void *pc, void **usp))
-	addq.l  #2*4,%sp
-	move.l  (%sp)+,%a0
-	move.l  %a0,%usp
+trapret0:
+	| we are returning to interrupt level 0
+	move.l	%usp,%a0
+	pea.l	(%a0)		| void *usp
+	pea.l	(%sp)		| void **usp
+	pea.l	7*4+2(%sp)	| void **pc
+	move	8*4(%sp),-(%sp)	| unsigned short ps
+	| void return_from_int(unsigned short ps, void **pc, void **usp);
+	jbsr	return_from_int
+	add.l	#2*4+2,%sp
+	move.l	(%sp)+,%a0
+	move.l	%a0,%usp
 	
 0:	movem.l	(%sp)+,%d0-%d2/%a0-%a1
 1:	rte
@@ -207,8 +298,7 @@ Int_3:
 Int_4:
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	linkintr	| just call the C routine
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
-	rte
+	bra	trapret
 
 | System timers.
 Int_5:
@@ -216,7 +306,7 @@ Int_5:
 	bne	1f		| ZZZZzzz
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	bsr	audiointr	| just call the C routine
-	movem.l	(%sp)+,%d0-%d2/%a0-%a1
+	bra	trapret
 1:	rte
 
 | ON Int.
@@ -227,17 +317,11 @@ Int_6:
 	move	#1,onkey
 	rte
 
-| send signal SIGSEGV
-Int_7:
-	/* FIXME */
-	jmp	the_beginning
-
 _WaitKeyboard:
 	moveq	#0x58,%d0
 	dbf	%d0,.
 	rts
 
-	.long	0xdeadd00d
 	|long dreg[5];  /* %d3-%d7 */
 	|long *usp;     /* %usp */
 	|long areg[5];  /* %a2-%a6 */
@@ -260,13 +344,14 @@ _syscall:
 	
 	movem.l	(%sp)+,%d3-%d7/%a1-%a7
 	move.l	%a1,%usp
-	rte
+
+	|rte
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	jbra	trapret0
 
 .global return_from_vfork
 return_from_vfork:
 	moveq	#0,%d0
-	rte
-
-| unused for now
-_trap:
+	movem.l	%d0-%d2/%a0-%a1,-(%sp)
+	jbra	trapret0
 	rte

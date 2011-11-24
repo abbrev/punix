@@ -1,0 +1,43 @@
+executing a file:
+
+// we could allow unlimited script recursion here (or until ENOMEM) since it is done iteratively, but in practice users won't be nesting scripts more than a couple times
+#define MAX_SCRIPTLEVEL 4 // or use SYMLOOP_MAX here, as it's kind of a similar concept
+
+execve:
+	int scriptlevel = 0;
+	struct inode *ip = NULL;
+	
+	for (;;) {
+		ip = namei(filename);
+		if (!ip)
+			return
+		if file does not have execute permission
+			errno = EACCES
+			return
+		
+		// should we open the file with ip->i_fops->open() here?
+		read the file's magic number
+		if it's not a script // #!
+			break;
+		if (++scriptlevel > MAX_SCRIPTLEVEL)
+			return with an erro
+		// make sure to clear set-user-id if it's set on the script file
+		parse the hashbang line and get hashbang_argc and hashbang_argv
+		// hashbang_argv will have 1 or 2 entries, unless we also
+		// support separating the hashbang arg at spaces...
+
+		set argv[0] to filename // file name of the script
+		set filename to contents of hashbang_argv[0] // file name of the interpreter
+		argv >>= hashbang_argc // make room for interpreter name
+		copy hashbang_argv to argv // 1 or 2 entries
+		iput(ip); // we're done with this inode
+	}
+	
+	try to execute the file based on the magic number // call exec handlers
+	if it can't be executed
+		iput(ip);
+		errno = ENOEXEC;
+		return
+	mark the file as busy, make a new text structure, etc
+	set argv[0] to basename of filename // optional
+

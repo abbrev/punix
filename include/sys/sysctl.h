@@ -67,6 +67,9 @@ enum {
 	KERN_PROC_RUID,
 };
 
+enum {
+	VM_LOADAVG,
+};
 /*
 enum {
 	MACHDEP_???;

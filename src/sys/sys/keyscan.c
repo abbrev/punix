@@ -230,6 +230,7 @@ static const struct expand expand_table[] = {
 	{ KEY_F7, "\e[18~" },
 	{ KEY_F8, "\e[19~" },
 #endif
+	{ KEY_CLEAR, "clear" },
 	{ 0, "" }
 };
 
@@ -238,7 +239,7 @@ static void expand(short key)
 	const struct expand *ep = expand_table;
 	while (ep->oldkey) {
 		if (ep->oldkey == key) {
-			char *cp = ep->expansion;
+			const char *cp = ep->expansion;
 			while (*cp != '\0')
 				vtrint(DEV_VT, *cp++);
 			return;
@@ -395,6 +396,10 @@ static const unsigned short status[][4] = {
 #include "glyphsets/status-batt3.inc"
 #include "glyphsets/status-batt4.inc"
 #include "glyphsets/status-busy.inc"
+#include "glyphsets/status-link0.inc"
+#include "glyphsets/status-link1.inc"
+#include "glyphsets/status-link2.inc"
+#include "glyphsets/status-link3.inc"
 };
 #else
 #define STATUSROWS 4
@@ -416,6 +421,10 @@ static const unsigned short status[][2] = {
 #include "glyphsets/status-batt3-89.inc"
 #include "glyphsets/status-batt4-89.inc"
 #include "glyphsets/status-busy-89.inc"
+#include "glyphsets/status-link0-89.inc"
+#include "glyphsets/status-link1-89.inc"
+#include "glyphsets/status-link2-89.inc"
+#include "glyphsets/status-link3-89.inc"
 };
 #endif
 
@@ -441,7 +450,11 @@ static const unsigned short status[][2] = {
 #define STATUS_BATT3      14
 #define STATUS_BATT4      15
 #define STATUS_BUSY       16
-#define STATUS_LAST       16
+#define STATUS_LINK0      17
+#define STATUS_LINK1      18
+#define STATUS_LINK2      19
+#define STATUS_LINK3      20
+#define STATUS_LAST       20
 
 #ifdef TI92P
 #define MODBASE ((char *)(LCD_MEM+0xf00-7*30-1))
@@ -474,7 +487,8 @@ void showstatus(void)
 	/* 8           7       6    5        4     3       2   1    0    */
 	
 	int batt;
-	int x = spl7();
+	//int x = spl7();
+	mask(&G.calloutlock);
 	int mod = G.vt.key_mod | G.vt.key_mod_sticky;
 	
 	batt = G.batt_level - 3;
@@ -495,13 +509,17 @@ void showstatus(void)
 #endif
 	drawmod(7, G.vt.compose ? STATUS_COMPOSE1 : G.vt.key_compose ? STATUS_COMPOSE2 : STATUS_NONE);
 	drawmod(8, G.vt.scroll_lock ? STATUS_SCROLLLOCK : STATUS_NONE);
-	splx(x);
+	drawmod(9, STATUS_LINK0 + (G.link.rxtx & 3));
+	unmask(&G.calloutlock);
+	//splx(x);
 }
+
+#define BELLTIMEOUT HZ
 
 /* callback for timeout() to remove bell status */
 void unbell(void *arg)
 {
-	struct tty *ttyp = (struct tty *)arg;
+	//struct tty *ttyp = (struct tty *)arg;
 	G.vt.bell = 0;
 	showstatus();
 }
@@ -513,7 +531,7 @@ void bell(struct tty *ttyp)
 	untimeout(unbell, ttyp);
 	G.vt.bell = 1;
 	showstatus();
-	timeout(unbell, ttyp, 1 * HZ); /* XXX: constant */
+	timeout(unbell, ttyp, BELLTIMEOUT);
 }
 
 static void addkey(unsigned short key)
@@ -633,7 +651,7 @@ static void addkey(unsigned short key)
 			key = 0xa9; /* copyright */
 #else
 		} else if (key == '/') {
-			key == 0x1f;
+			key = 0x1f;
 #endif
 		}
 	}
@@ -725,9 +743,7 @@ void scankb()
 					G.vt.key_mod &= ~key;
 				}
 			}
-			showstatus();
 		} while (kdiff);
-		showstatus();
 		goto end;
 	}
 	/* no key was pressed or released, so repeat the previous key */
@@ -738,6 +754,7 @@ void scankb()
 		addkey(G.vt.key_previous);
 	}
 end:
+	showstatus();
 	KBROWMASK = 0x380; /* reset to standard key reading */
 	return;
 }
