@@ -1,18 +1,19 @@
 PUNIXBASE	= ../../..
+PATH := $(TIGCC):$(TIGCC)/bin:$(PATH)
 
 STDINC	= $(PUNIXBASE)/include
 
-CC	= $(TIGCC)/bin/tigcc
+CC	= "$(TIGCC)/bin/gcc"
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
 	-I. -I- -I$(STDINC)
 
-AS	= $(TIGCC)/bin/tigcc
+AS	= "$(TIGCC)/bin/tigcc"
 ASFLAGS	= -c -Wa,--warn #-l
 
-LD	= $(TIGCC)/bin/tigcc
+LD	= "$(TIGCC)/bin/tigcc"
 LDFLAGS	=
 
-AR	= $(TIGCC)/bin/ar-tigcc
+AR	= "$(TIGCC)/bin/ar-tigcc"
 
 all:	libc.a
 scratch:
@@ -34,7 +35,7 @@ DEPEND = .dep
 
 
 depend $(DEPEND):
-	@-$(TIGCC)/bin/gcc -M -MG $(CFLAGS) $(SRC) >$(DEPEND) 2>/dev/null
+	-$(CC) -M -MG $(CFLAGS) $(SRC) >$(DEPEND) #2>/dev/null
 
 clean:
 	rm -f *.bin *.o *.a
