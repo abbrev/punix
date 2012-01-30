@@ -129,8 +129,7 @@ DEPEND = .dep
 
 .PHONY: depend
 depend $(DEPEND):
-	# fail. tigcc is broken when it comes to building dependencies
-#	-$(CC) -M -MG $(CFLAGS) $(CSRC) >$(DEPEND) #2>/dev/null
+	-$(CC) -M -MG $(CFLAGS) $(CSRC) >$(DEPEND) #2>/dev/null
 
 .PHONY: clean
 clean:
