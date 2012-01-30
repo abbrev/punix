@@ -64,9 +64,19 @@
 
 | XXX see h/globals.h
 G = 0x5c00
+
+| long seconds; /* XXX: see entry.s */
+| struct timespec _realtime;
+| 
+| /* all RAM below here can (should) be cleared on boot. see start.s */
+| char exec_ram[60]; /* XXX: see flash.s */
+| char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
+| int onkey; /* set to 1 when ON key is pressed. see entry.s */
+| int powerstate; /* set to 1 when power is off. see entry.s */
+
 seconds = G+0
-onkey = G+180
-powerstate = G+182
+onkey = G+4+8+60+9*16+5*4
+powerstate = onkey+2
 
 /*
  * Bus or Address error exception stack frame:

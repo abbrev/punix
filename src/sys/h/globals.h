@@ -18,7 +18,7 @@ struct globals {
 	
 	/* all RAM below here can (should) be cleared on boot. see start.s */
 	char exec_ram[60]; /* XXX: see flash.s */
-	char fpram[8*12+3*4]; /* XXX: see fpuem.s */
+	char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
 	int onkey; /* set to 1 when ON key is pressed. see entry.s */
 	int powerstate; /* set to 1 when power is off. see entry.s */
 	/*

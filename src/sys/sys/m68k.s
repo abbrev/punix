@@ -98,10 +98,21 @@ stacktrace:
 	rts
 
 G = 0x5c00
+
+| long seconds; /* XXX: see entry.s */
+| struct timespec _realtime;
+| 
+| /* all RAM below here can (should) be cleared on boot. see start.s */
+| char exec_ram[60]; /* XXX: see flash.s */
+| char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
+| int onkey; /* set to 1 when ON key is pressed. see entry.s */
+| int powerstate; /* set to 1 when power is off. see entry.s */
+
 seconds = G+0
 realtime = G+4
-onkey = G+180 | see globals.h
-powerstate = G+182 | see globals.h
+onkey = G+4+8+60+9*16+5*4
+powerstate = onkey+2
+
 
 | power off the CPU and LCD, and maintain the realtime clock.
 | wake on int 6 (ON key), int 4 (link activity), and int 3 (1 Hz clock)
