@@ -95,7 +95,11 @@ again:
 	if (P.p_error) {
 		if (P.p_error == ERESTART) {
 			if (callp->sy_flags & SA_RESTART) {
-				goto again;
+				/*
+				 * move the user PC backwards so it
+				 * points to the trap instruction.
+				 */
+				ctx->pc -= 2; // XXX constant
 			} else {
 				P.p_error = EINTR;
 			}
