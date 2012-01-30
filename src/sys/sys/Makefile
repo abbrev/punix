@@ -110,8 +110,8 @@ stupiddate:
 sysent.c: sysent.txt
 	$(AWK) -f mksysent.awk sysent.txt >sysent.c || { rm -f sysent.c; exit 1; }
 
-keyscan.o: glyphsets
-dev_vt.o: glyphsets
+#keyscan.o: glyphsets
+#dev_vt.o: glyphsets
 
 .PHONY: glyphsets
 glyphsets:
