@@ -763,7 +763,7 @@ void sys_getpgrp()
 
 void sys_getppid()
 {
-	P.p_retval = P.p_pptr->p_pid;
+	P.p_retval = P.p_pptr ? P.p_pptr->p_pid : 0;
 }
 
 static void donice(struct proc *p, int n)
