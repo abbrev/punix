@@ -1,6 +1,6 @@
-GLYPHS2C = (tail -c1152 | ./bin2c)
-STATUS2C = (tail -c8 | ./bin2c)
-STATUS2C89 = (tail -c4 | ./bin2c)
+GLYPHS2C = (echo '{'; tail -c1152 | xxd -i; echo '},')
+STATUS2C = (echo '{'; tail -c8 | xxd -i; echo '},')
+STATUS2C89 = (echo '{'; tail -c4 | xxd -i; echo '},')
 
 GLYPHS = upper.pbm small-upper.pbm uk.pbm us.pbm small-us.pbm sg.pbm tcs.pbm
 STATUS92P = status-none.pbm status-2nd.pbm status-alpha.pbm status-bell.pbm \
@@ -23,11 +23,10 @@ PBM = $(GLYPHS) $(STATUS92P) $(STATUS89)
 INC = $(PBM:.pbm=.inc)
 
 all:
-	$(MAKE) bin2c
 	$(MAKE) $(INC)
 
 clean:
-	rm -f *.inc bin2c .dep
+	rm -f *.inc .dep
 
 .dep:
 	@-for i in $(GLYPHS); do \
@@ -43,9 +42,7 @@ clean:
 		echo '	$$(STATUS2C89) <$$< >$$@'; \
 	done >>.dep ; \
 
-bin2c: bin2c.c
-
-$(INC): bin2c
+%.inc: %.pbm
 
 include .dep
 
