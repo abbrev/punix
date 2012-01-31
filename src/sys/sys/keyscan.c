@@ -378,7 +378,7 @@ static short compose(short key)
  * nice if they were rewritten (but not essential since it works as it is) */
 #ifdef TI92P
 #define STATUSROWS 8
-static const unsigned short status[][4] = {
+static const unsigned char status[][STATUSROWS] = {
 #include "glyphsets/status-none.inc"
 #include "glyphsets/status-2nd.inc"
 #include "glyphsets/status-diamond.inc"
@@ -403,7 +403,7 @@ static const unsigned short status[][4] = {
 };
 #else
 #define STATUSROWS 4
-static const unsigned short status[][2] = {
+static const unsigned char status[][STATUSROWS] = {
 #include "glyphsets/status-none-89.inc"
 #include "glyphsets/status-2nd-89.inc"
 #include "glyphsets/status-diamond-89.inc"

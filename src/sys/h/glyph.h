@@ -4,7 +4,7 @@
 #define GLYPH_HEIGHT 6
 
 struct glyph {
-	unsigned short rows[GLYPH_HEIGHT];
+	unsigned char rows[2*GLYPH_HEIGHT];
 };
 
 struct glyphset {

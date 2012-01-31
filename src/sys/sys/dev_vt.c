@@ -147,41 +147,21 @@ static void transition(int ch, int newstate,
 
 static const struct glyphset glyphsets[] = {
 #ifdef SMALLGLYPHS
-{
 #include "glyphsets/small-upper.inc"
-},
-{
 #include "glyphsets/uk.inc"
-},
-{
 #include "glyphsets/small-us.inc"
-},
-{
 #include "glyphsets/sg.inc"
-},
 /* alt char ROM standard chars here */
-{
 /* alt char ROM special graphics (technical character set) */
 #include "glyphsets/tcs.inc" 
-},
 #else
-{
 #include "glyphsets/upper.inc"
-},
-{
 #include "glyphsets/uk.inc"
-},
-{
 #include "glyphsets/us.inc"
-},
-{
 #include "glyphsets/sg.inc"
-},
 /* alt char ROM standard chars here */
-{
 /* alt char ROM special graphics (technical character set) */
 #include "glyphsets/tcs.inc" 
-},
 #endif
 };
 
