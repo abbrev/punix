@@ -14,7 +14,7 @@ UNAME_VERSION := $(DATE)
 UNAME_MACHINE := m68k
 
 PUNIXBASE	= ../../..
-#PATH := $(TIGCC):$(TIGCC)/bin:$(PATH)
+PATH := $(TIGCC):$(TIGCC)/bin:$(PATH)
 
 STDINC	= $(PUNIXBASE)/include
 SYSINC	= $(PUNIXBASE)/src/sys/h
