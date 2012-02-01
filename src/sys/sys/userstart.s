@@ -46,6 +46,7 @@ mkstart getty
 mkstart login
 mkstart uterm
 mkstart tests
+mkstart top
 
 .global bflt_header
 bflt_header:
@@ -117,15 +118,16 @@ printfptype:
 	bra	0b
 
 
-4:	.asciz "0"
-5:	.asciz "x"
+4:	.asciz "0 "
+5:	.asciz "x "
 6:	.asciz "-"
 7:	.asciz "+"
-8:	.asciz "%s%s\n"
+8:	.asciz "%s%s "
 9:	.asciz "nan"
 
 	.global fputest
 fputest:
+	movem.l	%d3-%d7/%a2-%a6,-(%sp)
 	move.l	#0x7fc00000,%d5
 	
 	fneg.b	#42,%fp7
@@ -134,11 +136,11 @@ fputest:
 	bsr	printfptype
 	|fneg.l	#42,%fp7
 
-	|fneg.s	#0x7fc00000  | nan (single) [invalid format?]
+	|fneg.s	#0x7fc00000,%fp7  | nan (single) [invalid format?]
 	| above instruction would assemble to this:
 	.word 0xf23c,0x479a,0x7fc0,0x0000
 	bsr	printfptype
-	fneg.x	%d5,%fp7
+	|fneg.x	%d5,%fp7
 	fneg.b	#-42,%fp7
 	bsr	printfptype
 	fneg.w	#-42,%fp7
@@ -151,7 +153,7 @@ fputest:
 	bsr	printfptype
 	fneg.l	#0,%fp7
 	bsr	printfptype
-	rts
+	|rts
 	
 	| %Dn.b
 	fneg.b	%d5,%fp7	| 42.b
@@ -205,6 +207,7 @@ fputest:
 	fneg.d	-(%a3),%fp5	| nan (double)
 	bsr	printfptype
 	
+	movem.l	(%sp)+,%d3-%d7/%a2-%a6
 	rts
 11:	.long 0x7fff0000,0x40000000,0x00000000  | nan
 	.long 0x00000000,0x00000000,0x00000000  | ?? (packed decimal)

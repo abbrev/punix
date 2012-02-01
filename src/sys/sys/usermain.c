@@ -297,6 +297,14 @@ static void sigalrm()
 	printf("sigalrm\n");
 }
 
+static void testfpu(int argc, char *argv[], char *envp[])
+{
+	fputest();
+	putchar('\n');
+	putchar('\n');
+	userpause();
+}
+
 static void testclock(int argc, char *argv[], char *envp[])
 {
 	printf("system clock:  %ld\n", realtime.tv_sec);
@@ -783,6 +791,7 @@ struct test {
 };
 
 static const struct test tests[] = {
+	{ "fpu", testfpu },
 	{ "clock", testclock },
 	{ "random", testrandom },
 	{ "link", testlink },
@@ -1888,7 +1897,7 @@ free:
 #endif
 
 #define TOPBUFSIZE 200
-static int top_main(int argc, char *argv[], char **envp)
+int top_main(int argc, char *argv[], char **envp)
 {
 	/* we should eventually put the terminal in raw mode
 	 * so we can read characters as soon as they're typed */
@@ -2182,7 +2191,7 @@ nextline:
 
 static struct applet applets[] = {
 	{ "tests", NULL },
-	{ "top", top_main },
+	{ "top", NULL },
 	{ "cat", cat_main },
 	{ "echo", echo_main },
 	{ "true", true_main },

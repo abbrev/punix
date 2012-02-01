@@ -200,11 +200,11 @@ void sys_execve()
 	void sh_start(), init_start(), bittybox_start(), time_start();
 	void getty_start(), login_start(), uterm_start();
 	void tests_start();
+	void top_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
 	else if (!strcmp(pathname, "cat") ||
 	         !strcmp(pathname, "echo") ||
-	         !strcmp(pathname, "top") ||
 	         !strcmp(pathname, "false") ||
 	         !strcmp(pathname, "true") ||
 	         !strcmp(pathname, "clear") ||
@@ -228,6 +228,8 @@ void sys_execve()
 		text = uterm_start;
 	else if (!strcmp(pathname, "tests"))
 		text = tests_start;
+	else if (!strcmp(pathname, "top"))
+		text = top_start;
 	else if (!strcmp(pathname, "bflt"))
 		bflt = &bflt_header;
 	else {
