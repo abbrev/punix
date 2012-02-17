@@ -3,12 +3,11 @@ REALTIME := $(shell date -d "$(DATE)" +%s)
 STUPIDDATE := $(shell date -d "$(DATE)" +%m/%d/%Y)
 
 # configuration
-ifeq ($(CALC), )
-CALC	= TI92P
-endif
+CALC = TI92P
+HOSTNAME := timmy
 
 UNAME_SYSNAME := Punix
-UNAME_NODENAME := timmy
+UNAME_NODENAME := $(HOSTNAME)
 UNAME_RELEASE := 0.08
 UNAME_VERSION := $(DATE)
 UNAME_MACHINE := m68k
@@ -61,8 +60,8 @@ SSRC	+= userstart.s mulu64.s divu64.s drawglyph.s
 
 #OBJ = testvectors.o
 
-OBJ	+= $(CSRC:.c=.o)
 OBJ	+= $(SSRC:.s=.o)
+OBJ	+= $(CSRC:.c=.o)
 OBJ	+= $(LIBC)
 
 TMPUNAME = uname.sysname uname.nodename uname.release uname.version uname.machine stupiddate
@@ -94,6 +93,8 @@ punix-89.tib:	$(OBJ)
 # generated data
 ########################################
 
+# build uname every time
+.PHONY: $(TMPUNAME) 
 version.o: $(TMPUNAME)
 uname.sysname:
 	echo -n "$(UNAME_SYSNAME)" >$@
@@ -110,14 +111,8 @@ stupiddate:
 sysent.c: sysent.txt
 	$(AWK) -f mksysent.awk sysent.txt >sysent.c || { rm -f sysent.c; exit 1; }
 
-#keyscan.o: glyphsets
-#dev_vt.o: glyphsets
-
-.PHONY: glyphsets
-glyphsets:
-	$(MAKE) -C glyphsets
 glyphsets/%.inc:
-	$(MAKE) -C glyphsets "`basename $@`"
+	$(MAKE) -C glyphsets "`basename $@`" >/dev/null
 
 
 ########################################
