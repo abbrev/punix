@@ -10,7 +10,7 @@ CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
 AS	= "$(TIGCC)/bin/tigcc"
 ASFLAGS	= -c -Wa,--warn #-l
 
-LD	= "$(TIGCC)/bin/tigcc"
+LD	= "$(TIGCC)/bin/ld-tigcc"
 LDFLAGS	=
 
 AR	= "$(TIGCC)/bin/ar-tigcc"
