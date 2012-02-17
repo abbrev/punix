@@ -30,7 +30,10 @@ STARTUP(void setrun(struct proc *p))
 		return;
 	}
 #endif
-	sched_run(p);
+	if (p->p_status != P_ZOMBIE) {
+		sched_run(p);
+	}
+out:
 	unmask(&G.calloutlock);
 }
 
@@ -182,7 +185,7 @@ STARTUP(void wakeup(void *chan))
 	mask(&G.calloutlock);
 	list_for_each_entry(p, &G.proc_list, p_list) {
 		if (p->p_waitchan == chan) {
-			//TRACE();
+			TRACE();
 			setrun(p);
 		}
 	}
@@ -249,7 +252,7 @@ retry:
 /*
  * Is p an inferior of the current process?
  */
-STARTUP(int inferior(struct proc *p))
+STARTUP(int inferior(struct proc const *p))
 {
 
         for (; p != current; p = p->p_pptr)
@@ -302,6 +305,6 @@ STARTUP(void procinit())
 	G.numrunning = 0;
 	G.cumulrunning = 0;
 	//kprintf("%s (%d)\n", __FILE__, __LINE__);
-	kprintf("procinit: sizeof(struct proc)=%ld\n", sizeof(struct proc));
+	//kprintf("procinit: sizeof(struct proc)=%ld\n", sizeof(struct proc));
 	setrun(current);
 }
