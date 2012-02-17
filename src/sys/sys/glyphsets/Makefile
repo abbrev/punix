@@ -31,15 +31,15 @@ clean:
 .dep:
 	@-for i in $(GLYPHS); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
-		echo '	$$(GLYPHS2C) <$$< >$$@'; \
+		echo '	@$$(GLYPHS2C) <$$< >$$@'; \
 	done >.dep ; \
 	for i in $(STATUS92P); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
-		echo '	$$(STATUS2C) <$$< >$$@'; \
+		echo '	@$$(STATUS2C) <$$< >$$@'; \
 	done >>.dep ; \
 	for i in $(STATUS89); do \
 		echo $$i: $$i | sed 's/\.pbm/\.inc/'; \
-		echo '	$$(STATUS2C89) <$$< >$$@'; \
+		echo '	@$$(STATUS2C89) <$$< >$$@'; \
 	done >>.dep ; \
 
 %.inc: %.pbm
