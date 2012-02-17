@@ -54,6 +54,9 @@ extern const unsigned char _ctype[];
 #define _toupper(c)	((c)^0x20)
 #define _tolower(c)	((c)^0x20)
 
+inline int tolower(int c) { if (isupper(c)) return tolower(c); return c; }
+inline int toupper(int c) { if (islower(c)) return toupper(c); return c; }
+
 #if 0
 /* another definition of _toupper/_tolower with different undefined behaviour */
 #define _toupper(c)	((c)+'A'-'a')
