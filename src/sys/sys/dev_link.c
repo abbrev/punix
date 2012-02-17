@@ -29,6 +29,8 @@ STARTUP(void linkinit())
 	ioport = 0;
 	G.link.open = 0;
 	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
+	while (untimeout(updaterxtx, NULL))
+		;
 	updaterxtx(NULL);
 }
 
@@ -128,12 +130,15 @@ STARTUP(void linkintr())
 		} else if (x == 0) { /* no room for this byte */
 			//kprintf("<.. ");
 			//kprintf("full ");
+			/*
+			 * N.B. The link hardware will not interrupt us again
+			 * for LS_RXBYTE until after we read the existing byte.
+			 * Set readoverflow so linkread gets the byte and
+			 * resumes receiving.
+			 */
+			G.link.readoverflow = 1;
 			rxoff();
 		} else {
-			if (x == 1) {
-				//kprintf("almost-full ");
-				rxoff();
-			}
 			recvbyte();
 			G.link.rxtx |= 2;
 			
@@ -205,16 +210,13 @@ STARTUP(void linkread(dev_t dev))
 	
 	while (P.p_count) {
 		x = spl4();
+		if (G.link.readoverflow) {
+			G.link.readoverflow = 0;
+			recvbyte();
+		}
 		rxon();
 		while ((ch = qgetc(&G.link.readq)) < 0) {
 			rxon();
-#if 0
-			if (G.link.readoverflow) {
-				G.link.readoverflow = 0;
-				recvbyte();
-				continue;
-			}
-#endif
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
 				slp(&G.link.readq, 1);
