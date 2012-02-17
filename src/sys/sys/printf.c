@@ -44,7 +44,7 @@ STARTUP(int fputc(int c, FILE *stream))
 STARTUP(int putchar(int c))
 {
 	P.user.charbuf[P.user.charbufsize++] = c;
-	if (P.user.charbufsize >= 128 || c == '\n')
+	if (P.user.charbufsize >= sizeof(P.user.charbuf) || c == '\n')
 		fflush(NULL);
 	return (unsigned char)c;
 }
