@@ -105,9 +105,10 @@ STARTUP(static void rdwr(int mode))
 	 * it's not zero, else return an error */
 	if (setjmp(P.p_sigjmp)) {
 		if (P.p_count == ap->count) {
-			P.p_error = EINTR;
+			//P.p_error = EINTR;
 			return;
 		} else {
+			P.p_error = 0;
 			goto out;
 		}
 	}
