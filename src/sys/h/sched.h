@@ -24,7 +24,7 @@ void sched_exit(struct proc *p);
 void sched_set_scheduler(struct proc *procp, int policy);
 int sched_get_scheduler(struct proc *procp);
 #endif
-int sched_get_nice(struct proc *p);
+int sched_get_nice(const struct proc *p);
 void sched_set_nice(struct proc *p, int newnice);
 int sched_setscheduler(pid_t pid, int policy, const struct sched_param *param);
 int sched_getscheduler(pid_t pid);

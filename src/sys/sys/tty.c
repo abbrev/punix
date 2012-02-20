@@ -167,7 +167,7 @@ struct queue {
 
 /* copy buffer to queue. return number of bytes copied */
 #if 1
-int b_to_q(char *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, struct queue *qp)
 {
 	int n = count;
 	unsigned long head = qp->q_head & QMASK;
@@ -194,7 +194,7 @@ int b_to_q(char *bp, int count, struct queue *qp)
 }
 #else
 /* unoptimized version */
-int b_to_q(char *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, struct queue *qp)
 {
 	int n = count;
 	

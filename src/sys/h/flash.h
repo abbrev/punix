@@ -13,7 +13,7 @@ struct flash_cache_entry {
 
 short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"),
                  size_t size asm("%d3"));
-short FlashErase(const void *dest asm("%a2"));
+short FlashErase(void *dest asm("%a2"));
 
 
 #endif

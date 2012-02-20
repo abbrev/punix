@@ -17,10 +17,10 @@ struct queue {
 	char q_buf[QSIZE];
 };
 
-static inline int qused(struct queue *q) { return ((q)->q_head - (q)->q_tail); }
-static inline int qfree(struct queue *q) { return (QSIZE - qused(q)); }
-static inline int qisfull(struct queue *q) { return (qfree(q) == 0); }
-static inline int qisempty(struct queue *q) { return (qused(q) == 0); }
+static inline int qused(struct queue const *q) { return ((q)->q_head - (q)->q_tail); }
+static inline int qfree(struct queue const *q) { return (QSIZE - qused(q)); }
+static inline int qisfull(struct queue const *q) { return (qfree(q) == 0); }
+static inline int qisempty(struct queue const *q) { return (qused(q) == 0); }
 static inline void qclear(struct queue *q) { (q)->q_tail = (q)->q_head = 0; }
 
 static inline int qputc_no_lock(int ch, struct queue *qp)
@@ -98,7 +98,7 @@ static inline int qungetc(int ch, struct queue *qp)
 }
 
 /* copy buffer to queue. return number of bytes copied */
-int b_to_q(char *bp, int count, struct queue *qp);
+int b_to_q(char const *bp, int count, struct queue *qp);
 /* copy queue to buffer. return number of bytes copied */
 int q_to_b(struct queue *qp, char *bp, int count);
 /* concatenate from queue 'from' to queue 'to' */

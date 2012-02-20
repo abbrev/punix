@@ -193,6 +193,8 @@ STARTUP(void hardclock(unsigned short ps))
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
 			procsignal(current, SIGPROF);
 		++current->p_cputime;
+	} else {
+		++*(long *)(0x4c00+0xf00-30*2+4);
 	}
 
 	if (USERMODE(ps)) {
@@ -212,7 +214,20 @@ STARTUP(void hardclock(unsigned short ps))
 	scankb();
 }
 
-void calcusage(void *unused)
+/*
+ * XXX: Currently this calculates an exponential moving average of a process's
+ * cpu usage. It might be more desirable to calculate the linear moving average
+ * instead, as follows:
+ * * keep track of a process's cpu usage for the last several time units in a
+ *   small array (in struct proc). a char array could be used.
+ * * also maintain the current sum of the array
+ * * each time this routine runs, subtract the "head" value from the sum and
+ *   add the p_cputime to the sum
+ * * write the p_cputime to the head of the array and clear p_cputime
+ * * this will maintain the numerator of the average with O(1) complexity
+ * * divide the numerator (sum) by a fixed denominator, ideally a power of 2
+ */
+void calcusage(const void *unused)
 {
 #define CPUTICKS (HZ/2)
 #define DECAY_NUM 3
@@ -315,6 +330,8 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 
 	if (!USERMODE(ps))
 		return;
+
+	G.whereami = WHEREAMI_USER;
 
 	/* preempt a running user process */
 	if (G.need_resched)
