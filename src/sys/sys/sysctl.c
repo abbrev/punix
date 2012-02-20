@@ -166,9 +166,6 @@ static void proc_to_kinfo_proc(struct proc *pp, struct kinfo_proc *kp)
 		else
 			kp->kp_state = PDSLEEP;
 		break;
-	case P_VFORKING: /* XXX: this should be P_SLEEPING */
-		kp->kp_state = PDSLEEP;
-		break;
 	case P_STOPPED:
 		kp->kp_state = PSTOPPED;
 		break;
