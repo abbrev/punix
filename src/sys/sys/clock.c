@@ -33,6 +33,7 @@
 
 void calloutinit()
 {
+	initmask(&G.calloutlock);
 	G.callout[0].c_func = NULL;
 }
 
@@ -46,12 +47,11 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	struct callout *c1, *c2;
 	long t;
 	int err = 0;
-	//int x;
+	int x;
 	
 	t = time;
 	c1 = &G.callout[0];
-	//x = spl7();
-	mask(&G.calloutlock);
+	x = spl7();
 	
 	//kprintf("timeout: adding a timeout in %ld ticks\n", time);
 	while (c1->c_func != NULL && c1->c_dtime <= t) {
@@ -85,8 +85,7 @@ STARTUP(int timeout(void (*func)(void *), void *arg, long time))
 	c1->c_arg = arg;
 	
 out:
-	unmask(&G.calloutlock);
-	//splx(x);
+	splx(x);
 	return err;
 }
 
@@ -97,10 +96,9 @@ out:
 STARTUP(int untimeout(void (*func)(void *), void *arg))
 {
 	struct callout *cp;
-	//int x;
+	int x;
 	int canhastimeout = 0;
-	//x = spl7();
-	mask(&G.calloutlock);
+	x = spl7();
 	for (cp = &G.callout[0]; cp < &G.callout[NCALL]; ++cp) {
 		if (cp->c_func == func && cp->c_arg == arg) {
 			canhastimeout = 1;
@@ -114,8 +112,7 @@ STARTUP(int untimeout(void (*func)(void *), void *arg))
 			break; /* remove only the first timeout */
 		}
 	}
-	unmask(&G.calloutlock);
-	//splx(x);
+	splx(x);
 	return canhastimeout;
 }
 
