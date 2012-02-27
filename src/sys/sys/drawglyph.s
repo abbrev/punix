@@ -23,12 +23,13 @@
 
 .global drawglyph
 | 6x4 (small) glyph
-| drawglyph(struct glyph *glyph, int row, int col)
+| drawglyph(struct glyph *glyph, int row, int col, void *lcd)
 drawglyph:
 	movem.l	%d3/%d4,-(%sp)
 	move.l	8+4(%sp),%a1	| glyph
 	move	8+8(%sp),%d1	| row
 	move	8+10(%sp),%d2	| col
+	move.l	8+12(%sp),%a0	| lcd
 	
 	| get address on screen
 	mulu	#6*LCD_INCY,%d1
@@ -40,8 +41,8 @@ drawglyph:
 	exg	%d3,%d4
 0:
 	add	%d2,%d1		| + col
-	move	%d1,%a0
-	lea	LCD_MEM(%a0),%a0	| address on screen
+	add	%d1,%a0
+	|lea	LCD_MEM(%a0),%a0	| address on screen
 	| %a0 holds screen address
 	| %d3.b holds glyph mask
 	| %d4.b holds screen mask
@@ -58,18 +59,16 @@ drawglyph:
 	
 	| FIXME: for greyscale, change the line below to do the same as above,
 	| except write to the light plane instead of the dark plane.
-	addq.l	#1,%a1
-	/*
 	move.b	(%a1)+,%d1	| get a row of glyph
+	cmp.l	0x5b00,%a0	| LCD_MEM is less than 0x5b00
+	blt	1f
+
 	and.b	%d3,%d1		| mask glyph
 	
-	| %a1 is on light plane
-	and.b	%d4,(%a1)	| mask byte on screen
-	eor.b	%d1,(%a1)	| and put glyph row there
+	and.b	%d4,(3840,%a0)	| mask byte on screen
+	eor.b	%d1,(3840,%a0)	| and put glyph row there
 	
-	add	%d0,%a1		| next screen row
-	*/
-	
+1:	
 	add	%d0,%a0		| next screen row
 	dbra	%d2,0b
 	
@@ -78,12 +77,13 @@ drawglyph:
 
 .global drawglyphinv
 | 6x4 (small) glyph, inverted
-| drawglyphinv(struct glyph *glyph, int row, int col)
+| drawglyphinv(struct glyph *glyph, int row, int col, void *lcd)
 drawglyphinv:
 	movem.l	%d3/%d4,-(%sp)
 	move.l	8+4(%sp),%a1	| glyph
 	move	8+8(%sp),%d1	| row
 	move	8+10(%sp),%d2	| col
+	move.l	8+12(%sp),%a0	| lcd
 	
 	| get address on screen
 	mulu	#6*LCD_INCY,%d1
@@ -94,8 +94,8 @@ drawglyphinv:
 	moveq	#0x0f,%d3
 0:
 	add	%d2,%d1		| + col
-	move	%d1,%a0
-	lea	LCD_MEM(%a0),%a0	| address on screen
+	add	%d1,%a0
+	|lea	LCD_MEM(%a0),%a0	| address on screen
 	| %a0 holds screen address
 	| %d3.b holds glyph mask and screen mask
 	| %a1 holds glyph address
@@ -111,18 +111,16 @@ drawglyphinv:
 	
 	| FIXME: for greyscale, change the line below to do the same as above,
 	| except write to the light plane instead of the dark plane.
-	addq.l	#1,%a1
-	/*
 	move.b	(%a1)+,%d1	| get a row of glyph
+	cmp.l	0x5b00,%a0	| LCD_MEM is less than 0x5b00
+	blt	1f
+
 	and.b	%d3,%d1		| mask glyph
 	
-	| %a1 is on light plane
-	or.b	%d3,(%a1)	| mask byte on screen
-	eor.b	%d1,(%a1)	| and put glyph row there
+	or.b	%d3,(3840,%a0)	| mask byte on screen
+	eor.b	%d1,(3840,%a0)	| and put glyph row there
 	
-	add	%d0,%a1		| next screen row
-	*/
-	
+1:	
 	add	%d0,%a0		| next screen row
 	dbra	%d2,0b
 	
@@ -130,11 +128,12 @@ drawglyphinv:
 	rts
 
 .global xorcursor
-| xorcursor(int row, int col)
+| xorcursor(int row, int col, void *lcd)
 | XXX: this can probably be optimized
 xorcursor:
 	move	4(%sp),%d0	| row
 	move	6(%sp),%d1	| col
+	move.l	8(%sp),%a0
 	
 	| get address on screen
 	mulu	#6*LCD_INCY,%d0
@@ -145,8 +144,8 @@ xorcursor:
 	move.b	#0x0f,%d2	| XXX
 0:
 	add	%d1,%d0		| + col
-	move	%d0,%a0
-	lea	LCD_MEM(%a0),%a0	| address on screen
+	add	%d0,%a0
+	|lea	LCD_MEM(%a0),%a0	| address on screen
 	| %a0 holds screen address
 	| %d2 holds cursor mask
 	

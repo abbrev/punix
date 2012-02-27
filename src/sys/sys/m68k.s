@@ -1,4 +1,4 @@
-.section _st1, "x"
+.section .text, "x"
 
 | NB: cpuidle() works on both the TI-89 and TI-92+, but it doesn't power off
 | the FlashROM on the 92+
@@ -165,7 +165,7 @@ unlock:
 	rts
 
 | masklock:
-| 1 byte atomic lock
+| 2 byte atomic lock
 
 | void initmask(masklock *lockp);
 .global initmask
@@ -206,3 +206,75 @@ setmask:
 	move.w	8(%sp),(%a0)
 	rts
 */
+
+.include "lcd.inc"
+
+.global copythird
+| void copythird(void *plane, int offset)
+copythird:
+	move.l	(4,%sp),%a0	| plane
+	move	(8,%sp),%d0	| offset
+	move.l	#LCD_MEM,%a1
+	add	%d0,%a0
+	add	%d0,%a1
+	movem.l	%d2-%d7/%a2-%a6,-(%sp)
+	move	%sr,%d0
+	move	%d0,-(%sp)
+	|move	#0x2700,%sr
+
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6	| move 52 bytes
+	movem.l	%d0-%d7/%a2-%a6,(%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(52,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(104,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(156,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(208,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(260,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(312,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(364,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(416,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(468,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(520,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(572,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(624,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(676,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(728,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(780,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(832,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(884,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(936,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(988,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1040,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1092,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1144,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1196,%a1)
+	movem.l	(%a0)+,%d0-%d7
+	movem.l	%d0-%d7,(1248,%a1)
+
+	move	(%sp)+,%d0
+	move	%d0,%sr
+	movem.l	(%sp)+,%d2-%d7/%a2-%a6
+	rts
+
