@@ -1,10 +1,13 @@
 #ifndef _TTY_H_
 #define _TTY_H_
 
+#define LOG2TTYQSIZE 10
+#define TTYQSIZE (1<<LOG2TTYQSIZE)
+
 struct tty {
-	struct queue t_rawq;
-	struct queue t_canq;
-	struct queue t_outq;
+	QUEUE(LOG2TTYQSIZE) t_rawq;
+	QUEUE(LOG2TTYQSIZE) t_canq;
+	QUEUE(LOG2TTYQSIZE) t_outq;
 	int t_state;
 	int t_numc;
 	struct termios t_termios;
@@ -13,8 +16,8 @@ struct tty {
 };
 
 #define TTBREAKC(c)                                                     \
-	((c) == '\n' || ((c) == cc[VEOF] ||                             \
-	(c) == cc[VEOL] || (c) == cc[VEOL2]) /* && (c) != _POSIX_VDISABLE*/ )
+	((c) && ((c) == '\n' || ((c) == cc[VEOF] ||                             \
+	         (c) == cc[VEOL] || (c) == cc[VEOL2])) /* && (c) != _POSIX_VDISABLE*/ )
 
 #define t_cc            t_termios.c_cc
 #define t_cflag         t_termios.c_cflag
@@ -25,10 +28,6 @@ struct tty {
 #define t_oflag         t_termios.c_oflag
 #define t_ospeed        t_termios.c_ospeed
 #define t_time          t_termios.c_time
-
-
-#define TTIPRI 10
-#define TTOPRI 20
 
 #define CTRL(a) ((a)&0x1f)
 
