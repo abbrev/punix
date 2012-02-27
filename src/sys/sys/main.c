@@ -45,6 +45,7 @@ STARTUP(void kmain())
 	lcdinit();
 	vtinit();
 	meminit();
+	grayinit();
 	linkinit();
 	audioinit();
 	sched_init();
@@ -54,7 +55,6 @@ STARTUP(void kmain())
 	loadavinit();
 	battinit();
 	usageinit();
-	G.calloutlock = 0;
 	
 #if 1
 	kprintf("%s build %s\n", uname_sysname, uname_version);
