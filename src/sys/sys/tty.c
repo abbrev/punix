@@ -38,8 +38,9 @@ void ttyopen(dev_t dev, struct tty *tp)
 			tp->t_pgrp = P.p_pid;
 		P.p_pgrp = tp->t_pgrp;
 	}
-	qclear(&tp->t_rawq);
-	qclear(&tp->t_canq);
+	qinit(&tp->t_rawq, LOG2TTYQSIZE);
+	qinit(&tp->t_canq, LOG2TTYQSIZE);
+	qinit(&tp->t_outq, LOG2TTYQSIZE);
 }
 
 void ttychars(struct tty *tp)
@@ -110,7 +111,7 @@ loop:
 		if ((lflag & ICANON)) {
 			int numc = tp->t_numc;
 			tp->t_numc = !TTBREAKC(ch);
-			if (ch == cc[VEOF]) {
+			if (cc[VEOF] && ch == cc[VEOF]) {
 				//kprintf("numc=%d havec=%d\n", numc, havec);
 				if (numc && !havec) {
 					//kprintf("goto loop\n");
@@ -170,20 +171,20 @@ struct queue {
 int b_to_q(char const *bp, int count, struct queue *qp)
 {
 	int n = count;
-	unsigned long head = qp->q_head & QMASK;
-	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long head = qp->q_head & qp->q_mask;
+	unsigned long tail = qp->q_tail & qp->q_mask;
 	/* limit n to the free size of our queue */
 	if (n > qfree(qp))
 		n = qfree(qp);
 	if (n == 0)
 		return 0;
 	
-	if (head < tail || head + n <= QSIZE) {
+	if (head < tail || head + n <= qsize(qp)) {
 		/* easy case: one contiguous block */
 		memmove(qp->q_buf + head, bp, n);
 	} else {
 		/* split case: two separate blocks */
-		int y = QSIZE - head; /* upper block byte count */
+		int y = qsize(qp) - head; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
 		memmove(qp->q_buf + head, bp, y); /* copy upper block */
 		memmove(qp->q_buf, bp + y, z); /* copy lower block */
@@ -211,7 +212,7 @@ int b_to_q(char const *bp, int count, struct queue *qp)
 int q_to_b(struct queue *qp, char *bp, int count)
 {
 	int n = count;
-	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long tail = qp->q_tail & qp->q_mask;
 	unsigned long used = qused(qp);
 	/* limit n to the used size of our queue */
 	if (n > used)
@@ -219,12 +220,12 @@ int q_to_b(struct queue *qp, char *bp, int count)
 	if (n == 0)
 		return 0;
 	
-	if (tail < (qp->q_head & QMASK) || tail + n <= QSIZE) {
+	if (tail < (qp->q_head & qp->q_mask) || tail + n <= qsize(qp)) {
 		/* single block */
 		memmove(bp, qp->q_buf + tail, n);
 	} else {
 		/* two blocks */
-		int y = QSIZE - tail; /* upper block byte count */
+		int y = qsize(qp) - tail; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
 		memmove(bp, qp->q_buf + tail, y); /* copy upper block */
 		memmove(bp + y, qp->q_buf, z); /* copy lower block */

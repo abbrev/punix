@@ -143,10 +143,13 @@ STARTUP(void hardclock(unsigned short ps))
 	int whereami;
 	long nsec = TICK;
 	
-	splclock();
+	//splclock(); // this is pointless
 	
 	whereami = G.whereami;
 	++G.ticks;
+
+	extern void updategray();
+	updategray();
 
 	if (current && ++G.spin >= 2) {
 		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+whereami*4);
@@ -211,7 +214,7 @@ STARTUP(void hardclock(unsigned short ps))
 	if (G.callout[0].c_func)
 		--G.callout[0].c_dtime;
 	
-	scankb();
+	//scankb();
 }
 
 /*

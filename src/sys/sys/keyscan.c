@@ -377,7 +377,7 @@ static short compose(short key)
 /* The status bitmaps and drawmod()/showstatus() are kind of a hack. It would be
  * nice if they were rewritten (but not essential since it works as it is) */
 #ifdef TI92P
-#define STATUSROWS 8
+#define STATUSROWS 7
 static const unsigned char status[][STATUSROWS] = {
 #include "glyphsets/status-none.inc"
 #include "glyphsets/status-2nd.inc"
@@ -457,9 +457,9 @@ static const unsigned char status[][STATUSROWS] = {
 #define STATUS_LAST       20
 
 #ifdef TI92P
-#define MODBASE ((char *)(LCD_MEM+0xf00-7*30-1))
+#define MODBASE ((char *)((G.lcd.grayplanes[0]?:LCD_MEM)+0xf00-6*30-1))
 #else
-#define MODBASE ((char *)(LCD_MEM+6*NUMCELLROWS*LCD_INCY+19))
+#define MODBASE ((char *)((G.lcd.grayplanes[0]?:LCD_MEM)+6*NUMCELLROWS*LCD_INCY+19))
 #endif
 
 static void drawmod(int pos, int m)
@@ -473,10 +473,8 @@ static void drawmod(int pos, int m)
 	//kprintf("drawmod(%d, %d)\n", pos, m);
 	s = MODBASE - pos;
 	d = (char *)&status[m][0];
-	for (i = 0; i < STATUSROWS; ++i) {
-		*s = *d;
-		s+=30;
-		++d;
+	for (i = 0; i < STATUSROWS; ++i, s += 30) {
+		*s = *d++;
 	}
 }
 
@@ -539,6 +537,23 @@ static void addkey(unsigned short key)
 	unsigned short mod;
 	short k;
 	
+	if (key == KEY_APPS) {
+#if 0
+		int i;
+		kprintf("\n");
+		for (i = 0; G.callout[i].c_func; ++i) {
+			struct callout *cp = &G.callout[i];
+			kprintf("%2d: dtime=%-6ld func=%p arg=%p\n",
+			        i, cp->c_dtime, cp->c_func, cp->c_arg);
+		}
+
+		
+#elif 1
+		printheaplist();
+#endif
+		return;
+	}
+
 	mod = G.vt.key_mod | G.vt.key_mod_sticky;
 	
 	/* translate alpha and hand first */
@@ -695,7 +710,7 @@ end:
 #endif
 }
 
-void scankb()
+void scankb(void *unused)
 {
 	short rowmask = 1, colmask = 1, key;
 	unsigned char *currow = &G.vt.key_array[0];
@@ -756,5 +771,11 @@ void scankb()
 end:
 	showstatus();
 	KBROWMASK = 0x380; /* reset to standard key reading */
-	return;
+	kbinit();
 }
+
+void kbinit()
+{
+	timeout(scankb, NULL, 1);
+}
+

@@ -1,5 +1,5 @@
 GLYPHS2C = (echo '{'; tail -c1152 | xxd -i; echo '},')
-STATUS2C = (echo '{'; tail -c8 | xxd -i; echo '},')
+STATUS2C = (echo '{'; tail -c7 | xxd -i; echo '},')
 STATUS2C89 = (echo '{'; tail -c4 | xxd -i; echo '},')
 
 GLYPHS = upper.pbm small-upper.pbm uk.pbm us.pbm small-us.pbm sg.pbm tcs.pbm

@@ -171,13 +171,14 @@ static void invertcursor(struct tty *tp)
 {
 	(void)tp;
 	xorcursor(G.vt.pos.row,
-	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column);
+	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column,
+	          G.lcd.grayplanes[0] ? : LCD_MEM);
 }
 
 /* move screen contents up */
-extern void scrolldown(int n);
+extern void scrolldown(int n, void *lcd);
 /* move screen contents down */
-extern void scrollup(int n);
+extern void scrollup(int n, void *lcd);
 
 #if 1
 static void cursor(struct tty *tp)
@@ -197,11 +198,15 @@ static void scroll(struct tty *tp)
 	int rows;
 	if (G.vt.pos.row < 0) {
 		rows = -G.vt.pos.row;
-		scrollup(rows);
+		scrollup(rows, G.lcd.grayplanes[0] ? : LCD_MEM);
+		if (G.lcd.grayplanes[1])
+			scrollup(rows, G.lcd.grayplanes[1]);
 		G.vt.pos.row = 0;
 	} else if (G.vt.pos.row > MARGINBOTTOM) {
 		rows = G.vt.pos.row - MARGINBOTTOM;
-		scrolldown(rows);
+		scrolldown(rows, G.lcd.grayplanes[0] ? : LCD_MEM);
+		if (G.lcd.grayplanes[1])
+			scrolldown(rows, G.lcd.grayplanes[1]);
 		G.vt.pos.row = MARGINBOTTOM;
 	}
 }
@@ -312,9 +317,9 @@ static void defaultparams(int n, struct tty *tp)
 static void drawgl(struct glyph *glyph, int row, int col)
 {
 	if (G.vt.gr & GR_INVERSE)
-		drawglyphinv(glyph, row, col);
+		drawglyphinv(glyph, row, col, G.lcd.grayplanes[0] ? : LCD_MEM);
 	else
-		drawglyph(glyph, row, col);
+		drawglyph(glyph, row, col, G.lcd.grayplanes[0] ? : LCD_MEM);
 }
 
 static void print(int ch, struct tty *tp)
@@ -589,7 +594,9 @@ static void clearrows(int top, int bottom)
 {
 	int n = bottom - top + 1;
 	if (n <= 0) return;
-	memset(LCD_MEM+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
+	memset((G.lcd.grayplanes[0] ? : LCD_MEM)+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
+	if (G.lcd.grayplanes[1])
+		memset(G.lcd.grayplanes[1]+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
 }
 
 static void csi_dispatch(int ch, struct tty *tp)
@@ -1196,9 +1203,10 @@ void vtinit()
 	G.vt.bell = 0;
 	G.cpubusy = 1;
 	showstatus();
-	qclear(&G.vt.vt[0].t_rawq);
-	qclear(&G.vt.vt[0].t_canq);
-	qclear(&G.vt.vt[0].t_outq);
+	qinit(&G.vt.vt[0].t_rawq, LOG2TTYQSIZE);
+	qinit(&G.vt.vt[0].t_canq, LOG2TTYQSIZE);
+	qinit(&G.vt.vt[0].t_outq, LOG2TTYQSIZE);
+	kbinit();
 }
 
 /* FIXME: use the tty structure */
@@ -1230,6 +1238,7 @@ static void dovtoutput(int ch, struct tty *tp)
 
 static void vtoutput(int ch, struct tty *tp)
 {
+#if 1
 	int c;
 	int x = spl7();
 	if (G.vt.lock) {
@@ -1249,6 +1258,9 @@ static void vtoutput(int ch, struct tty *tp)
 	}
 	G.vt.lock = 0;
 	splx(x);
+#else
+	dovtoutput(ch, tp);
+#endif
 }
 
 /*
@@ -1367,44 +1379,46 @@ static void ttyinput(int ch, struct tty *tp)
 			ch = '\n';
 	} else if (ch == '\n' && iflag & INLCR)
 		ch = '\r';
-	if (ch == cc[VSTART]) {
-		if (tp->t_state & TTSTOP) {
-			tp->t_state &= ~TTSTOP;
-			/*ttstart(tp);*/
-		}
-		return;
-	}
-	if (ch == cc[VSTOP]) {
-		if (!(tp->t_state & TTSTOP)) {
-			tp->t_state |= TTSTOP;
-			/*cdevsw[MAJOR(tp->t_dev)].d_stop(tp);*/
-		}
-		return;
-	}
-	if (ch == cc[VSUSP]) {
-		ttyecho(ch, tp);
-		if (lflag & ECHO) {
-			ttyoutput('\n', tp);
-		}
-		if (lflag & ISIG) {
-			gsignal(tp->t_pgrp, SIGTSTP);
-			if (!(lflag & NOFLSH))
-				flushtty(tp);
+	if (ch != '\0') {
+		if (ch == cc[VSTART]) {
+			if (tp->t_state & TTSTOP) {
+				tp->t_state &= ~TTSTOP;
+				/*ttstart(tp);*/
+			}
 			return;
 		}
-	}
-	if (ch == cc[VINTR] || ch == cc[VQUIT]) {
-		ttyecho(ch, tp);
-		if (lflag & ECHO) {
-			ttyoutput('\n', tp);
-		}
-		if (lflag & ISIG) {
-			gsignal(tp->t_pgrp,
-				ch == cc[VQUIT] ? SIGQUIT : SIGINT);
-			gsignal(tp->t_pgrp, SIGCONT);
-			if (!(lflag & NOFLSH))
-				flushtty(tp);
+		if (ch == cc[VSTOP]) {
+			if (!(tp->t_state & TTSTOP)) {
+				tp->t_state |= TTSTOP;
+				/*cdevsw[MAJOR(tp->t_dev)].d_stop(tp);*/
+			}
 			return;
+		}
+		if (ch == cc[VSUSP]) {
+			ttyecho(ch, tp);
+			if (lflag & ECHO) {
+				ttyoutput('\n', tp);
+			}
+			if (lflag & ISIG) {
+				gsignal(tp->t_pgrp, SIGTSTP);
+				if (!(lflag & NOFLSH))
+					flushtty(tp);
+				return;
+			}
+		}
+		if (ch == cc[VINTR] || ch == cc[VQUIT]) {
+			ttyecho(ch, tp);
+			if (lflag & ECHO) {
+				ttyoutput('\n', tp);
+			}
+			if (lflag & ISIG) {
+				gsignal(tp->t_pgrp,
+					ch == cc[VQUIT] ? SIGQUIT : SIGINT);
+				gsignal(tp->t_pgrp, SIGCONT);
+				if (!(lflag & NOFLSH))
+					flushtty(tp);
+				return;
+			}
 		}
 	}
 	if (1 && (tp->t_state & TTSTOP)) {
@@ -1413,6 +1427,7 @@ static void ttyinput(int ch, struct tty *tp)
 	}
 
 	if (lflag & ICANON) {
+		if (ch == '\0') goto putchar;
 		if (ch == cc[VERASE]) {
 			if (!qisempty(&tp->t_rawq))
 				ttyrub(qunputc(&tp->t_rawq), tp);
@@ -1423,8 +1438,9 @@ static void ttyinput(int ch, struct tty *tp)
 			if ((lflag & ECHOKE) /* && ... */)
 				while (!qisempty(&tp->t_rawq))
 					ttyrub(qunputc(&tp->t_rawq), tp);
-			else {
+			else
 #endif
+			{
 				ttyecho(ch, tp);
 				if ((lflag & ECHOK) /*|| (lflag & ECHOKE)*/ )
 					ttyecho('\n', tp);
@@ -1460,6 +1476,7 @@ static void ttyinput(int ch, struct tty *tp)
 #endif
 		}
 
+putchar:
 		/*
 		 * put the character on the character queue
 		 */
