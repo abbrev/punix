@@ -62,31 +62,30 @@ static struct proc *earliest_deadline_proc(void)
 	int idx = NORMAL_PRIO;
 	struct list_head *queue;
 	
-tryqueue:
-	queue = &G.runqueues[idx];
-	list_for_each_entry(procp, queue, p_runlist) {
-		//kprintf(".");
-		if (idx < MAX_RT_PRIO) {
-			earliest_procp = procp;
-			goto out;
-		}
-		
-		dl = procp->p_deadline;
+	do {
+		queue = &G.runqueues[idx];
+		list_for_each_entry(procp, queue, p_runlist) {
+			//kprintf(".");
+			if (idx < MAX_RT_PRIO) {
+				earliest_procp = procp;
+				goto out;
+			}
+			
+			dl = procp->p_deadline;
 #if 0
-		// select a process immediately if its deadline is past
-		if (time_before(dl, G.ticks)) {
-			earliest_procp = procp;
-			goto out;
-		}
+			// select a process immediately if its deadline is past
+			if (time_before(dl, G.ticks)) {
+				earliest_procp = procp;
+				goto out;
+			}
 #endif
-		if (earliest_procp == NULL ||
-		    time_before(dl, earliest_deadline)) {
-			earliest_procp = procp;
-			earliest_deadline = dl;
+			if (earliest_procp == NULL ||
+			    time_before(dl, earliest_deadline)) {
+				earliest_procp = procp;
+				earliest_deadline = dl;
+			}
 		}
-	}
-	if (!earliest_procp && ++idx < PRIO_LIMIT)
-		goto tryqueue;
+	} while (!earliest_procp && ++idx < PRIO_LIMIT);
 	
 out:
 	if (!earliest_procp) {
