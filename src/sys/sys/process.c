@@ -33,7 +33,6 @@ STARTUP(void setrun(struct proc *p))
 	if (p->p_status != P_ZOMBIE) {
 		sched_run(p);
 	}
-out:
 	unmask(&G.calloutlock);
 }
 
@@ -54,7 +53,6 @@ STARTUP(void unsleep(struct proc *p))
 STARTUP(static void endtsleep(void *vp))
 {
 	struct proc *p = (struct proc *)vp;
-	int s;
 	
 	mask(&G.calloutlock);
 	if (p->p_waitchan) {
@@ -88,7 +86,6 @@ STARTUP(static void endtsleep(void *vp))
 STARTUP(int tsleep(void *chan, int intr, long timo))
 {
 	struct proc *p = &P;
-	int s;
 	int sig;
 	int err = 0;
 
@@ -230,7 +227,6 @@ retry:
 		G.pidchecked = 0;
 	}
 	if (G.mpid >= G.pidchecked) {
-		struct list_head *lp;
 		G.pidchecked = MAXPID;
 		
 		list_for_each_entry(p, &G.proc_list, p_list) {
