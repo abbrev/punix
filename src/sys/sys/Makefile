@@ -55,7 +55,7 @@ SSRC	+= context.s long.s fpuemu.s
 CSRC	+= subr.c tty.c inode.c process.c pfs_alloc.c pfs_bmap.c
 CSRC	+= panic.c abort.c assert.c kprintf.c printf.c clock.c #globals.c
 CSRC	+= loadav.c heap.c sched.c bogomips.c
-CSRC	+= sysctl.c usermain.c qsort.c
+CSRC	+= sysctl.c usermain.c qsort.c gray.c
 SSRC	+= userstart.s mulu64.s divu64.s drawglyph.s
 
 #OBJ = testvectors.o
@@ -77,6 +77,14 @@ scratch:
 %.a:
 	$(MAKE) -C `dirname $@`
 
+%.o: %.c
+	@echo "  CC $@"
+	@$(CC) -c $(CFLAGS) -o $@ $<
+
+%.o: %.s
+	@echo "  AS $@"
+	@$(AS) -c $(ASFLAGS) -o $@ $<
+
 .PHONY: tib
 ifeq ($(CALC), TI92P)
 tib: punix-9x.tib
@@ -97,17 +105,17 @@ punix-89.tib:	$(OBJ)
 .PHONY: $(TMPUNAME) 
 version.o: $(TMPUNAME)
 uname.sysname:
-	echo -n "$(UNAME_SYSNAME)" >$@
+	@echo -n "$(UNAME_SYSNAME)" >$@
 uname.nodename:
-	echo -n "$(UNAME_NODENAME)" >$@
+	@echo -n "$(UNAME_NODENAME)" >$@
 uname.release:
-	echo -n "$(UNAME_RELEASE)" >$@
+	@echo -n "$(UNAME_RELEASE)" >$@
 uname.version:
-	echo -n "$(UNAME_VERSION)" >$@
+	@echo -n "$(UNAME_VERSION)" >$@
 uname.machine:
-	echo -n "$(UNAME_MACHINE)" >$@
+	@echo -n "$(UNAME_MACHINE)" >$@
 stupiddate:
-	echo -n "$(STUPIDDATE)" >$@
+	@echo -n "$(STUPIDDATE)" >$@
 sysent.c: sysent.txt
 	$(AWK) -f mksysent.awk sysent.txt >sysent.c || { rm -f sysent.c; exit 1; }
 
