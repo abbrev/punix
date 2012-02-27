@@ -39,14 +39,6 @@ void devttyopen(dev_t, int), devttyclose(dev_t, int);
 void devttyread(dev_t), devttywrite(dev_t);
 void devttyioctl(dev_t, int, ...);
 
-void linkopen(dev_t, int), linkclose(dev_t, int);
-void linkread(dev_t), linkwrite(dev_t);
-void linkioctl(dev_t, int, ...);
-
-void audioopen(dev_t, int), audioclose(dev_t, int);
-void audioread(dev_t), audiowrite(dev_t);
-void audioioctl(dev_t, int, ...);
-
 void miscopen(dev_t, int), miscclose(dev_t, int);
 void miscread(dev_t), miscwrite(dev_t);
 void miscioctl(dev_t, int, ...);
