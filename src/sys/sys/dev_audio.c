@@ -23,8 +23,9 @@
 /* one-shot routine on system-startup */
 STARTUP(void audioinit())
 {
+	qinit(&G.audio.q, LOG2AUDIOQSIZE);
 	qclear(&G.audio.q);
-	kprintf("&G.audio.q=%p\n", &G.audio.q);
+	//kprintf("&G.audio.q=%p\n", &G.audio.q);
 	ioport = 0;
 }
 
@@ -82,7 +83,7 @@ STARTUP(void audiointr())
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
 		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+4*4);
-		*spinner = (~0L) << 32L*qfree(&G.audio.q)/QSIZE;
+		*spinner = (~0L) << 32L*qfree(&G.audio.q)/AUDIOQSIZE;
 	}
 	
 	/* put this sample into the lower 2 bits */
@@ -132,8 +133,8 @@ STARTUP(void audioread(dev_t dev))
  * audio queue (we have only about 12e6/8192 = 1464 cycles between each audio
  * interrupt to copy data to the audio queue).
  */
-#define MAXCOPYSIZE QSIZE //8
-#define MAXDRAIN (QSIZE / 2)
+#define MAXCOPYSIZE AUDIOQSIZE //8
+#define MAXDRAIN (AUDIOQSIZE / 2)
 
 /* write audio samples to the audio queue */
 STARTUP(void audiowrite(dev_t dev))
@@ -144,7 +145,7 @@ STARTUP(void audiowrite(dev_t dev))
 
 	while (P.p_count) {
 		*spinner = 0xffffffff;
-		n = b_to_q(P.p_base, MIN(P.p_count, QSIZE), &G.audio.q);
+		n = b_to_q(P.p_base, MIN(P.p_count, AUDIOQSIZE), &G.audio.q);
 		P.p_base += n;
 		P.p_count -= n;
 
@@ -158,7 +159,7 @@ STARTUP(void audiowrite(dev_t dev))
 		*spinner = 0xffff0000;
 		
 		x = spl1();
-		G.audio.lowat = QSIZE - MIN(P.p_count, MAXDRAIN);
+		G.audio.lowat = AUDIOQSIZE - MIN(P.p_count, MAXDRAIN);
 		
 		slp(&G.audio.q, 1);
 		splx(x);

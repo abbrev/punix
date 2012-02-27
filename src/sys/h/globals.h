@@ -1,16 +1,18 @@
 #include <termios.h>
 #include <setjmp.h>
 
+#include "heap.h"
 #include "flash.h"
 #include "callout.h"
 #include "queue.h"
 #include "inode.h"
 #include "tty.h"
-#include "heap.h"
 #include "buf.h"
 #include "kbd.h"
 #include "glyph.h"
 #include "sched.h"
+#include "audio.h"
+#include "link.h"
 
 struct globals {
 	long seconds; /* XXX: see entry.s */
@@ -70,12 +72,13 @@ struct globals {
 		
 		/* we should probably use a more efficient
 		 * structure than a queue for audio */
-		struct queue q;
+		QUEUE(LOG2AUDIOQSIZE) q;
 	} audio;
 	
 	struct {
 		int lowat, hiwat;
-		struct queue readq, writeq;
+		QUEUE(LOG2AUDIOQSIZE) readq, writeq;
+
 		char control;
 		int readoverflow;
 		int open;
@@ -88,7 +91,6 @@ struct globals {
 	dev_t rootdev, pipedev;
 	struct inode *rootdir;
 	
-	char canonb[CANBSIZ];
 	struct inode inode[NINODE];
 	struct inode *inodelist;
 	struct list_head inode_list;
@@ -156,6 +158,15 @@ struct globals {
 		int scroll_lock;
 		int bell;
 	} vt;
+	struct {
+		int third;
+		int planeindex;
+		int fs;
+		void *currentplane;
+		void *grayplanes[2];
+		void *planes[3];
+		int grayinitialized;
+	} lcd;
 	int cpubusy;
 	
 	int batt_level;

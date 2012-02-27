@@ -22,8 +22,8 @@ void updaterxtx(void *unused)
 
 STARTUP(void linkinit())
 {
-	qclear(&G.link.readq);
-	qclear(&G.link.writeq);
+	qinit(&G.link.readq, LOG2LINKQSIZE);
+	qinit(&G.link.writeq, LOG2LINKQSIZE);
 	G.link.lowat = G.link.hiwat = -1;
 	G.link.readoverflow = 0;
 	ioport = 0;
@@ -242,7 +242,7 @@ STARTUP(void linkwrite(dev_t dev))
 		txon();
 		while (qputc(ch, &G.link.writeq) < 0) {
 			txon();
-			G.link.lowat = QSIZE - 32; /* XXX constant */
+			G.link.lowat = LINKQSIZE - 32; /* XXX constant */
 			slp(&G.link.writeq, 1);
 		}
 		splx(x);
