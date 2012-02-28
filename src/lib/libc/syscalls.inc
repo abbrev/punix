@@ -5,6 +5,7 @@ SYS_read         = 3
 SYS_write        = 4
 SYS_open         = 5
 SYS_close        = 6
+SYS_lseek        = 19
 SYS_getpid       = 20
 SYS_uname        = 23
 SYS_getuid       = 24
