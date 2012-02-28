@@ -22,7 +22,9 @@ struct termios {
 
 /* c_cc characters (subscript for c_cc array) */
 #define VEOF    0  /* EOF character */
+#define VMIN    VEOF /* MIN value */
 #define VEOL    1  /* EOL character */
+#define VTIME   VEOL /* TIME value */
 #define VERASE  2  /* ERASE character */
 #define VINTR   3  /* INTR character */
 #define VKILL   4  /* KILL character */
@@ -30,8 +32,6 @@ struct termios {
 #define VSTART  6  /* START character */
 #define VSTOP   7  /* STOP character */
 #define VSUSP   8  /* SUSP character */
-#define VMIN    0  /* MIN value */
-#define VTIME   1  /* TIME value */
 /* the following are from Linux and are not in POSIX */
 #define VSWTC    9   /* */
 #define VREPRINT 10  /* */
