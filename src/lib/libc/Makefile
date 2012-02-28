@@ -25,7 +25,17 @@ OBJ := $(SRC:.c=.o)
 OBJ := $(OBJ:.s=.o)
 
 libc.a: $(OBJ)
-	$(AR) -rc libc.a $^
+	@echo "  AR $@"
+	@$(AR) -rc libc.a $^
+
+%.o: %.c
+	@echo "  CC $@"
+	@$(CC) -c $(CFLAGS) -o $@ $<
+
+%.o: %.s
+	@echo "  AS $@"
+	@$(AS) -c $(ASFLAGS) -o $@ $<
+
 
 ########################################
 # miscellaneous
@@ -35,7 +45,7 @@ DEPEND = .dep
 
 
 depend $(DEPEND):
-	-$(CC) -M -MG $(CFLAGS) $(SRC) >$(DEPEND) #2>/dev/null
+	@-$(CC) -M -MG $(CFLAGS) $(SRC) >$(DEPEND) #2>/dev/null
 
 clean:
 	rm -f *.bin *.o *.a
