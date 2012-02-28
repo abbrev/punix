@@ -1,3 +1,6 @@
+#ifndef _GLOBALS_H_
+#define _GLOBALS_H_
+
 #include <termios.h>
 #include <setjmp.h>
 
@@ -204,3 +207,5 @@ extern int updlock;
 #define uptime   G._uptime
 
 # endif
+
+#endif
