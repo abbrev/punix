@@ -38,9 +38,9 @@ void ttyopen(dev_t dev, struct tty *tp)
 			tp->t_pgrp = P.p_pid;
 		P.p_pgrp = tp->t_pgrp;
 	}
-	qinit(&tp->t_rawq, LOG2TTYQSIZE);
-	qinit(&tp->t_canq, LOG2TTYQSIZE);
-	qinit(&tp->t_outq, LOG2TTYQSIZE);
+	qinit((queue *)&tp->t_rawq, LOG2TTYQSIZE);
+	qinit((queue *)&tp->t_canq, LOG2TTYQSIZE);
+	qinit((queue *)&tp->t_outq, LOG2TTYQSIZE);
 }
 
 void ttychars(struct tty *tp)
@@ -62,8 +62,8 @@ void ttychars(struct tty *tp)
 void flushtty(struct tty *tp)
 {
 	/* FIXME */
-	qclear(&tp->t_rawq);
-	qclear(&tp->t_canq);
+	qclear((queue *)&tp->t_rawq);
+	qclear((queue *)&tp->t_canq);
 }
 
 void wflushtty(struct tty *tp)
@@ -94,10 +94,10 @@ void ttyread(struct tty *tp)
 	int ch;
 	int lflag = tp->t_lflag;
 	cc_t *cc = tp->t_termios.c_cc;
-	struct queue *qp;
+	queue *qp;
 	int havec = 0;
 	
-	qp = (lflag & ICANON) ? &tp->t_canq : &tp->t_rawq;
+	qp = (lflag & ICANON) ? (queue *)&tp->t_canq : (queue *)&tp->t_rawq;
 	
 loop:
 	/* TODO: also check for the tty closing */
@@ -159,16 +159,9 @@ void ttywakeup(struct tty *tp)
 
 /* Following functions should be moved into some other file */
 
-#if 0
-struct queue {
-	unsigned long q_head, q_tail;
-	char q_buf[QSIZE];
-};
-#endif
-
 /* copy buffer to queue. return number of bytes copied */
 #if 1
-int b_to_q(char const *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, queue *qp)
 {
 	int n = count;
 	unsigned long head = qp->q_head & qp->q_mask;
@@ -195,7 +188,7 @@ int b_to_q(char const *bp, int count, struct queue *qp)
 }
 #else
 /* unoptimized version */
-int b_to_q(char const *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, queue *qp)
 {
 	int n = count;
 	
@@ -209,7 +202,7 @@ int b_to_q(char const *bp, int count, struct queue *qp)
 /* copy queue to buffer. return number of bytes copied */
 #if 1
 /* XXX: this has NOT been tested */
-int q_to_b(struct queue *qp, char *bp, int count)
+int q_to_b(queue *qp, char *bp, int count)
 {
 	int n = count;
 	unsigned long tail = qp->q_tail & qp->q_mask;
@@ -236,7 +229,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 }
 #else
 /* unoptimized version */
-int q_to_b(struct queue *qp, char *bp, int count)
+int q_to_b(queue *qp, char *bp, int count)
 {
 	int n = 0;
 	int ch;
@@ -252,12 +245,12 @@ int q_to_b(struct queue *qp, char *bp, int count)
 
 /* concatenate from queue 'from' to queue 'to' */
 /* TODO: this can also be optimized much as b_to_q and q_to_b can */
-void catq(struct queue *from, struct queue *to)
+void catq(queue *from, queue *to)
 {
 	int ch;
 	while ((ch = qgetc(from)) >= 0) {
 		if (qputc(ch, to) < 0) {
-			qungetc(ch, from);
+			qungetc(ch, (queue *)from);
 			break;
 		}
 	}

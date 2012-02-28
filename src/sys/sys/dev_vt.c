@@ -1203,9 +1203,9 @@ void vtinit()
 	G.vt.bell = 0;
 	G.cpubusy = 1;
 	showstatus();
-	qinit(&G.vt.vt[0].t_rawq, LOG2TTYQSIZE);
-	qinit(&G.vt.vt[0].t_canq, LOG2TTYQSIZE);
-	qinit(&G.vt.vt[0].t_outq, LOG2TTYQSIZE);
+	qinit((queue *)&G.vt.vt[0].t_rawq, LOG2TTYQSIZE);
+	qinit((queue *)&G.vt.vt[0].t_canq, LOG2TTYQSIZE);
+	qinit((queue *)&G.vt.vt[0].t_outq, LOG2TTYQSIZE);
 	kbinit();
 }
 
@@ -1242,7 +1242,7 @@ static void vtoutput(int ch, struct tty *tp)
 	int c;
 	int x = spl7();
 	if (G.vt.lock) {
-		qputc(ch, &tp->t_outq);
+		qputc(ch, (queue *)&tp->t_outq);
 		splx(x);
 		return;
 	}
@@ -1251,7 +1251,7 @@ static void vtoutput(int ch, struct tty *tp)
 
 	dovtoutput(ch, tp);
 	x = spl7();
-	while ((c = qgetc(&tp->t_outq)) != -1) {
+	while ((c = qgetc((queue *)&tp->t_outq)) != -1) {
 		splx(x);
 		dovtoutput(c, tp);
 		x = spl7();
@@ -1429,36 +1429,36 @@ static void ttyinput(int ch, struct tty *tp)
 	if (lflag & ICANON) {
 		if (ch == '\0') goto putchar;
 		if (ch == cc[VERASE]) {
-			if (!qisempty(&tp->t_rawq))
-				ttyrub(qunputc(&tp->t_rawq), tp);
+			if (!qisempty((queue *)&tp->t_rawq))
+				ttyrub(qunputc((queue *)&tp->t_rawq), tp);
 			goto endcase;
 		}
 		if (ch == cc[VKILL]) {
 #if 1
 			if ((lflag & ECHOKE) /* && ... */)
-				while (!qisempty(&tp->t_rawq))
-					ttyrub(qunputc(&tp->t_rawq), tp);
+				while (!qisempty((queue *)&tp->t_rawq))
+					ttyrub(qunputc((queue *)&tp->t_rawq), tp);
 			else
 #endif
 			{
 				ttyecho(ch, tp);
 				if ((lflag & ECHOK) /*|| (lflag & ECHOKE)*/ )
 					ttyecho('\n', tp);
-				qclear(&tp->t_rawq); /* ??? */
+				qclear((queue *)&tp->t_rawq); /* ??? */
 				//tp->t_rocount = 0;
 			}
 			goto endcase;
 		}
 		if (ch == cc[VWERASE]) {
 			/* first erase whitespace */
-			while ((ch = qunputc(&tp->t_rawq)) == ' ' || ch == '\t')
+			while ((ch = qunputc((queue *)&tp->t_rawq)) == ' ' || ch == '\t')
 				ttyrub(ch, tp);
 			while (ch != -1 && ch != ' ' && ch != '\t') {
 				ttyrub(ch, tp);
-				ch = qunputc(&tp->t_rawq);
+				ch = qunputc((queue *)&tp->t_rawq);
 			}
 			if (ch != -1)
-				qputc(ch, &tp->t_rawq);
+				qputc(ch, (queue *)&tp->t_rawq);
 			goto endcase;
 		}
 		if (lflag & IEXTEN) {
@@ -1483,9 +1483,9 @@ putchar:
 		TRACE();
 		if (TTBREAKC(ch) ||
 		    !(iflag & IMAXBEL) ||
-		    (qused(&tp->t_rawq) + 1) < qfree(&tp->t_canq)) {
+		    (qused((queue *)&tp->t_rawq) + 1) < qfree((queue *)&tp->t_canq)) {
 		TRACE();
-			if (qputc(ch, &tp->t_rawq) < 0) {
+			if (qputc(ch, (queue *)&tp->t_rawq) < 0) {
 				flushtty(tp);
 				return;
 			}
@@ -1496,7 +1496,7 @@ putchar:
 		TRACE();
 		if (TTBREAKC(ch)) {
 			//tp->t_rocount = 0;
-			catq(&tp->t_rawq, &tp->t_canq);
+			catq((queue *)&tp->t_rawq, (queue *)&tp->t_canq);
 			defer(ttywakeup, tp);
 		} /*else if (tp->t_rocount++ == 0)
 			tp->t_rocol = tp->t_column;*/
@@ -1522,12 +1522,12 @@ putchar:
 #endif
 /*
 		if (ch == cc[VEOL] || ch == cc[VEOF]) {
-			catq(&tp->t_rawq, &tp->t_canq);
+			catq((queue *)&tp->t_rawq, (queue *)&tp->t_canq);
 			defer(ttywakeup, tp);
 		}
 */
 	} else {
-		if (qputc(ch, &tp->t_rawq) < 0) {
+		if (qputc(ch, (queue *)&tp->t_rawq) < 0) {
 			flushtty(tp);
 			return;
 		}

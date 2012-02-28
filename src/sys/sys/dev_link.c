@@ -22,8 +22,8 @@ void updaterxtx(void *unused)
 
 STARTUP(void linkinit())
 {
-	qinit(&G.link.readq, LOG2LINKQSIZE);
-	qinit(&G.link.writeq, LOG2LINKQSIZE);
+	qinit((queue *)&G.link.readq, LOG2LINKQSIZE);
+	qinit((queue *)&G.link.writeq, LOG2LINKQSIZE);
 	G.link.lowat = G.link.hiwat = -1;
 	G.link.readoverflow = 0;
 	ioport = 0;
@@ -62,7 +62,7 @@ STARTUP(static void flush())
 {
 	int x = spl4();
 	/* wait until the write queue is empty */
-	while (!qisempty(&G.link.writeq)) {
+	while (!qisempty((queue *)&G.link.writeq)) {
 		G.link.lowat = 0;
 		txon();
 		slp(&G.link.writeq, 0);
@@ -75,7 +75,7 @@ STARTUP(static void recvbyte())
 {
 	int ch;
 	ch = LINK_BUFFER;
-	qputc(ch, &G.link.readq);
+	qputc(ch, (queue *)&G.link.readq);
 	//kprintf("<0x%02x ", ch);
 }
 
@@ -121,7 +121,7 @@ STARTUP(void linkintr())
 #if 0
 	++*(short *)(0x4c00+0xf00-30*4);
 #endif
-		int x = qfree(&G.link.readq);
+		int x = qfree((queue *)&G.link.readq);
 		//kprintf("Rx ");
 		if (!G.link.open) {
 			//kprintf("not-open ");
@@ -143,7 +143,7 @@ STARTUP(void linkintr())
 			G.link.rxtx |= 2;
 			
 			if (G.link.hiwat >= 0 &&
-			    qused(&G.link.readq) >= G.link.hiwat) {
+			    qused((queue *)&G.link.readq) >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
 				defer(wakeup, &G.link.readq);
 				G.link.hiwat = -1;
@@ -161,7 +161,7 @@ STARTUP(void linkintr())
 		if (!G.link.open) {
 			//kprintf("not-open ");
 			txoff();
-		} else if ((ch = qgetc(&G.link.writeq)) < 0) { /* nothing to send */
+		} else if ((ch = qgetc((queue *)&G.link.writeq)) < 0) { /* nothing to send */
 			//kprintf(">.. ");
 			//kprintf("empty ");
 			txoff();
@@ -170,7 +170,7 @@ STARTUP(void linkintr())
 			G.link.rxtx |= 1;
 			//kprintf(">0x%02x ", ch);
 			
-			if (qused(&G.link.writeq) <= G.link.lowat) {
+			if (qused((queue *)&G.link.writeq) <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
 				defer(wakeup, &G.link.writeq);
 				G.link.lowat = -1;
@@ -187,8 +187,8 @@ STARTUP(void linkopen(dev_t dev, int rw))
 		return;
 	}
 	
-	qclear(&G.link.readq);
-	qclear(&G.link.writeq);
+	qclear((queue *)&G.link.readq);
+	qclear((queue *)&G.link.writeq);
 	G.link.lowat = G.link.hiwat = -1;
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
 	++ioport; /* block other uses of the IO port */
@@ -215,7 +215,7 @@ STARTUP(void linkread(dev_t dev))
 			recvbyte();
 		}
 		rxon();
-		while ((ch = qgetc(&G.link.readq)) < 0) {
+		while ((ch = qgetc((queue *)&G.link.readq)) < 0) {
 			rxon();
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
@@ -240,7 +240,7 @@ STARTUP(void linkwrite(dev_t dev))
 		ch = *P.p_base++;
 		x = spl4();
 		txon();
-		while (qputc(ch, &G.link.writeq) < 0) {
+		while (qputc(ch, (queue *)&G.link.writeq) < 0) {
 			txon();
 			G.link.lowat = LINKQSIZE - 32; /* XXX constant */
 			slp(&G.link.writeq, 1);
