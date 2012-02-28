@@ -93,9 +93,11 @@ tib: punix-89.tib
 endif
 
 punix-9x.tib:	$(OBJ)
-	$(LD) $(LDFLAGS) -o punix $^
+	@echo "  LD $@"
+	@$(LD) $(LDFLAGS) -o punix $^
 punix-89.tib:	$(OBJ)
-	$(LD) $(LDFLAGS) -o punix $^
+	@echo "  LD $@"
+	@$(LD) $(LDFLAGS) -o punix $^
 
 ########################################
 # generated data
@@ -132,7 +134,7 @@ DEPEND = .dep
 
 .PHONY: depend
 depend $(DEPEND):
-	-$(CC) -M -MG $(CFLAGS) $(CSRC) >$(DEPEND) #2>/dev/null
+	@-$(CC) -M -MG $(CFLAGS) $(CSRC) >$(DEPEND) #2>/dev/null
 
 .PHONY: clean
 clean:
