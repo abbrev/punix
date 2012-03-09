@@ -555,6 +555,11 @@ static void addkey(unsigned short key)
 	}
 
 	mod = G.vt.key_mod | G.vt.key_mod_sticky;
+
+	if ((mod & (KEY_2ND|KEY_DIAMOND)) && key == KEY_ON) {
+		cpupoweroff();
+		goto end;
+	}
 	
 	/* translate alpha and hand first */
 #ifdef TI89
@@ -710,6 +715,7 @@ end:
 #endif
 }
 
+#define ON_KEY_PORT (*(volatile char *)0x60001a)
 void scankb(void *unused)
 {
 	short rowmask = 1, colmask = 1, key;
@@ -718,6 +724,15 @@ void scankb(void *unused)
 	short k;
 	unsigned char kdiff;
 	int kp;
+
+	if (G.vt.on_key ^ !(ON_KEY_PORT&2)) {
+		if (G.vt.on_key) {
+			// add ON key on release so it doesn't turn the calc back on immediately
+			addkey(KEY_ON);
+		}
+		G.vt.on_key ^= 1;
+	}
+
 	KBROWMASK = 0;
 	_WaitKeyboard();
 	k = KBCOLMASK;
@@ -771,6 +786,7 @@ void scankb(void *unused)
 end:
 	showstatus();
 	KBROWMASK = 0x380; /* reset to standard key reading */
+	void kbinit();
 	kbinit();
 }
 
