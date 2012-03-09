@@ -22,6 +22,7 @@
 .macro mkstart name
 .global \name\()_start
 \name\()_start:
+	jbsr	crt
 	move	(%sp),%d0		| argc
 	lea	2(%sp),%a0		| argv
 	move	%d0,%d1
