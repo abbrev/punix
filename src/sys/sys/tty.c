@@ -38,9 +38,9 @@ void ttyopen(dev_t dev, struct tty *tp)
 			tp->t_pgrp = P.p_pid;
 		P.p_pgrp = tp->t_pgrp;
 	}
-	qinit((queue *)&tp->t_rawq, LOG2TTYQSIZE);
-	qinit((queue *)&tp->t_canq, LOG2TTYQSIZE);
-	qinit((queue *)&tp->t_outq, LOG2TTYQSIZE);
+	qinit(&tp->t_rawq.q, LOG2TTYQSIZE);
+	qinit(&tp->t_canq.q, LOG2TTYQSIZE);
+	qinit(&tp->t_outq.q, LOG2TTYQSIZE);
 }
 
 void ttychars(struct tty *tp)
@@ -62,8 +62,8 @@ void ttychars(struct tty *tp)
 void flushtty(struct tty *tp)
 {
 	/* FIXME */
-	qclear((queue *)&tp->t_rawq);
-	qclear((queue *)&tp->t_canq);
+	qclear(&tp->t_rawq.q);
+	qclear(&tp->t_canq.q);
 }
 
 void wflushtty(struct tty *tp)
@@ -97,13 +97,13 @@ void ttyread(struct tty *tp)
 	queue *qp;
 	int havec = 0;
 	
-	qp = (lflag & ICANON) ? (queue *)&tp->t_canq : (queue *)&tp->t_rawq;
+	qp = (lflag & ICANON) ? &tp->t_canq.q : &tp->t_rawq.q;
 	
 loop:
 	/* TODO: also check for the tty closing */
 	spl1();  // inhibit soft interrupts
 	while (qisempty(qp)) {
-		slp(&tp->t_rawq, 1);
+		slp(&tp->t_rawq.q, 1);
 	}
 	spl0();
 	
@@ -153,7 +153,7 @@ void ttywakeup(struct tty *tp)
 		pgsignal(tp->t_pgrp, SIGIO, 1);
 */
 	TRACE();
-	wakeup((void *)&tp->t_rawq);
+	wakeup((void *)&tp->t_rawq.q);
 }
 
 
@@ -250,7 +250,7 @@ void catq(queue *from, queue *to)
 	int ch;
 	while ((ch = qgetc(from)) >= 0) {
 		if (qputc(ch, to) < 0) {
-			qungetc(ch, (queue *)from);
+			qungetc(ch, from);
 			break;
 		}
 	}

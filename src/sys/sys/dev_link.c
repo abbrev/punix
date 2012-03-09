@@ -22,8 +22,14 @@ void updaterxtx(void *unused)
 
 STARTUP(void linkinit())
 {
-	qinit((queue *)&G.link.readq, LOG2LINKQSIZE);
-	qinit((queue *)&G.link.writeq, LOG2LINKQSIZE);
+	qinit(&G.link.readq.q, LOG2LINKQSIZE);
+	qinit(&G.link.writeq.q, LOG2LINKQSIZE);
+#if 0
+	kprintf("link: readq:  sizeof=%ld qsize=%d qmask=%04x\n",
+	        sizeof(G.link.readq), qsize(&G.link.readq.q), qmask(&G.link.readq.q));
+	kprintf("link: writeq: sizeof=%ld qsize=%d qmask=%04x\n",
+	        sizeof(G.link.writeq), qsize(&G.link.writeq.q), qmask(&G.link.writeq.q));
+#endif
 	G.link.lowat = G.link.hiwat = -1;
 	G.link.readoverflow = 0;
 	ioport = 0;
@@ -62,10 +68,10 @@ STARTUP(static void flush())
 {
 	int x = spl4();
 	/* wait until the write queue is empty */
-	while (!qisempty((queue *)&G.link.writeq)) {
+	while (!qisempty(&G.link.writeq.q)) {
 		G.link.lowat = 0;
 		txon();
-		slp(&G.link.writeq, 0);
+		slp(&G.link.writeq.q, 0);
 	}
 	splx(x);
 }
@@ -75,7 +81,7 @@ STARTUP(static void recvbyte())
 {
 	int ch;
 	ch = LINK_BUFFER;
-	qputc(ch, (queue *)&G.link.readq);
+	qputc(ch, &G.link.readq.q);
 	//kprintf("<0x%02x ", ch);
 }
 
@@ -121,7 +127,7 @@ STARTUP(void linkintr())
 #if 0
 	++*(short *)(0x4c00+0xf00-30*4);
 #endif
-		int x = qfree((queue *)&G.link.readq);
+		int x = qfree(&G.link.readq.q);
 		//kprintf("Rx ");
 		if (!G.link.open) {
 			//kprintf("not-open ");
@@ -143,9 +149,9 @@ STARTUP(void linkintr())
 			G.link.rxtx |= 2;
 			
 			if (G.link.hiwat >= 0 &&
-			    qused((queue *)&G.link.readq) >= G.link.hiwat) {
+			    qused(&G.link.readq.q) >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
-				defer(wakeup, &G.link.readq);
+				defer(wakeup, &G.link.readq.q);
 				G.link.hiwat = -1;
 			}
 		}
@@ -161,7 +167,7 @@ STARTUP(void linkintr())
 		if (!G.link.open) {
 			//kprintf("not-open ");
 			txoff();
-		} else if ((ch = qgetc((queue *)&G.link.writeq)) < 0) { /* nothing to send */
+		} else if ((ch = qgetc(&G.link.writeq.q)) < 0) { /* nothing to send */
 			//kprintf(">.. ");
 			//kprintf("empty ");
 			txoff();
@@ -170,9 +176,9 @@ STARTUP(void linkintr())
 			G.link.rxtx |= 1;
 			//kprintf(">0x%02x ", ch);
 			
-			if (qused((queue *)&G.link.writeq) <= G.link.lowat) {
+			if (qused(&G.link.writeq.q) <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
-				defer(wakeup, &G.link.writeq);
+				defer(wakeup, &G.link.writeq.q);
 				G.link.lowat = -1;
 			}
 		}
@@ -187,14 +193,21 @@ STARTUP(void linkopen(dev_t dev, int rw))
 		return;
 	}
 	
-	qclear((queue *)&G.link.readq);
-	qclear((queue *)&G.link.writeq);
+	qclear(&G.link.readq.q);
+	qclear(&G.link.writeq.q);
 	G.link.lowat = G.link.hiwat = -1;
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
 	++ioport; /* block other uses of the IO port */
 	G.link.open = 1;
 }
 
+/*
+ * XXX: we shouldn't flush here because a process will stay in an
+ * uninterruptible sleep state until the write queue is drained, which might
+ * be never if nobody else is connected to the link port.
+ * Perhaps a new ioctl could drain the write queue, but it would be
+ * interruptible so the process can be killed.
+ */
 STARTUP(void linkclose(dev_t dev, int flag))
 {
 	flush();
@@ -215,11 +228,11 @@ STARTUP(void linkread(dev_t dev))
 			recvbyte();
 		}
 		rxon();
-		while ((ch = qgetc((queue *)&G.link.readq)) < 0) {
+		while ((ch = qgetc(&G.link.readq.q)) < 0) {
 			rxon();
 			if (count == P.p_count) {
 				G.link.hiwat = 1;
-				slp(&G.link.readq, 1);
+				slp(&G.link.readq.q, 1);
 			} else {
 				/* we got some data already, so just return */
 				return;
@@ -240,10 +253,10 @@ STARTUP(void linkwrite(dev_t dev))
 		ch = *P.p_base++;
 		x = spl4();
 		txon();
-		while (qputc(ch, (queue *)&G.link.writeq) < 0) {
+		while (qputc(ch, &G.link.writeq.q) < 0) {
 			txon();
 			G.link.lowat = LINKQSIZE - 32; /* XXX constant */
-			slp(&G.link.writeq, 1);
+			slp(&G.link.writeq.q, 1);
 		}
 		splx(x);
 	}

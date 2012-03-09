@@ -23,9 +23,9 @@
 /* one-shot routine on system-startup */
 STARTUP(void audioinit())
 {
-	qinit((queue *)&G.audio.q, LOG2AUDIOQSIZE);
-	qclear((queue *)&G.audio.q);
-	//kprintf("&G.audio.q=%p\n", &G.audio.q);
+	qinit(&G.audio.q.q, LOG2AUDIOQSIZE);
+	qclear(&G.audio.q.q);
+	//kprintf("&G.audio.q.q=%p\n", &G.audio.q.q);
 	ioport = 0;
 }
 
@@ -53,13 +53,13 @@ STARTUP(static void stopaudio())
 STARTUP(static void dspsync())
 {
 	int x = spl1();  // inhibit soft interrupts
-	while (G.audio.play && !qisempty((queue *)&G.audio.q)) {
-		if (qused((queue *)&G.audio.q) < 4) { // XXX constant
+	while (G.audio.play && !qisempty(&G.audio.q.q)) {
+		if (qused(&G.audio.q.q) < 4) { // XXX constant
 			// samples will be played before slp() would even finish
 			cpuidle();
 		} else {
 			G.audio.lowat = 0;
-			slp(&G.audio.q, 0);
+			slp(&G.audio.q.q, 0);
 		}
 	}
 	splx(x);
@@ -77,12 +77,12 @@ STARTUP(void audiointr())
 	
 	if (!G.audio.samples) {
 		int c;
-		if ((c = qgetc_no_lock((queue *)&G.audio.q)) < 0)
+		if ((c = qgetc_no_lock(&G.audio.q.q)) < 0)
 			goto out;
 		G.audio.samp = c;
 		G.audio.samples = SAMPLESPERBYTE;
 		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+4*4);
-		*spinner = (~0L) << 32L*qfree((queue *)&G.audio.q)/AUDIOQSIZE;
+		*spinner = (~0L) << 32L*qfree(&G.audio.q.q)/AUDIOQSIZE;
 	}
 	
 	/* put this sample into the lower 2 bits */
@@ -91,12 +91,12 @@ STARTUP(void audiointr())
 	
 	++G.audio.optr;
 out:
-	if (qused((queue *)&G.audio.q) <= G.audio.lowat) {
-		if (G.audio.lowat != 0 && qisempty((queue *)&G.audio.q))
+	if (qused(&G.audio.q.q) <= G.audio.lowat) {
+		if (G.audio.lowat != 0 && qisempty(&G.audio.q.q))
 			kprintf("audio buffer underrun!\n");
 		G.audio.lowat = -1;
 		spl4();
-		defer(wakeup, &G.audio.q);
+		defer(wakeup, &G.audio.q.q);
 	}
 }
 
@@ -109,7 +109,7 @@ STARTUP(void audioopen(dev_t dev, int rw))
 	
 	++ioport; /* one reference for being open */
 	
-	qclear((queue *)&G.audio.q);
+	qclear(&G.audio.q.q);
 	startaudio();
 }
 
@@ -144,7 +144,7 @@ STARTUP(void audiowrite(dev_t dev))
 
 	while (P.p_count) {
 		*spinner = 0xffffffff;
-		n = b_to_q(P.p_base, MIN(P.p_count, AUDIOQSIZE), (queue *)&G.audio.q);
+		n = b_to_q(P.p_base, MIN(P.p_count, AUDIOQSIZE), &G.audio.q.q);
 		P.p_base += n;
 		P.p_count -= n;
 
@@ -160,7 +160,7 @@ STARTUP(void audiowrite(dev_t dev))
 		x = spl1();
 		G.audio.lowat = AUDIOQSIZE - MIN(P.p_count, MAXDRAIN);
 		
-		slp(&G.audio.q, 1);
+		slp(&G.audio.q.q, 1);
 		splx(x);
 	}
 	*spinner = 0x00000000;
@@ -170,7 +170,7 @@ STARTUP(void audiowrite(dev_t dev))
  * SNDCTL_DSP_SILENCE: G.audio.q.q_count = 0;
  * SNDCTL_DSP_SKIP: G.audio.q.q_count = 0;
  * SNDCTL_DSP_SPEED: always return 8192;
- * SNDCTL_DSP_SYNC: G.audio.lowat = 0; slp(&G.audio.q);
+ * SNDCTL_DSP_SYNC: G.audio.lowat = 0; slp(&G.audio.q.q);
  * SNDCTL_DSP_CURRENT_OPTR: return G.audio.optr and
  *   G.audio.q.q_count * SAMPLESPERBYTE;
  * SNDCTL_DSP_HALT{,_OUTPUT}
@@ -185,16 +185,16 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 	switch (cmd) {
 #if 0
 	case SNDCTL_DSP_SILENCE:
-		qclear((queue *)&G.audio.q);
-		qputc(0, (queue *)&G.audio.q); /* make sure the output is 0 */
+		qclear(&G.audio.q.q);
+		qputc(0, &G.audio.q.q); /* make sure the output is 0 */
 		break;
 	case SNDCTL_DSP_SKIP:
-		qclear((queue *)&G.audio.q);
+		qclear(&G.audio.q.q);
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		x = spl5();
 		count.samples = G.audio.optr;
-		count.fifo_samples = G.audio.q.q_count * SAMPLESPERBYTE;
+		count.fifo_samples = G.audio.q.q.q_count * SAMPLESPERBYTE;
 		splx(x);
 		copyout(cmarg, &count);
 		break;
