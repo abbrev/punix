@@ -30,6 +30,8 @@
 #include "process.h"
 #include "link.h"
 #include "audio.h"
+#include "flash.h"
+#include "lcd.h"
 
 int kputs(char *);
 
@@ -41,11 +43,19 @@ int kputs(char *);
  */
 STARTUP(void kmain())
 {
+	// TODO: move these to the appropriate headers
+	void vtinit();
+	void grayinit();
+	void loadavinit();
+	void battinit();
+	void usageinit();
+	void bogomips();
+
 	calloutinit();
 	lcdinit();
-	vtinit();
 	meminit();
 	grayinit();
+	vtinit();
 	linkinit();
 	audioinit();
 	sched_init();
@@ -70,7 +80,8 @@ STARTUP(void kmain())
 	 "\n");
 #endif
 	if (realtime.tv_sec < 1000000000L) { /* before ~2001 */
-		realtime.tv_sec = REALTIME;
+		extern const unsigned long build_date;
+		realtime.tv_sec = build_date;
 		realtime.tv_nsec = 0;
 	}
 	G.seconds = realtime.tv_sec;

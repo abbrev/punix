@@ -28,10 +28,10 @@ AWK	= awk
 CC	= "$(TIGCC)/bin/gcc"
 CFLAGS	= -O2 -fomit-frame-pointer -Wall -nostdinc -fno-builtin -mno-bss \
 	-I$(SYSINC) -I. -I- -I$(STDINC) -D__KERNEL__ -D$(CALC)= \
-	-DSMALLGLYPHS= -DREALTIME=$(REALTIME)UL
+	-DSMALLGLYPHS= # -DREALTIME=$(REALTIME)UL
 
 AS	= "$(TIGCC)/bin/tigcc"
-ASFLAGS	= -c -Wa,-m68881,--warn,-I$(SYSINC),--defsym,$(CALC)= #-l
+ASFLAGS	= -c -Wa,-m68881,--warn,-I$(SYSINC),--defsym,$(CALC)=,--defsym,REALTIME=$(REALTIME) #-l
 
 LD	= "$(TIGCC)/bin/tigcc"
 LDFLAGS	= -nostdlib -L$(STDLIB) --outputbin --flash-os
@@ -76,6 +76,11 @@ scratch:
 
 %.a:
 	$(MAKE) -C `dirname $@`
+
+# preprocessing only
+%.i: %.c
+	@echo "  CC $@"
+	@$(CC) -E $(CFLAGS) -o $@ $<
 
 %.o: %.c
 	@echo "  CC $@"

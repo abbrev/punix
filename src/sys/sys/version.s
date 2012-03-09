@@ -20,3 +20,6 @@ uname_machine:
 	.incbin "uname.machine"
 	.byte 0
 
+.global build_date
+build_date:
+	.long REALTIME
