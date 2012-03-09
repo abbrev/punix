@@ -99,6 +99,7 @@ extern char *strerror(int _errno);
 
 extern int errno;
 // this is a hack until we get proper support for data sections
-#define errno (P.user.u_errno)
+int *_geterrnop();
+#define errno (*_geterrnop())
 
 #endif /* _ERRNO_H_ */
