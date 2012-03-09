@@ -45,7 +45,8 @@
  *
  * mask() can be nested up to 65535 times (which should be more than enough).
  */
-typedef volatile int masklock;
+typedef int masklock;
+void initmask(masklock *lockp);
 masklock mask(masklock *);
 void unmask(masklock *);
 void setmask(masklock *, masklock v);
@@ -147,5 +148,7 @@ int kprintf(const char *, ...);
 
 int inferior(struct proc const *);
 struct proc *pfind(int pid);
+
+void cpuidle(void);
 
 #endif /* _SYS_PUNIX_H_ */

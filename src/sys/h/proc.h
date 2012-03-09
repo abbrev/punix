@@ -317,8 +317,11 @@ struct proc {
 		char charbuf[64];
 		int charbufsize;
 		jmp_buf getcalcjmp;
+		void *streams[3];
 	} user;
 };
+
+void procinit();
 
 /* states for p_status */
 #define P_RUNNING   0	/* zero so tests are fast and small */
