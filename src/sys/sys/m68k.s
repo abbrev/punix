@@ -125,20 +125,33 @@ cpupoweroff:
 	sub.l	seconds,%d2
 	move	%d0,%sr
 	
-	lea.l	0x60001c,%a0
-	move.b	(%a0),%d1
-	move.b	#0x3c,(%a0)	| shut off LCD
-	
 	clr	onkey
 	move	#1,powerstate
 	
+	| turn off LCD
+	lea.l	0x600000,%a0
+	lea.l	0x700000,%a1
+	move.b	#0b00111100,0x1c(%a0)	| 0x60001c turn off row sync
+	bset.b	#4,0x1d(%a0)		| 0x60001d disable screen (hw1)
+	bclr.b	#1,0x1d(%a1)		| 0x70001d shut down LCD (hw2)
+	| LCD is off!
+
 0:	move.b	#0x0c,0x600005	| bit 3 => int 4, bit 2 => int 3
 	tst	onkey
 	beq	0b
 	
+	| turn screen back on
+	bset.b	#1,0x1d(%a1)
+	bclr.b	#4,0x1d(%a0)
+	move.b	#0b00100001,0x1c(%a0)
+	ori.b	#4+2+1,0x1f(%a1)	| 0x70001f
+	move	%d0,-(%sp)
+	jbsr	lcd_reset_contrast	| contrast was reset when 0x60001d was modified
+	move	(%sp)+,%d0
+	| LCD should be back on!
+
+
 	clr	powerstate
-	
-	move.b  %d1,(%a0)	| turn on LCD
 	
 	move	#0x2700,%sr
 	add.l	seconds,%d2
