@@ -60,7 +60,7 @@ drawglyph:
 	| FIXME: for greyscale, change the line below to do the same as above,
 	| except write to the light plane instead of the dark plane.
 	move.b	(%a1)+,%d1	| get a row of glyph
-	cmp.l	0x5b00,%a0	| LCD_MEM is less than 0x5b00
+	cmp.l	#0x5b00,%a0	| LCD_MEM is less than 0x5b00
 	blt	1f
 
 	and.b	%d3,%d1		| mask glyph
@@ -112,7 +112,7 @@ drawglyphinv:
 	| FIXME: for greyscale, change the line below to do the same as above,
 	| except write to the light plane instead of the dark plane.
 	move.b	(%a1)+,%d1	| get a row of glyph
-	cmp.l	0x5b00,%a0	| LCD_MEM is less than 0x5b00
+	cmp.l	#0x5b00,%a0	| LCD_MEM is less than 0x5b00
 	blt	1f
 
 	and.b	%d3,%d1		| mask glyph
