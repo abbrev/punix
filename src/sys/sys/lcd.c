@@ -33,6 +33,11 @@ STARTUP(int lcd_dec_contrast())
 	return lcd_set_contrast(G.contrast-1);
 }
 
+STARTUP(int lcd_reset_contrast())
+{
+	return lcd_set_contrast(G.contrast);
+}
+
 STARTUP(void lcdinit())
 {
 	lcd_set_contrast(CONTRASTMAX/2);
