@@ -80,7 +80,7 @@ struct globals {
 	
 	struct {
 		int lowat, hiwat;
-		QUEUE(LOG2AUDIOQSIZE) readq, writeq;
+		QUEUE(LOG2LINKQSIZE) readq, writeq;
 
 		char control;
 		int readoverflow;
@@ -144,6 +144,7 @@ struct globals {
 		
 		char key_array[KEY_NBR_ROW];
 		short key_mod, key_mod_sticky;
+		short on_key;
 		short key_compose;
 		unsigned char caps_lock;
 		union {
