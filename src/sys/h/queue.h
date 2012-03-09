@@ -15,8 +15,9 @@ typedef struct queue {
 	char q_buf[];
 } queue;
 
-#define QUEUE(log2size) union { queue head; char dummy[sizeof(queue)+(1<<log2size)]; }
+#define QUEUE(log2size) union { queue q; char dummy[sizeof(queue)+(1<<log2size)]; }
 
+static inline int qmask(queue const *q) { return q->q_mask; }
 static inline int qsize(queue const *q) { return q->q_mask + 1; }
 static inline int qused(queue const *q) { return (q->q_head - q->q_tail); }
 static inline int qfree(queue const *q) { return (qsize(q) - qused(q)); }
