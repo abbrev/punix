@@ -290,8 +290,7 @@ trapret0:
  *  So, you understand why you don't use it ;)
  *  Write any value to 0x60001B to acknowledge this interrupt.
  */
-Int_2:	move.w	#0x2600,%sr
-	move.w	#0x00FF,0x60001A	| acknowledge Int2
+Int_2:	move.w	#0x00FF,0x60001A	| acknowledge Int2
 oldInt_3:	rte				| Clock for int 3 ?
 
 Int_3:
@@ -355,7 +354,6 @@ _syscall:
 	movem.l	(%sp)+,%d3-%d7/%a1-%a7
 	move.l	%a1,%usp
 
-	|rte
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	jbra	trapret0
 
