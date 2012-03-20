@@ -104,6 +104,11 @@ punix-89.tib:	$(OBJ)
 	@echo "  LD $@"
 	@$(LD) $(LDFLAGS) -o punix $^
 
+punix-9x.9xu: punix-9x.tib
+	tib2xxu punix-9x.tib punix-9x.9xu && rabbitsign -r -K 01 punix-9x.9xu
+punix-89.89u: punix-89.tib
+	tib2xxu punix-89.tib punix-89.89u && rabbitsign -r -K 03 punix-89.89u
+
 ########################################
 # generated data
 ########################################
