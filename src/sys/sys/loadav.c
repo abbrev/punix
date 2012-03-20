@@ -51,7 +51,7 @@ void loadav(unsigned long numrun)
 	for (i = 0; i < 3; ++i) {
 		G.loadavg[i] = ((cexp[i] * G.loadavg[i]
 		                 + (F_ONE - cexp[i]) * numrun)
-		                 + (F_ONE / 2)) >> F_SHIFT;
+		                 /*+ (F_ONE / 2)*/) >> F_SHIFT;
 	}
 }
 
