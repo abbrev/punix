@@ -1310,7 +1310,7 @@ int uterm_main(int argc, char **argv, char **envp)
 			y = fdtofd(0, linkfd);
 		} while (y > 0);
 		if ((x < 0 || y < 0) && errno != EINTR) {
-			printf("x=%ld y=%ld\n", x, y);
+			perror("uterm");
 			break;
 		}
 		if (x == 0) break;
@@ -2168,6 +2168,8 @@ static int updatetop(struct topinfo *info)
 #endif
 	/* clear to the end of the screen */
 	printf(ESC "[J" ESC "[5H");
+	if (feof(stdout) || ferror(stdout))
+		status = 1;
 free:
 	free(allproc);
 	free(allprocp);
