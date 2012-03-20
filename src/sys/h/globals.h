@@ -68,7 +68,7 @@ struct globals {
 	
 	struct {
 		unsigned char samp; /* current samples */
-		int samples; /* number of samples within that byte */
+		char samples; /* number of samples within that byte */
 		int lowat; /* low water level in audio queue */
 		int play; /* flag to indicate if audio should play */
 		long long optr;
@@ -83,9 +83,10 @@ struct globals {
 		QUEUE(LOG2LINKQSIZE) readq, writeq;
 
 		char control;
-		int readoverflow;
-		int open;
-		int rxtx;
+		char readoverflow;
+		char open;
+		char rxtx;
+		char iserror;
 	} link;
 	
 	/* seed for the pseudo-random number generator */
