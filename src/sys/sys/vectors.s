@@ -5,7 +5,7 @@
 .global vectors_table
 vectors_table:
 	.long	0x4c00			| 00 Stack Ptr
-	.long	the_beginning		| 04 Start of Kernel
+	.long	boot_start		| 04 Start of Kernel
 	.long	buserr		| 08 Bus Error
 	.long	ADDRESS_ERROR		| 0C Address Error
 	.long	ILLEGAL_INSTR		| 10 Illegal Instruction

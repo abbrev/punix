@@ -64,7 +64,7 @@ FlashWrite:
 	cmp.l	#0x3FFFF,%a4
 	bhi	error
 	
-	bsr	disableProtection
+	bsr	disable_protection
 	
 	lsr.l	#1,%d3		| Convert Byte to Word
 	
@@ -79,7 +79,7 @@ exec_in_ram:
 	
 	jsr	exec_ram	| Execute code in RAM
 
-	bsr	enableProtection
+	bsr	enable_protection
 	
 	move.w	(%sp)+,%sr
 	movem.l	(%sp)+,%d3-%d4/%a2-%a4	| Pop registers
@@ -132,7 +132,7 @@ FlashErase:
 	cmp.l	#archive-1,%a2
 	bls	error
 	
-	bsr	disableProtection
+	bsr	disable_protection
 	
 	| Round to the upper 64K
 	move.l	%a2,%d0

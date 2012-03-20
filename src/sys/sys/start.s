@@ -24,12 +24,12 @@
 .include "vectors.inc"
 
 .section _st1,"x"
-.global the_beginning
+.global boot_start
 |***************************************************************
 | Init the Hardware
 |***************************************************************
 
-the_beginning:
+boot_start:
 	| Init the calc
 	bclr.b	#1,0x70001d		| disable screen on HW2 (must be the first instruction)
 	move.w	#0x2700,%sr		| Prevent Auto Ints
@@ -58,24 +58,26 @@ the_beginning:
 		move.b	%d0,(%a5)		| Do not set Pin100 
 0:
 
-	jbsr	disableProtection
-	
-	| Can not registers to access IO ports <= we have disabled the hardware protection, so a hack may be used. (using registers seems to work fine -- caw)
+
+	jbsr	disable_protection
+
+	| Can not registers to access IO ports <= we have disabled the hardware protection, so a hack may be used.
 	| Set Protected IO ports
 	ori.b	#4+2+1,0x70001F		| HW2: ???/Enable OSC2/5 contrasts bits
 
 	moveq	#0,%d0			| %d0.l = 0 (Even if %d0=0, I must set it again <= AntiHack).
 	move.w	#0x003F,0x700012	| Allow Execution of all Flash ROM on HW2
-	move.w	%d0,0x45E00		| Allow Execution of all Flash ROM on HW1
-	move.w	%d0,0x85E00
-	move.w	%d0,0xC5E00
+	move.w	%d0,0x45b00		| Allow Execution of all Flash ROM on HW1
+	move.w	%d0,0x85b00
+	move.w	%d0,0xC5b00
 	
 	| Allow Execution of all RAM on HW2
 | clr.l 0x700000 is potentially dangerous since we read it before setting it !
 	move.l	%d0,0x700000
 	move.l	%d0,0x700004
-	
-	jbsr	enableProtection
+
+	jbsr	enable_protection
+
 	
 	| Setup IO ports
 	moveq.l	#0,%d0
@@ -195,34 +197,37 @@ InstallVectors:
 	bset.b	#2,0x600001		| protect vector table
 	rts
 
-	.global disableProtection
-	.global enableProtection
-/*
- * disable the Protection on I/O ports and Flash
- * interrupts must be disabled upon entry (%sr = 0x27xx)
- * XXX: this has not been tested.
- */
-disableProtection:
-	lea	(0x1c0000),%a0
-	move.w	(%a0),%d0	| preserve the data
+.global disable_protection
+disable_protection:
+	| Unprotect access to special IO ports
+	| we can use any value in $1C0000-$1FFFFF here
+	| I choose 0x5b00 because that immediately follows the LCD RAM,
+	| and it's not used for anything else
+	lea	0x1c5b00,%a0
+	bclr	#1,0x600015	| disable LCD from reading RAM (hw1)
 	nop
 	nop
 	nop
-	nop
-	move	#0x2700,%sr
+	move.w	#0x2700,%sr
 	move.w	%d0,(%a0)
+	| do we have to do this twice?
+	nop
+	nop
+	nop
+	move.w	#0x2700,%sr
+	move.w	%d0,(%a0)
+	bset	#1,0x600015	| enable LCD from reading RAM (hw1)
 	rts
 
-/*
- * enable the Protection on I/O ports and Flash
- * interrupts must be disabled upon entry (%sr = 0x27xx)
- * XXX: this has not been tested.
- */
-enableProtection:
-	lea	(0x1c0000),%a0
+.global enable_protection
+enable_protection:
+	| Protect access to special IO ports
+	bclr	#1,0x600015	| disable LCD from reading RAM (hw1)
 	nop
 	nop
 	nop
-	move	#0x2700,%sr
-	move.w	(%a0),%d0
+	move.w  #0x2700,%sr
+	move.w  (%a0),%d0
+	bset	#1,0x600015	| enable LCD from reading RAM (hw1)
 	rts
+
