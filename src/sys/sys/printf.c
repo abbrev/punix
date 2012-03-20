@@ -147,6 +147,9 @@ static int _fflush(FILE *f)
 	}
 	
 	f->bufsize = 0;
+	if (err) {
+		f->flags |= FILE_ERROR;
+	}
 	return err;
 }
 
