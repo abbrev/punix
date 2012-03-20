@@ -76,6 +76,8 @@ static const struct exception_signal exception_signals[] = {
 
 #define SIZEOF_SIGNALS (sizeof(exception_signals) / sizeof(exception_signals[0]))
 
+#define ALWAYS_PRINT_EXCEPTIONS 1
+
 STARTUP(void handle_exception(union exception_info *eip, int num))
 {
 	const struct exception_signal *esp;
@@ -85,8 +87,8 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 
 	esp = &exception_signals[num];
 	if (esp->type == EX_BUS) {
-		sr = eip->bus_error.status_register;
-		if (!USERMODE(sr)) {
+		sr = 0; //eip->bus_error.status_register;
+		if (ALWAYS_PRINT_EXCEPTIONS || !USERMODE(sr)) {
 			kprintf("%s exception\n"
 			        "       function code: 0x%04x\n"
 				"      access address: %p\n"
@@ -104,7 +106,7 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 		}
 	} else {
 		sr = eip->other.status_register;
-		if (!USERMODE(sr)) {
+		if (ALWAYS_PRINT_EXCEPTIONS || !USERMODE(sr)) {
 			kprintf("%s exception\n"
 			        "     status register: 0x%04x\n"
 				"     program counter: %p\n"
