@@ -144,10 +144,9 @@ cpupoweroff:
 	bset.b	#1,0x1d(%a1)
 	bclr.b	#4,0x1d(%a0)
 	move.b	#0b00100001,0x1c(%a0)
-	ori.b	#4+2+1,0x1f(%a1)	| 0x70001f
-	move	%d0,-(%sp)
+	movem	%d0/%d2,-(%sp)
 	jbsr	lcd_reset_contrast	| contrast was reset when 0x60001d was modified
-	move	(%sp)+,%d0
+	movem	(%sp)+,%d0/%d2
 	| LCD should be back on!
 
 
