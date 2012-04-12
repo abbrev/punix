@@ -173,9 +173,10 @@ void sched_tick(void)
 
 #if 1
 /* set the state of the process to 'state' */
-static void set_state(struct proc *p, int state)
+static void set_state(struct proc *p, const int state)
 {
 	if (state == p->p_status) return;
+	mask(&G.calloutlock);
 	if (state == P_RUNNING) {
 		++G.numrunning;
 		/* preempt the current process */
@@ -194,6 +195,7 @@ static void set_state(struct proc *p, int state)
 		}
 	}
 	p->p_status = state;
+	unmask(&G.calloutlock);
 	/* TODO: anything else? */
 }
 #endif
@@ -203,10 +205,12 @@ void sched_run(struct proc *p)
 {
 	mask(&G.calloutlock);
 	//kprintf("sched_run()\n");
+#if 0
 	if (p->p_status == P_RUNNING) {
 		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
 		panic("trying to run an already running process");
 	}
+#endif
 	if (p->p_status == P_ZOMBIE)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
