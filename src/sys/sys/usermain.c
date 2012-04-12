@@ -589,7 +589,7 @@ static void testrandom(int argc, char *argv[], char *envp[])
 }
 
 static const char onebit[] = {
-#include "onebit.hex"
+//#include "onebit.hex"
 };
 #define AUDIOBUFSIZE 4096
 static void testaudio(int argc, char *argv[], char *envp[])
@@ -1026,7 +1026,7 @@ out:
 
 static int banner(const char *s)
 {
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	static const char stars[] = "*****************************";
 #else
 	static const char stars[] = "*******************";
@@ -2053,7 +2053,7 @@ static int updatetop(struct topinfo *info)
 	/* sort the array by cpu usage */
 	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
 	
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;

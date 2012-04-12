@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include "list.h"
 #include "proc.h"
+#include "calc.h"
 
 #if 0
 #define OS_NAME	"Punix"

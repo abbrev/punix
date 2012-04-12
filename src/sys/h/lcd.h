@@ -37,12 +37,12 @@
  *
  */
 
-#ifdef	TI89
-	#define LCD_WIDTH	160
-	#define LCD_HEIGHT	100
-#else	/* TI-92+ and V200 */
+#if CALC_HAS_LARGE_SCREEN
 	#define LCD_WIDTH	240
 	#define LCD_HEIGHT	128
+#else
+	#define LCD_WIDTH	160
+	#define LCD_HEIGHT	100
 #endif
 
 void lcdinit();

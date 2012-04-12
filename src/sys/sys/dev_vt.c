@@ -1182,7 +1182,7 @@ void vtinit()
 {
 	short *horline;
 	
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	for (horline = (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS];
 	 horline < (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS+LCD_INCY];
 	  ++horline)
