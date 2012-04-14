@@ -26,7 +26,8 @@ OBJ := $(OBJ:.s=.o)
 
 libc.a: $(OBJ)
 	@echo "  AR $@"
-	@$(AR) -rc libc.a $^
+	@$(AR) -rc $@ $^
+	cp $@ $(PUNIXBASE)/lib/
 
 %.o: %.c
 	@echo "  CC $@"
