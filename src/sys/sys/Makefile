@@ -12,8 +12,9 @@ UNAME_RELEASE := 0.08
 UNAME_VERSION := $(DATE)
 UNAME_MACHINE := m68k
 
-PUNIXBASE	= ../../..
 PATH := $(TIGCC):$(TIGCC)/bin:$(PATH)
+PUNIXBASE = ../../..
+TARGET = $(PUNIXBASE)/target
 
 STDINC	= $(PUNIXBASE)/include
 SYSINC	= $(PUNIXBASE)/src/sys/h
@@ -66,8 +67,21 @@ OBJ	+= $(LIBC)
 
 TMPUNAME = uname.sysname uname.nodename uname.release uname.version uname.machine stupiddate
 
+ifeq ($(CALC), TI92P)
+TIB = punix-9x.tib
+XXU = punix-9x.9xu
+KEY = 01
+else ifeq ($(CALC), TI89)
+TIB = punix-89.tib
+XXU = punix-89.89u
+KEY = 03
+else
+$(error Unsupported CALC: $(CALC))
+endif
+
+
 .PHONY: all
-all:	tib
+all:	xxu
 .PHONY: scratch
 scratch:
 	$(MAKE) clean
@@ -91,23 +105,20 @@ scratch:
 	@$(AS) -c $(ASFLAGS) -o $@ $<
 
 .PHONY: tib
-ifeq ($(CALC), TI92P)
-tib: punix-9x.tib
-else
-tib: punix-89.tib
-endif
-
-punix-9x.tib:	$(OBJ)
-	@echo "  LD $@"
-	@$(LD) $(LDFLAGS) -o punix $^
-punix-89.tib:	$(OBJ)
+tib:
 	@echo "  LD $@"
 	@$(LD) $(LDFLAGS) -o punix $^
 
-punix-9x.9xu: punix-9x.tib
-	tib2xxu punix-9x.tib punix-9x.9xu && rabbitsign -r -K 01 punix-9x.9xu
-punix-89.89u: punix-89.tib
-	tib2xxu punix-89.tib punix-89.89u && rabbitsign -r -K 03 punix-89.89u
+$(TIB): $(OBJ)
+	@echo "  LD $@"
+	@$(LD) $(LDFLAGS) -o punix $^
+	cp $@ $(PUNIXBASE)
+
+xxu: $(XXU)
+%.9xu %.89u: %.tib
+	tib2xxu $< $@
+	rabbitsign -r -K $(KEY) $@
+	cp $@ $(PUNIXBASE)
 
 ########################################
 # generated data

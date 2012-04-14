@@ -5,20 +5,9 @@ PLATFORMS = ti89 ti92p
 kernel:
 	for p in $(PLATFORMS); do $(MAKE) $$p; done
 
-ti89: punix-89.tib
-ti92p: punix-9x.tib
-
-filesystem: commands mkpfs
-
-punix-89.tib: src/sys/sys/punix-89.tib
-	cp $^ .
-punix-9x.tib: src/sys/sys/punix-9x.tib
-	cp $^ .
-
-src/sys/sys/punix-89.tib: lib
+ti89:
 	$(MAKE) -C src/sys/sys CALC=TI89 scratch
-
-src/sys/sys/punix-9x.tib: lib
+ti92p:
 	$(MAKE) -C src/sys/sys CALC=TI92P scratch
 
 lib:
@@ -33,6 +22,8 @@ scratch:
 	$(MAKE) all
 
 # TODO
+filesystem: commands mkpfs
+
 commands:
 
 mkpfs: tools/fs/mkpfs
