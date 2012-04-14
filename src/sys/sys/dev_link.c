@@ -120,13 +120,8 @@ STARTUP(void linkintr())
 		/* LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX | LC_TRIGTX */
 		LINK_CONTROL = 0x8f;
 		
-		qclear(&G.link.readq.q);
 		qclear(&G.link.writeq.q);
-		G.link.iserror = 1;
-		G.link.readoverflow = 0;
-		rxoff();
 		txoff();
-		defer(wakeup, &G.link.readq.q);
 		defer(wakeup, &G.link.writeq.q);
 		/* return; */
 	}
@@ -203,7 +198,6 @@ STARTUP(void linkopen(dev_t dev, int rw))
 	
 	qclear(&G.link.readq.q);
 	qclear(&G.link.writeq.q);
-	G.link.iserror = 0;
 	G.link.lowat = G.link.hiwat = -1;
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
 	++ioport; /* block other uses of the IO port */
@@ -230,14 +224,14 @@ STARTUP(void linkread(dev_t dev))
 	int x;
 	size_t count = P.p_count;
 	
-	while (!G.link.iserror && P.p_count) {
+	while (P.p_count) {
 		x = spl4();
 		if (G.link.readoverflow) {
 			G.link.readoverflow = 0;
 			recvbyte();
 		}
 		rxon();
-		while (!G.link.iserror && (ch = qgetc(&G.link.readq.q)) < 0) {
+		while ((ch = qgetc(&G.link.readq.q)) < 0) {
 			rxon();
 			if (count != P.p_count) {
 				/* we got some data already, so just return */
@@ -246,15 +240,9 @@ STARTUP(void linkread(dev_t dev))
 			G.link.hiwat = 1;
 			slp(&G.link.readq.q, 1);
 		}
-		if (G.link.iserror) {
-			break;
-		}
 		splx(x);
 		*P.p_base++ = ch;
 		--P.p_count;
-	}
-	if (G.link.iserror && count == P.p_count) {
-		P.p_error = EIO;
 	}
 }
 
@@ -264,19 +252,16 @@ STARTUP(void linkwrite(dev_t dev))
 	int x;
 	size_t count = P.p_count;
 	
-	for (; !G.link.iserror && P.p_count; --P.p_count) {
+	for (; P.p_count; --P.p_count) {
 		ch = *P.p_base++;
 		x = spl4();
 		txon();
-		while (!G.link.iserror && qputc(ch, &G.link.writeq.q) < 0) {
+		while (qputc(ch, &G.link.writeq.q) < 0) {
 			txon();
 			G.link.lowat = LINKQSIZE - 32; /* XXX constant */
 			slp(&G.link.writeq.q, 1);
 		}
 		splx(x);
-	}
-	if (G.link.iserror && count == P.p_count) {
-		P.p_error = EIO;
 	}
 }
 
