@@ -5,7 +5,6 @@
 #define CALC_HAS_QWERTY_KBD 1
 #define CALC_HAS_LARGE_SCREEN 1
 #elif defined(TI89) || defined(TI89TI)
-#warn TI89 or TI89TI is defined!
 #define CALC_HAS_QWERTY_KBD 0
 #define CALC_HAS_LARGE_SCREEN 0
 #else
