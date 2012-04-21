@@ -112,12 +112,12 @@ tib:
 $(TIB): $(OBJ)
 	@echo "  LD $@"
 	@$(LD) $(LDFLAGS) -o punix $^
-	cp $@ $(PUNIXBASE)
+	#cp $@ $(PUNIXBASE)
 
 xxu: $(XXU)
 %.9xu %.89u: %.tib
 	tib2xxu $< $@
-	rabbitsign -r -K $(KEY) $@
+	rabbitsign -r -K $(KEY) $@ -o $@
 	cp $@ $(PUNIXBASE)
 
 ########################################
