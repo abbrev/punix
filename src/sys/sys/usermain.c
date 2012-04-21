@@ -589,7 +589,7 @@ static void testrandom(int argc, char *argv[], char *envp[])
 }
 
 static const char onebit[] = {
-//#include "onebit.hex"
+#include "onebit.hex"
 };
 #define AUDIOBUFSIZE 4096
 static void testaudio(int argc, char *argv[], char *envp[])
