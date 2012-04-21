@@ -159,7 +159,7 @@ depend $(DEPEND):
 
 .PHONY: clean
 clean:
-	rm -f *.bin *.o punix-9x.tib punix-89.tib $(TMPUNAME)
+	rm -f *.bin *.o *.tib *.[89]?u $(TMPUNAME)
 	rm -f sysent.c
 	rm -f $(DEPEND)
 	$(MAKE) -C glyphsets clean

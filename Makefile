@@ -17,6 +17,7 @@ clean:
 	rm -f *.[89]?u *.tib
 	$(MAKE) -C lib clean
 	$(MAKE) -C src/sys/sys clean
+	$(MAKE) -C tools/fs clean
 
 scratch:
 	$(MAKE) clean
