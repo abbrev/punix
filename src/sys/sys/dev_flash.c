@@ -136,10 +136,6 @@ void *blkno_to_addr(long blkno)
 }
 #endif
 
-short FlashWrite(const void *src asm("%a2"), void *dest asm("%a3"),
-                 size_t size asm("%d3"));
-short FlashErase(const void *dest asm("%a2"));
-
 const struct devtab fltab;
 
 void flashinit(void)
