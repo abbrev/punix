@@ -36,6 +36,10 @@ void timersub(struct timeval *__a, struct timeval *__b, struct timeval *__res);
 #define timercmp(tvp, uvp, cmp) \
         ((tvp)->tv_sec cmp (uvp)->tv_sec || \
          ((tvp)->tv_sec == (uvp)->tv_sec && (tvp)->tv_usec cmp (uvp)->tv_usec))
+#define timercmp(tvp, uvp, cmp) \
+        ((tvp)->tv_sec == (uvp)->tv_sec ? \
+         (tvp)->tv_usec cmp (uvp)->tv_usec : \
+         (tvp)->tv_sec cmp (uvp)->tv_sec)
 
 #endif /* _BSD_SOURCE */
 
