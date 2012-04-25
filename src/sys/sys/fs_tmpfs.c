@@ -12,14 +12,6 @@
 
 #define TMPFS_SIGNATURE 0x1234
 
-int tmpfs_read_filesystem(struct fstype *, struct filesystem *, int flags, const char *devname, const void *data);
-
-
-struct fstype tmpfs_fstype = {
-	.name = "tmpfs",
-	.flags = FS_NOAUTO,
-	.read_filesystem = tmpfs_read_filesystem,
-};
 
 int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
                           int flags, const char *devname, const void *data)
@@ -27,6 +19,12 @@ int tmpfs_read_filesystem(struct fstype *fst, struct filesystem *fs,
 	P.p_error = EIO; // XXX
 	return 1;
 }
+
+struct fstype tmpfs_fstype = {
+	.name = "tmpfs",
+	.flags = FS_NOAUTO,
+	.read_filesystem = tmpfs_read_filesystem,
+};
 
 struct tmpfs_inode {
 	short signature;
