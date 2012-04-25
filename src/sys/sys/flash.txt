@@ -16,6 +16,8 @@ To speed up block searches, the driver will maintain a cache of recently-used bl
 
 Occasionally a rarely-written block will be moved in order to promote even wearing of all pages. This can be done by moving the first valid block from the page with the largest number of obsolete blocks to the head. This increases the obsolete count for that page, and eventually that page will be completely obsolete (and the GC will reap it).
 
+Update to previous paragraph: the driver will maintain the relative age of each page (the age will be stored in the page as the number of erases of that page, modulo 2^32). Occasionally when writing a block to the head, a block from the oldest page will also be moved to the head, eventually draining the oldest page of valid blocks, so that the GC will reap it. The frequency of draining the oldest page will be proportional to the age of the oldest page relative to the age of the younger pages.
+
 
 Upon opening the flash device, the driver will scan all pages in FlashROM to ensure that they are "clean". A "clean" page means that the page contains a signature which indicates that the page is valid for writing new content. The value of the signature is arbitrary, but it never changes. During the scanning, the driver also gathers some statistics about the pages (eg, number of valid, free, and obsolete blocks). The driver will point the head at the page with the lowest (non-zero) number of free blocks so it can fill it up first. Once the head page has no more free blocks, the head will again move to the page with the lowest (non-zero) number of free blocks.
 
@@ -47,13 +49,18 @@ put block (given old block position, new block position, and buffer to write):
 	if old != new, obsolete old block
 
 write block:
-	find the old pos
-	if block is all zero bytes
-		if old pos != NULL
-			obsolete old block
-		return
-	if old pos is NULL or block cannot be written in place
-		new pos = head
+	find oldpos
+	if (oldpos == NULL || block cannot be written in place) {
+		newpos = head;
+	} else {
+		newpos = oldpos;
+	}
+	if (oldpos != NULL && oldpos != newpos) {
+		obsolete oldpos
+	}
+	if (block is all zero bytes) {
+		return;
+	}
 	put block at new pos
 
 move block:
@@ -78,3 +85,9 @@ block is 128 bytes, block number is 2 bytes
 the signature can be up to 16 bytes long, such as:
 * "PunixFlashDevice"
 * "Kilroy Was Here "
+* "I'm sorry Dave  "
+* "Domo Arigato    "
+
+Part of these 16 bytes can be used to store statistics about the page, such as the erase count (modulo 128). The page with the lowest erase count can then be emptied first via the occasional stale-page process.
+
+
