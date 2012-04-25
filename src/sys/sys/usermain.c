@@ -23,6 +23,7 @@
 
 //#include <stdio.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -51,38 +52,22 @@
 #include "punix.h"
 #include "globals.h"
 
-extern ssize_t write(int fd, const void *buf, size_t count);
-extern void _exit(int status);
-int printf(const char *format, ...);
-int putchar(int);
-//size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
-//int fflush(FILE *stream);
-//int vfork(void);
 int adjtime(const struct timeval *delta, struct timeval *olddelta);
 
 /* simple implementations of some C standard library functions */
 void *kmalloc(size_t *size);
+void *krealloc(void *ptr, size_t *size, int direction);
 void kfree(void *ptr);
 
+void poweroff();
 
-void seterrno(int e)
-{
-	errno = e;
-}
 
-/* XXX: this prints to stdout instead of stderr */
 void perror(const char *s)
 {
 	int e = errno;
 	if (s && *s)
-		printf("%s: ", s);
-	printf("%s\n", strerror(e));
-}
-
-static void println(char *s)
-{
-	write(2, s, strlen(s));
-	write(2, "\n", 1);
+		fprintf(stderr, "%s: ", s);
+	fprintf(stderr, "%s\n", strerror(e));
 }
 
 void *malloc(size_t size)
@@ -111,7 +96,11 @@ void free(void *ptr)
 
 void *realloc(void *ptr, size_t size)
 {
-	return NULL; /* FIXME */
+	if (!size) {
+		free(ptr);
+		return NULL;
+	}
+	return krealloc(ptr, &size, 0);
 }
 
 time_t time(time_t *tp)
@@ -297,6 +286,270 @@ static void sigalrm()
 	printf("sigalrm\n");
 }
 
+int busyloop_main(int argc, char *argv[], char *envp[])
+{
+	for (;;) {
+		nop();
+		nop();
+		nop();
+		nop();
+	}
+	return 0;
+}
+
+static void testnice(int argc, char *argv[], char *envp[])
+{
+	int i;
+	int pid;
+	for (i = 0; i < 5; ++i) {
+		pid = vfork();
+		if (pid < 0) {
+			fprintf(stderr, "testnice: vfork() failed\n");
+			return;
+		} else if (pid == 0) {
+			static char *const argv[] = { "busyloop", NULL };
+			int n = nice(i*5);
+			fprintf(stderr, "nice %d\n", n);
+			execve(argv[0], argv, envp);
+			perror("execve");
+			_Exit(1);
+		}
+	}
+}
+
+#include <stdlib.h>
+
+long int strtol(const char *nptr, char **endptr, int base)
+{
+	static const char digits[36+1] = "0123456789abcdefghijklmnopqrstuvwxyz";
+	unsigned long int result = 0;
+	int sign = 0;
+
+	/* first skip whitespace */
+	while (isspace(*nptr))
+		++nptr;
+	
+	/* get optional sign character */
+	switch (*nptr) {
+	case '-': sign = 1;
+	case '+': ++nptr;
+	}
+
+	/* get optional leading 0x or 0 characters */
+	if ((base == 0 || base == 16) && nptr[0] == '0' && tolower(nptr[1]) == 'x') {
+		base = 16;
+		nptr += 2;
+	} else if ((base == 0 || base == 8) && nptr[0] == '0') {
+		base = 8;
+		nptr += 1;
+	} else if (base == 0) {
+		// default base
+		base = 10;
+	}
+
+	unsigned long threshold = ((unsigned long)LONG_MAX + base - 1) / base;
+#if 0
+	unsigned long max = sign ? -(unsigned long)LONG_MIN : LONG_MAX;
+#else
+	unsigned long max = sign ? 0x80000000UL : 0x7fffffffUL;
+#endif
+	/* now get the digits! */
+	while (*nptr) {
+		const char *c = strchr(digits, tolower(*nptr));
+		if (!c) break; // invalid character
+		int digit = c - digits;
+		if (digit >= base) break; // digit out of range
+		if (result >= threshold) {
+			/* multiplying by base will overflow result */
+			result = max;
+		} else {
+			result = result * base + digit;
+		}
+		if (result > max) {
+			/* result is overflowed */
+			result = max;
+		}
+		++nptr;
+	}
+	if (endptr) {
+		*endptr = (char *)nptr;
+	}
+	return sign ? -result : result;
+}
+
+typedef unsigned long softfloat;
+softfloat fadd(softfloat, softfloat);
+
+static void printsng(softfloat f)
+{
+	int sign = (f & 0x80000000L) != 0;
+	int exp = ((f >> 23) & 0xff) - 127;
+	long man = (f & 0x007fffffL);
+
+	const char *signstr = sign ? "-" : "+";
+	if (exp == 128) {
+		if (man) {
+			printf("%s%snan", signstr, man & 0x00400000L ? "" : "s");
+		} else {
+			printf("%sinf", signstr);
+		}
+		return;
+	} else if (exp == -127) {
+		if (man) {
+			++exp;
+			while (!(man & 0x00800000L)) {
+				man <<= 1;
+				--exp;
+			}
+		} else {
+			exp = 0;
+			printf("%s0", signstr);
+			return;
+		}
+	} else {
+		//man |= 0x00800000L;
+	}
+	man &= 0x7fffffL;
+	man <<= 1;
+	printf("%s0x1.%06lxp%d", signstr, man, exp);
+}
+
+union longlong {
+	long long ll;
+	struct int64 {
+		unsigned long high, low;
+	};
+};
+
+unsigned long long sl64(unsigned long long, unsigned);
+unsigned long long sr64(unsigned long long, unsigned);
+
+static void testsr64(int argc, char *argv[], char *envp[])
+{
+	long long x = 0x0102030405060708ULL;
+	int i, j;
+	int p = 0;
+	for (i = 0; i < 4; ++i) {
+		for (j = i; j < 68; j += 4) {
+			union longlong y; y.ll = sr64(x, j);
+			printf("%2d: %08lx %08lx\n", j, y.high, y.low);
+			if (++p == 17) {
+				userpause();
+				p = 0;
+			}
+		}
+	}
+	if (p)
+		userpause();
+}
+
+struct floattest {
+	softfloat a, b, c;
+};
+
+static int testfloats(struct floattest test, int print)
+{
+	int correct;
+	softfloat c = fadd(test.a, test.b);
+	correct = c == test.c;
+	//printf("0x%08lx + 0x%08lx = 0x%08lx\n", a, b, c);
+	if (print) {
+		if (correct) {
+			printf("PASS\n");
+		} else {
+			printf("FAIL: expected: ");
+			printsng(test.c);
+			printf(" actual: ");
+			printsng(c);
+			putchar('\n');
+		}
+		//printsng(test.a); printf(" + "); printsng(test.b); printf(" != "); printsng(c);
+		//printf(" (%s)\n", correct ? "correct" : "INCORRECT");
+	}
+	return correct;
+}
+
+static void testfpu(int argc, char *argv[], char *envp[])
+{
+	static const struct floattest tests[] = {
+		/* x - x = +0 */
+		{0x00000000, 0x00000000, 0x00000000}, /* +0.000000 + +0.000000 = +0.000000 */
+		{0x80000000, 0x00000000, 0x00000000}, /* -0.000000 + +0.000000 = +0.000000 */
+		{0x00000000, 0x80000000, 0x00000000}, /* +0.000000 + -0.000000 = +0.000000 */
+		{0x80000000, 0x80000000, 0x80000000}, /* -0.000000 + +0.000000 = -0.000000 */
+		{0x3f800000, 0xbf800000, 0x00000000}, /* 1.000000 + -1.000000  = +0.000000 */
+		{0xbf800000, 0x3f800000, 0x00000000}, /* -1.000000 + 1.000000  = +0.000000 */
+
+		{0x7f800000, 0x3f800000, 0x7f800000}, /* inf + 1.000000 = inf */
+		{0x7f800000, 0xff800000, 0x7fc00000}, /* inf + -inf = nan */
+		{0xff800000, 0x7f800000, 0x7fc00000}, /* -inf + inf = nan */
+		{0x7fc04200, 0x3f800000, 0x7fc04200}, /* nan + 1.000000 = nan */
+		{0x3f800000, 0x7fc00000, 0x7fc00000}, /* 1.000000 + nan = nan */
+		{0x40000000, 0xbf800000, 0x3f800000}, /* 2.000000 + -1.000000 = 1.000000 */
+
+
+		{0x428b6148, 0xbf800000, 0x42896148}, /* 69.690002 + -1.000000 = 68.690002 */
+		{0x3f800000, 0xc28b6148, 0xc2896148}, /* 1.000000 + -69.690002 = -68.690002 */
+		{0xc28b6148, 0xbf800000, 0xc28d6148}, /* -69.690002 + -1.000000 = -70.690002 */
+		{0xbf800000, 0xc28b6148, 0xc28d6148}, /* -1.000000 + -69.690002 = -70.690002 */
+
+	};
+	int i;
+	int pass = 0;
+	int print = 1;
+	if (argc > 1)
+		print = atoi(argv[1]);
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i) {
+		if (print) {
+			printf("test %2d: ", i);
+		}
+		pass += testfloats(tests[i], print);
+		//userpause();
+		//printf(ESC "[A" ESC "[A"); // cursor up
+	}
+	if (print) {
+		printf("pass: %d/%d\n", pass, i);
+		//fputest();
+		userpause();
+	}
+}
+
+static void testbase(const char *str, int base)
+{
+	char *endptr;
+	long x = strtol(str, &endptr, base);
+	printf("base %2d: %ld (end=%ld)\n", base, x, endptr-str);
+}
+
+static void teststrtol(int argc, char *argv[], char *envp[])
+{
+	static const char *tests[] = {
+#if 0
+		" 	\n1234567", " 	\n+1234567", " 	\n-1234567",
+		" 	\n0x12345", " 	\n+0x12345", " 	\n-0x12345",
+		" 	\n0123456", " 	\n+0123456", " 	\n-0123456",
+		" 	\n0101101", " 	\n+0101101", " 	\n-0101101",
+		"123k5", "34565243523452345", "", "09", "0xg",
+#endif
+		"2147483646",
+		"2147483647",
+		"2147483648",
+		"-2147483647",
+		"-2147483648",
+		"-2147483649",
+	};
+	int i;
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i) {
+		printf("'%s' (length %ld):\n", tests[i], strlen(tests[i]));
+		testbase(tests[i], 0);
+		testbase(tests[i], 2);
+		testbase(tests[i], 8);
+		testbase(tests[i], 10);
+		testbase(tests[i], 16);
+		userpause();
+	}
+}
+
 static void testclock(int argc, char *argv[], char *envp[])
 {
 	printf("system clock:  %ld\n", realtime.tv_sec);
@@ -335,6 +588,9 @@ static void testrandom(int argc, char *argv[], char *envp[])
 	userpause();
 }
 
+static const char onebit[] = {
+#include "onebit.hex"
+};
 #define AUDIOBUFSIZE 4096
 static void testaudio(int argc, char *argv[], char *envp[])
 {
@@ -351,6 +607,7 @@ static void testaudio(int argc, char *argv[], char *envp[])
 		goto out;
 	}
 
+#if 0
 	audioleft = malloc(AUDIOBUFSIZE*sizeof(long));
 	audioright = malloc(AUDIOBUFSIZE*sizeof(long));
 	audiocenter = malloc(AUDIOBUFSIZE*sizeof(long));
@@ -375,6 +632,9 @@ static void testaudio(int argc, char *argv[], char *envp[])
 	
 	printf("playing both...\n");
 	write(audiofd, audiocenter, AUDIOBUFSIZE * sizeof(long));
+#else
+	write(audiofd, onebit, sizeof(onebit));
+#endif
 #if 0
 	ioctl(audiofd, SNDCTL_DSP_SYNC); /* close() automatically sync's */
 #endif
@@ -766,7 +1026,7 @@ out:
 
 static int banner(const char *s)
 {
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	static const char stars[] = "*****************************";
 #else
 	static const char stars[] = "*******************";
@@ -783,18 +1043,16 @@ struct test {
 };
 
 static const struct test tests[] = {
+	{ "nice", testnice },
+	{ "sr64", testsr64 },
+	{ "fpu", testfpu },
+	{ "strtol", teststrtol },
 	{ "clock", testclock },
 	{ "random", testrandom },
 	{ "link", testlink },
 	{ "audio", testaudio },
 	{ "", NULL }
 };
-
-typedef unsigned long softfloat;
-softfloat fadd(softfloat, softfloat);
-
-unsigned long long sl64(unsigned long long, unsigned);
-unsigned long long sr64(unsigned long long, unsigned);
 
 #define BUFSIZE 512
 
@@ -1024,12 +1282,11 @@ static int fdtofd(int fromfd, int tofd)
 int uterm_main(int argc, char **argv, char **envp)
 {
 	int linkfd;
-	ssize_t recvcount, sendcount;
 	struct sigaction sa;
 	/* periodically interrupt read() calls */
 	struct itimerval it = {
-		{ 0, 100000 },
-		{ 0, 100000 }
+		{ 0, 1000000/8 },
+		{ 0, 1000000/8 }
 	};
 
 	linkfd = open("/dev/link", O_RDWR);
@@ -1039,7 +1296,8 @@ int uterm_main(int argc, char **argv, char **envp)
 	}
 
 	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
+	//sa.sa_flags = SA_RESTART;
+	sa.sa_flags = 0;
 	sigaction(SIGALRM, &sa, NULL);
 	setitimer(ITIMER_REAL, &it, NULL);
 	
@@ -1047,12 +1305,12 @@ int uterm_main(int argc, char **argv, char **envp)
 		ssize_t x, y;
 		do {
 			x = fdtofd(linkfd, 1);
-		} while (x == BUFSIZE);
+		} while (x > 0);
 		do {
 			y = fdtofd(0, linkfd);
-		} while (y == BUFSIZE);
+		} while (y > 0);
 		if ((x < 0 || y < 0) && errno != EINTR) {
-			printf("x=%ld y=%ld\n", x, y);
+			perror("uterm");
 			break;
 		}
 		if (x == 0) break;
@@ -1084,7 +1342,7 @@ int time_main(int argc, char **argv, char **envp)
 		--argc;
 	}
 	if (argc < 2) {
-		printf("Usage: %s [-p] utility [argument...]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-p] utility [argument...]\n", argv[0]);
 		return 1;
 	}
 	++v;
@@ -1164,12 +1422,11 @@ int tests_main(int argc, char **argv, char **envp)
 	const struct test *testp;
 	int match = 0;
 	for (testp = &tests[0]; testp->func; ++testp) {
-		if (argc > 1 && strcmp(argv[1], testp->name))
-			continue;
-
-		match = 1;
-		banner(testp->name);
-		testp->func(argc, argv, envp);
+		if (argc <= 1 || !strcmp(argv[1], testp->name)) {
+			match = 1;
+			banner(testp->name);
+			testp->func(argc - 1, argv + 1, envp);
+		}
 	}
 	if (!match) {
 		printf("error: no test named %s\n", argv[1]);
@@ -1192,7 +1449,7 @@ static int docat(int fd)
 	return (n < 0);
 }
 
-static int cat_main(int argc, char **argv, char **envp)
+int cat_main(int argc, char **argv, char **envp)
 {
 	int err = 0;
 	int fd;
@@ -1296,7 +1553,8 @@ static int pause_main(int argc, char **argv, char **envp)
 	struct sigaction sa;
 	int e;
 	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
+	//sa.sa_flags = SA_RESTART;
+	sa.sa_flags = 0;
 	printf("sigaction returned %d\n", sigaction(SIGALRM, &sa, NULL));
 	alarm(3);
 	e = pause();
@@ -1390,6 +1648,36 @@ static int pgrp_main(int argc, char **argv, char **envp)
 	return 0;
 }
 
+int nice_main(int argc, char **argv, char **envp)
+{
+	int err;
+	int inc = 10; // default increment
+	int cmdarg = 1;
+	if (argc == 1) {
+		printf("%d\n", nice(0));
+		return 0;
+	}
+	if (argc >= 3 && !strcmp(argv[1], "-n")) {
+		inc = atoi(argv[2]);
+		cmdarg = 3;
+	}
+	if (argc <= cmdarg) {
+		printf("nice: command must be given\n");
+		return 1;
+	}
+	errno = 0;
+	if (nice(inc) == -1 && errno) {
+		perror("nice");
+	}
+	execve(argv[cmdarg], &argv[cmdarg], envp);
+	if (errno == ENOENT)
+		err = 127;
+	else
+		err = 126;
+	perror(argv[cmdarg]);
+	return err;
+}
+
 int atoi(const char *a)
 {
 	int i = 0;
@@ -1457,10 +1745,10 @@ static int kill_main(int argc, char **argv, char **envp)
 	};
 #define SIZEOF_NAMES (sizeof(names)/sizeof(names[0]))
 	void usage() {
-		printf("Usage: kill -s signal_name pid ...\n"
-		       "       kill -l [exit_status]\n"
-		       "       kill [-signal_name] pid ...\n"
-		       "       kill [-signal_number] pid ...\n");
+		fprintf(stderr, "Usage: kill -s signal_name pid ...\n"
+		                "       kill -l [exit_status]\n"
+		                "       kill [-signal_name] pid ...\n"
+		                "       kill [-signal_number] pid ...\n");
 	}
 	int signum(const char *signame) {
 		int i;
@@ -1484,13 +1772,13 @@ static int kill_main(int argc, char **argv, char **envp)
 		if (!strcmp(argv[1], "-s")) {
 			/* kill -s signal_name pid ... */
 			if (argc < 4) {
-				printf("kill: not enough arguments\n");
+				fprintf(stderr, "kill: not enough arguments\n");
 				usage();
 				return 1;
 			}
 			sig = signum(argv[2]);
 			if (sig < 0) {
-				printf("kill: unknown signal \"%s\"\n",
+				fprintf(stderr, "kill: unknown signal \"%s\"\n",
 				       argv[2]);
 				return 1;
 			}
@@ -1498,7 +1786,7 @@ static int kill_main(int argc, char **argv, char **envp)
 		} else if (!strcmp(argv[1], "-l")) {
 			/* kill -l [exit_status] */
 			if (argc > 3) {
-				printf("kill: too many arguments\n");
+				fprintf(stderr, "kill: too many arguments\n");
 				usage();
 				return 1;
 			}
@@ -1514,7 +1802,7 @@ static int kill_main(int argc, char **argv, char **envp)
 					printf("%s\n", names[s] + 3);
 					return 0;
 				}
-				printf("kill: unknown signal %d\n", sig);
+				fprintf(stderr, "kill: unknown signal %d\n", sig);
 				return 1;
 			}
 			for (i = 1; i < SIZEOF_NAMES; ++i) {
@@ -1533,8 +1821,8 @@ static int kill_main(int argc, char **argv, char **envp)
 				sig = signum(&argv[1][1]);
 			}
 			if (sig < 0) {
-				printf("kill: unknown signal \"%s\"\n",
-				       &argv[1][1]);
+				fprintf(stderr, "kill: unknown signal \"%s\"\n",
+				        &argv[1][1]);
 				return 1;
 			}
 			pidarg = 2;
@@ -1765,7 +2053,7 @@ static int updatetop(struct topinfo *info)
 	/* sort the array by cpu usage */
 	qsort(allprocp, allproclen, sizeof(void *), topcompare_pcpu);
 	
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	/* line 1 */
 	t = tv.tv_sec - 25200; /* -7 hours */
 	second = t % 60; t /= 60;
@@ -1880,6 +2168,8 @@ static int updatetop(struct topinfo *info)
 #endif
 	/* clear to the end of the screen */
 	printf(ESC "[J" ESC "[5H");
+	if (feof(stdout) || ferror(stdout))
+		status = 1;
 free:
 	free(allproc);
 	free(allprocp);
@@ -1888,7 +2178,7 @@ free:
 #endif
 
 #define TOPBUFSIZE 200
-static int top_main(int argc, char *argv[], char **envp)
+int top_main(int argc, char *argv[], char **envp)
 {
 	/* we should eventually put the terminal in raw mode
 	 * so we can read characters as soon as they're typed */
@@ -1905,7 +2195,8 @@ static int top_main(int argc, char *argv[], char **envp)
 	struct sigaction sa;
 	
 	sa.sa_handler = sigalrm;
-	sa.sa_flags = SA_RESTART;
+	//sa.sa_flags = SA_RESTART;
+	sa.sa_flags = 0;
 	sigaction(SIGALRM, &sa, NULL);
 	setitimer(ITIMER_REAL, &it, NULL);
 	
@@ -1939,12 +2230,12 @@ static struct applet applets[];
 static void showhelp(int shell)
 {
 	struct applet *ap;
-	printf("available applets:\n");
+	fprintf(stderr, "available applets:\n");
 	for (ap = &applets[0]; ap->name; ++ap) {
 		if (!shell && ap->main == NULL) continue;
-		printf(" %-9s", ap->name);
+		fprintf(stderr, " %-9s", ap->name);
 	}
-	printf("\n");
+	fprintf(stderr, "\n");
 }
 
 const unsigned char _ctype[256] = {
@@ -2079,7 +2370,16 @@ int sh_main(int argc, char **argv, char **envp)
 	sigaction(SIGTTIN, &sa, NULL);
 	sigaction(SIGTTOU, &sa, NULL);
 
-	printf("stupid shell v0.2\n");
+	/* test continual interruptions to syscalls */
+	sa.sa_handler = sh_empty_sig_handler;
+	sa.sa_flags = SA_RESTART;
+	struct sigaction oldsa;
+	sigaction(SIGALRM, &sa, &oldsa);
+	//sigaction(SIGALRM, NULL, &oldsa);
+	//printf("current sa_flags=%04x\n", oldsa.sa_flags);
+	setitimer(ITIMER_REAL, &it, NULL);
+
+	fprintf(stderr, "stupid shell v0.2\n");
 	
 	/*
 	 * Notice that we do not explicitly free these buffers. Punix frees all
@@ -2088,7 +2388,7 @@ int sh_main(int argc, char **argv, char **envp)
 	buf = malloc(BUFSIZE);
 	aargv = malloc(sizeof(char *)*(BUFSIZE/2+1));
 	if (!buf || !aargv) {
-		printf("sh: fatal: can't allocate buffers!\n");
+		fprintf(stderr, "sh: fatal: can't allocate buffers!\n");
 		return 1;
 	}
 	
@@ -2102,29 +2402,38 @@ int sh_main(int argc, char **argv, char **envp)
 	
 	bp = buf;
 	for (;;) {
-		setitimer(ITIMER_REAL, &it, NULL);
+		//setitimer(ITIMER_REAL, &it, NULL);
 		if (len == 0) {
-			printf("%s@%s:%s%c ", username, hostname, "~",
-			       uid ? '$' : '#');
+			fprintf(stderr, "%s@%s:%s%c ", username, hostname, "~",
+			        uid ? '$' : '#');
 		}
 		n = read(0, bp, BUFSIZE - len);
 		if (n < 0) {
-			if (errno == EINTR)
+			if (errno == EINTR) {
+				// clear the input buffer
+				bp = buf;
+				len = 0;
 				continue;
-			else
+			} else {
+				fprintf(stderr, "exiting because errno=%d\n", errno);
 				break;
+			}
 		}
 		len += n;
 		bp += n;
 		if (len == 0) {
 			++neof;
 			if (neof > ignoreeof) {
-				printf ("exit\n");
+				fprintf(stderr, "exit\n");
 				break;
 			}
-			printf("Use \"exit\" to leave the shell.\n");
+			fprintf(stderr, "Use \"exit\" to leave the shell.\n");
 			continue;
 		}
+		// TODO: if input is larger than the buffer (ie, no newline in
+		// buf), report an error, gobble up input until a newline is
+		// reached, and then resume taking commands as normal
+		// OR expand the buffer dynamically
 		if (len != BUFSIZE && buf[len-1] != '\n')
 			continue;
 		
@@ -2153,7 +2462,7 @@ int sh_main(int argc, char **argv, char **envp)
 				errstr = "unmatched single quote";
 				break;
 			}
-			printf("sh: error: %s\n", errstr);
+			fprintf(stderr, "sh: error: %s\n", errstr);
 			goto eol;
 		}
 		aargv[aargc] = NULL;
@@ -2182,8 +2491,8 @@ nextline:
 
 static struct applet applets[] = {
 	{ "tests", NULL },
-	{ "top", top_main },
-	{ "cat", cat_main },
+	{ "top", NULL },
+	{ "cat", NULL },
 	{ "echo", echo_main },
 	{ "true", true_main },
 	{ "false", false_main },
@@ -2241,7 +2550,7 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 	 */
 	pid = vfork();
 	if (pid < 0) {
-		printf("sh: cannot vfork: %s\n", strerror(errno));
+		perror("sh: cannot vfork");
 		return 127;
 	} else if (pid == 0) {
 		struct sigaction sa;
@@ -2264,7 +2573,7 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 			s = strerror(errno);
 			break;
 		}
-		printf("sh: %s: %s\n", cmd, s);
+		fprintf(stderr, "sh: %s: %s\n", cmd, s);
 		_exit(127);
 	}
 	
@@ -2274,6 +2583,8 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		if (pid < 0) {
 			if (errno == EINTR)
 				continue;
+			else
+				break;
 		}
 		if (WIFEXITED(status)) {
 			status = WEXITSTATUS(status);
@@ -2281,16 +2592,16 @@ static int run(const char *cmd, int argc, char **argv, char **envp)
 		} else if (WIFSIGNALED(status)) {
 			status = WTERMSIG(status);
 			if (status != SIGINT)
-				printf("sh: terminated with signal %d\n", status);
+				fprintf(stderr, "terminated with signal %d\n", status);
 			status += 128;
 			break;
 		} else if (WIFSTOPPED(status)) {
 			status = WSTOPSIG(status);
-			printf("sh: stopped with signal %d\n", status);
+			fprintf(stderr, "stopped with signal %d\n", status);
 			status += 128;
 			break;
 		} else {
-			printf("sh: unknown status %d\n", status);
+			fprintf(stderr, "sh: unknown status %d\n", status);
 			break;
 		}
 	}
@@ -2311,10 +2622,26 @@ int bittybox_main(int argc, char **argv, char **envp)
 	}
 	n = run_applet(argv[0], argc, argv, envp);
 	if (n < 0) {
-		printf("bittybox: unknown applet \"%s\"\n", argv[0]);
+		fprintf(stderr, "bittybox: unknown applet \"%s\"\n", argv[0]);
 		showhelp(0);
 	}
 	return n;
+}
+
+void sleep_sigalrm(int sig) {}
+
+unsigned sleep(unsigned seconds)
+{
+	struct sigaction save;
+	struct sigaction sa;
+	sa.sa_handler = sleep_sigalrm;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGALRM, &sa, &save);
+	alarm(seconds);
+	pause();
+	sigaction(SIGALRM, &save, NULL);
+	return 0;
 }
 
 #define GETTYBUFSIZE 42
@@ -2327,12 +2654,13 @@ int getty_main(int argc, char *argv[], char *envp[])
 	size_t count;
 	ssize_t n;
 	struct utsname uts;
-	char *dev = "/dev/vt";
+	const char *dev = "/dev/vt";
 
 	// Usage: getty [devname]
 	// devname defaults to /dev/vt
 	if (argc == 2) dev = argv[1];
 
+	//sleep(5);
 	fd = open(dev, O_RDWR); /* fd 0 */
 	if (fd < 0) return -1;
 	dup(fd); /* fd 1 */
@@ -2343,7 +2671,7 @@ int getty_main(int argc, char *argv[], char *envp[])
 prompt:
 	bp = line;
 	count = GETTYBUFSIZE;
-	printf("\n%s login: ", uts.nodename);
+	fprintf(stderr, "\n%s login: ", uts.nodename);
 	for (;;) {
 		if (count == 0) break;
 		n = read(0, bp, count);
@@ -2361,10 +2689,10 @@ prompt:
 		argv[1] = line;
 		argv[2] = NULL;
 		execve(argv[0], argv, envp);
-		printf("getty: could not execute login!\n");
+		fprintf(stderr, "getty: could not execute login!\n");
 		break;
 	}
-	printf("getty: fail!\n");
+	fprintf(stderr, "getty: fail!\n");
 	return 1;
 }
 
@@ -2387,7 +2715,7 @@ int login_main(int argc, char *argv[], char *envp[])
 
 	count = LOGINBUFSIZE;
 	bp = line;
-	printf("password: ");
+	fprintf(stderr, "password: ");
 	for (;;) {
 		if (count == 0) goto badpass;
 		n = read(0, bp, count);
@@ -2412,7 +2740,7 @@ badpass:
 	sigaction(SIGALRM, &sa, NULL);
 	alarm(2);
 	pause();
-	printf("bad login!\n");
+	fprintf(stderr, "bad login!\n");
 	return 1;
 }
 
@@ -2433,9 +2761,6 @@ static int spawn_getty(const char *dev)
 
 int init_main(int argc, char *argv[], char *envp[])
 {
-	int fd;
-	int err;
-	int pid;
 	int linkpid = 0, vtpid = -1;
 	struct utsname uts;
 	
@@ -2475,4 +2800,18 @@ spawn:
 			goto spawn;
 		}
 	}
+}
+
+static FILE *openstdstream(int fd, const char *mode, int buftype)
+{
+	FILE *f = fdopen(fd, "r+");
+	if (f) setvbuf(f, NULL, buftype, 0);
+	return f;
+}
+
+void crt()
+{
+	stdin  = openstdstream(0, "r", _IOLBF);
+	stdout = openstdstream(1, "w", _IOLBF);
+	stderr = openstdstream(2, "w", _IONBF);
 }

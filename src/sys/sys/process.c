@@ -30,7 +30,9 @@ STARTUP(void setrun(struct proc *p))
 		return;
 	}
 #endif
-	sched_run(p);
+	if (p->p_status != P_ZOMBIE) {
+		sched_run(p);
+	}
 	unmask(&G.calloutlock);
 }
 
@@ -51,7 +53,6 @@ STARTUP(void unsleep(struct proc *p))
 STARTUP(static void endtsleep(void *vp))
 {
 	struct proc *p = (struct proc *)vp;
-	int s;
 	
 	mask(&G.calloutlock);
 	if (p->p_waitchan) {
@@ -85,7 +86,6 @@ STARTUP(static void endtsleep(void *vp))
 STARTUP(int tsleep(void *chan, int intr, long timo))
 {
 	struct proc *p = &P;
-	int s;
 	int sig;
 	int err = 0;
 
@@ -182,7 +182,7 @@ STARTUP(void wakeup(void *chan))
 	mask(&G.calloutlock);
 	list_for_each_entry(p, &G.proc_list, p_list) {
 		if (p->p_waitchan == chan) {
-			//TRACE();
+			TRACE();
 			setrun(p);
 		}
 	}
@@ -227,7 +227,6 @@ retry:
 		G.pidchecked = 0;
 	}
 	if (G.mpid >= G.pidchecked) {
-		struct list_head *lp;
 		G.pidchecked = MAXPID;
 		
 		list_for_each_entry(p, &G.proc_list, p_list) {
@@ -249,7 +248,7 @@ retry:
 /*
  * Is p an inferior of the current process?
  */
-STARTUP(int inferior(struct proc *p))
+STARTUP(int inferior(struct proc const *p))
 {
 
         for (; p != current; p = p->p_pptr)
@@ -302,6 +301,6 @@ STARTUP(void procinit())
 	G.numrunning = 0;
 	G.cumulrunning = 0;
 	//kprintf("%s (%d)\n", __FILE__, __LINE__);
-	kprintf("procinit: sizeof(struct proc)=%ld\n", sizeof(struct proc));
+	//kprintf("procinit: sizeof(struct proc)=%ld\n", sizeof(struct proc));
 	setrun(current);
 }

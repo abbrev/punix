@@ -5,11 +5,9 @@
  * 
  * This attempts to emulate the 68881 FPU by trapping F-line instructions.
  * The instruction is decoded and executed with software floating-point.
- * The 68881 has 8 extended-precision FP data registers (96 bits each). Only 80
- * bits are used in each of these registers but they have 16 unused bits so
- * are aligned to 12 bytes. Almost every instruction, with the exception of a
- * few instructions such as fmove, uses a floating-point register as the
- * destination.
+ * The 68881 has 8 extended-precision FP data registers (96 bits each). Almost
+ * every instruction, with the exception of a few instructions such as fmove,
+ * uses a floating-point register as the destination.
  * 
  * So far (as of 2011-02-24 T13:58) only part of the decoding code has been
  * written, and only for the general FP instructions.
@@ -18,8 +16,62 @@
  * %a5 is the program counter. use move.w (%a5)+,%dn to get the next word and
  *   advance the PC at the same time
  * %d7 and %d6 are the first and second (if applicable) words of the instruction
- * %a3 is src register (multiple formats)
- * %a4 is dst register (ext)
+ * 
+Rounding algorithm:
+
+1. guard + round + sticky = 0: exact result, end
+2. set INEX2
+3. select rounding mode:
+
+  RN (Round to Nearest):
+  a. guard * LSB = 1, round + sticky = 0 OR guard = 1, round + sticky = 1: add 1 to LSB
+  b. goto 4
+
+  RM (Round to Minus infinity) and result is negative,
+  OR
+  RP (Round to Positive infinity) and result is positive:
+  a. add 1 to LSB
+  b. goto 4
+
+  RZ (Round to Zero):
+  a. guard, round, and sticky are chopped
+  b. goto 4
+
+3 (alternate). Treat guard, round, and sticky bits as "sub fractions" of the fraction.
+  select rounding mode:
+
+  RN (Round to Nearest):
+  a. LSB = 1: add 0.011 to fraction (1.001..1.100 => 1.xxx (down), 1.101..1.111 => 0.xxx (up))
+     LSB = 0: add 0.100 to fraction (0.001..0.011 => 0.xxx (down), 0.100..0.111 => 1.xxx (up))
+  b. goto 4
+
+  RM (Round to Minus infinity) and result is negative,
+  OR
+  RP (Round to Positive infinity) and result is positive:
+  a. add 1 to LSB
+  b. goto 4
+
+  RZ (Round to Zero),
+  OR
+  RM (Round to Minus infinity) and result is positive,
+  OR
+  RP (Round to Positive infinity) and result is negative:
+  a. goto 4
+
+4. overflow = 1:
+  a. shift mantissa right 1 bit
+  b. add 1 to exponent
+5. clear guard, round, and sticky
+6. end
+
+Note: I don't see the point of the round bit. It seems to be used always in
+conjuction with the sticky bit, so it can probably be eliminated.
+Of course, implementing the extra bits is somewhat expensive, so each operation
+can keep track of the extra bits its own way so it can perform rounding
+reliably and efficiently. For example, FMUL may contain the full 128-bit
+product before rounding, so it can extract the guard and sticky bits from the
+bottom 64 bits.
+
  */
 	.if 0
 MC6888X/MC68040 FPU instructions
@@ -99,7 +151,7 @@ xxxxxx is almost always a 6-bit field
 | fp control and status registers
 
 |fpcr:	.ds.l	1	| Floating-point control register
-.equ	fpcr,srcfpreg+12
+.equ	fpcr,srcfpreg+fpregsize
 .equ	fpcrenable,fpcr+2
 .equ	fpcrmode,fpcr+3
 
@@ -117,33 +169,33 @@ xxxxxx is almost always a 6-bit field
 |fpia:	.ds.l	1	| Floating-point instruction address register
 .equ	fpia,fpsr+4
 
-.equiv	FPCC_NAN_BIT, 0
-.equiv	FPCC_I_BIT,   1
-.equiv	FPCC_Z_BIT,   2
-.equiv	FPCC_N_BIT,   3
-|.equiv	FPCC_NAN, (1<<FPCC_NAN_BIT)
-|.equiv	FPCC_I,   (1<<FPCC_I_BIT)
-|.equiv	FPCC_Z,   (1<<FPCC_Z_BIT)
-|.equiv	FPCC_N,   (1<<FPCC_N_BIT)
+.equiv	CC_NAN_BIT, 0
+.equiv	CC_I_BIT,   1
+.equiv	CC_Z_BIT,   2
+.equiv	CC_N_BIT,   3
+.equiv	CC_NAN, (1<<CC_NAN_BIT)
+.equiv	CC_I,   (1<<CC_I_BIT)
+.equiv	CC_Z,   (1<<CC_Z_BIT)
+.equiv	CC_N,   (1<<CC_N_BIT)
 
 .equiv	FPCRMODE_RND_MASK,  0x30
 .equiv	FPCRMODE_PREC_MASK, 0xc0
 
 | these bits apply to the FPCR ENABLE byte and FPSR EXC byte
-.equiv	FPEXC_INEX1_BIT, 0
-.equiv	FPEXC_INEX2_BIT, 1
-.equiv	FPEXC_DZ_BIT,    2
-.equiv	FPEXC_UNFL_BIT,  3
-.equiv	FPEXC_OVFL_BIT,  4
-.equiv	FPEXC_OPERR_BIT, 5
-.equiv	FPEXC_SNAN_BIT,  6
-.equiv	FPEXC_BSUN_BIT,  7
+.equiv	EXC_INEX1_BIT, 0
+.equiv	EXC_INEX2_BIT, 1
+.equiv	EXC_DZ_BIT,    2
+.equiv	EXC_UNFL_BIT,  3
+.equiv	EXC_OVFL_BIT,  4
+.equiv	EXC_OPERR_BIT, 5
+.equiv	EXC_SNAN_BIT,  6
+.equiv	EXC_BSUN_BIT,  7
 
-.equiv	FPSRAEXC_INEX_BIT, 3	| INEX1 + INEX2 + OVFL
-.equiv	FPSRAEXC_DZ_BIT,   4	| DZ
-.equiv	FPSRAEXC_UNFL_BIT, 5	| UNFL L INEX2
-.equiv	FPSRAEXC_OVFL_BIT, 6	| OVFL
-.equiv	FPSRAEXC_IOP_BIT,  7	| SNAN + OPERR
+.equiv	AEXC_INEX_BIT, 3	| INEX1 + INEX2 + OVFL
+.equiv	AEXC_DZ_BIT,   4	| DZ
+.equiv	AEXC_UNFL_BIT, 5	| UNFL L INEX2
+.equiv	AEXC_OVFL_BIT, 6	| OVFL
+.equiv	AEXC_IOP_BIT,  7	| SNAN + OPERR
 
 | format of extended-precision float register:
 | seee eeee eeee eeee 0000 0000 0000 0000
@@ -153,18 +205,35 @@ xxxxxx is almost always a 6-bit field
 | s=sign
 | e=exponent
 | f=fraction (with explicit integer bit)
-.equiv EXT_SIGN_OFFSET, 0
-.equiv EXT_SIGN_BIT,   31
-.equiv EXT_EXP_OFFSET,  0
-.equiv EXT_EXP_BIT,    16
-.equiv EXT_FRAC_OFFSET, 1 | first long that contains the fraction
+| 
+| N.B. Internally ext float values are stored with an unbiased 16-bit exponent,
+| a sign in bit 16, and an inf/nan flag in bit 17, but they are stored in
+| memory as above.
+| This internal format simplifies detecting overflow/underflow
+| N.B. The NAN, INF, Z, and SIGN bits correspond exactly with the condition
+| code bits so that testing each condition is trivial.
+.equiv EXT_NAN_BIT,  16 | set=nan
+.equiv EXT_INF_BIT,  17 | set=inf
+.equiv EXT_Z_BIT,    18 | set=zero
+.equiv EXT_SIGN_BIT, 19 | set=negative
+.equiv EXT_NAN,  (1<<EXT_NAN_BIT)
+.equiv EXT_INF,  (1<<EXT_INF_BIT)
+.equiv EXT_Z,    (1<<EXT_Z_BIT)
+.equiv EXT_SIGN, (1<<EXT_SIGN_BIT)
+
 .equiv EXT_EXP_BIAS, 16383
+.equiv EXT_EXP_MAX,  32766
+
+.equiv SNG_EXP_BIAS, 127
+.equiv SNG_EXP_MAX,  254
+
+.equiv DBL_EXP_BIAS, 1023
+.equiv DBL_EXP_MAX,  2046
 
 .text
 
 
 	| offsets from %fp
-	.equ SAVED_FP,0
 	.equ SAVED_D0,4
 	.equ SAVED_D1,8
 	.equ SAVED_D2,12 
@@ -181,6 +250,7 @@ xxxxxx is almost always a 6-bit field
 	.equ SAVED_A5,56 
 	.equ SAVED_A6,60 
 	.equ SAVED_A7,64 
+	.equ SAVED_SP,64 
 	.equ SAVED_SR,68
 	.equ SAVED_PC,70 
 
@@ -192,16 +262,14 @@ fpuemu:
 	movem.l	%d0-%d7/%a0-%a7,-(%sp)
 	link	%fp,#0
 	move.l	%usp,%a0
-	move.l	%a0,(SAVED_A7,%fp)
+	move.l	%a0,(SAVED_SP,%fp)
 	move.l	(SAVED_PC,%fp),%a5
 	
 	| 1. verify that coproc ID (bits 9-11) is 001 (is this necessary?)
-	move	(%a5)+,%d7
+	move	(%a5)+,%d7	| get first instruction word
 	move	%d7,%d0
-	lsr.w	#8,%d0
-	lsr.w	#1,%d0
-	and	#7,%d0
-	cmp	#1,%d0
+	and	#7*0x200,%d0
+	cmp	#1*0x200,%d0
 	bne	8f
 1:
 	
@@ -218,22 +286,28 @@ fpuemu:
 	|    instruction
 
 9:
+	| add exceptions to accrued exceptions
+	| FIXME: accrued exception byte has a different layout than the exception byte
+	move.b	fpsrexc,%d0
+	or.b	%d0,fpsraexc
+	
 	| 5. restore all registers
 	move.l	%a5,(SAVED_PC,%fp)
-	move.l	(SAVED_A7,%sp),%a0
+	move.l	(SAVED_SP,%sp),%a0
 	move.l	%a0,%usp
 	unlk	%fp
 	movem.l	(%sp)+,%d0-%d7/%a0-%a6
 	lea.l	(4,%sp),%sp
 	
 	| 6. return from trap
+	| TODO: check and post pending signals etc
 	rte
 
 7:
 	.long	instr_gen
 	.long	instr_scc
-	.long	instr_bcc
-	.long	instr_bcc
+	.long	instr_bcc_w
+	.long	instr_bcc_l
 	.long	instr_save
 	.long	instr_restore
 	.long	instr_invalid
@@ -243,14 +317,6 @@ fpuemu:
 	bsr	instr_invalid
 	bra	9b
 
-| input:
-|  %d0 = format (L/S/X/P/W/D/B)
-| output:
-|  %d0 = size of format
-get_format_size:
-	move.b	(format_sizes,%pc,%d0.w),%d0
-	ext.w	%d0
-	rts
 .equiv FORMAT_INT_LONG, 0
 .equiv FORMAT_REAL_SNG, 1
 .equiv FORMAT_REAL_EXT, 2
@@ -260,43 +326,31 @@ get_format_size:
 .equiv FORMAT_INT_BYTE, 6
 .equiv FORMAT_INVALID,  7 | this is used for fmovecr
 
-	.if 0
-mode	register	addressing mode		tested?
-000	Dn		Dn			yes
-001	An		An
-010	An		(An)			yes
-011	An		(An)+			yes
-100	An		-(An)			yes
-101	An		(d16,An)		yes
-110	An		(d8,An,Xn)
-110	An		(bd,An,Xn)		not on 68000
-110	An		([bd,An,Xn],od)		not on 68000
-110	An		([bd,An],Xn,od)		not on 68000
-111	000		(xxx).W
-111	001		(xxx).L
-111	010		(d16,PC)		yes
-111	011		(d8,PC,Xn)
-111	011		(bd,PC,Xn)		not on 68000
-111	011		([bd,PC,Xn],od)		not on 68000
-111	011		([bd,PC],Xn,od)		not on 68000
-111	100		#<data>			yes
-	.endif
-
 | input:
 |  %d7=first instruction word
 |  %d0=data size (determines pre-decrement and
 |                 post-increment size)
 | output:
-|  %a3=pointer to (source) operand
+|  %a0=pointer to (source) operand
 |  %d0=type of EA (bit field):
-.equiv EA_WRITABLE,  1
-.equiv EA_MEMORY,    2
-.equiv EA_PREDEC,    4	| this can be repeated safely
-.equiv EA_POSTINC,   8	| this can be repeated safely
-.equiv EA_DATAREG,  16
-.equiv EA_ADDRREG,  32
+|  %d0 is 0 if invalid
+|  Z flag is set if invalid
+.equiv EA_WRITABLE_BIT, 0
+.equiv EA_MEMORY_BIT,   1
+.equiv EA_PREDEC_BIT,   2
+.equiv EA_POSTINC_BIT,  3
+.equiv EA_DATAREG_BIT,  4
+.equiv EA_ADDRREG_BIT,  5
+
+.equiv EA_WRITABLE, (1<<EA_WRITABLE_BIT)
+.equiv EA_MEMORY,   (1<<EA_MEMORY_BIT)
+.equiv EA_PREDEC,   (1<<EA_PREDEC_BIT)	| this can be repeated safely
+.equiv EA_POSTINC,  (1<<EA_POSTINC_BIT)	| this can be repeated safely
+.equiv EA_DATAREG,  (1<<EA_DATAREG_BIT)
+.equiv EA_ADDRREG,  (1<<EA_ADDRREG_BIT)
 .equiv EA_PREPOST, EA_PREDEC+EA_POSTINC
 get_ea:
+	| TODO: verify word and long memory accesses are word-aligned
 	move	%d7,%d2
 	move	%d7,%d1
 	lsr	#3,%d2
@@ -323,20 +377,27 @@ mode	register	addressing mode
 	.endif
 	dbra	%d1,1f	| %d1 == 0?
 	| (xxx).W
-	move.w	(%a5)+,%a3
+	move.w	(%a5)+,%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d1,1f	| %d1 == 1?
 	| (xxx).L
-	move.l	(%a5)+,%a3
+	move.l	(%a5)+,%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d1,1f	| %d1 == 2?
 	| (d16,PC) -- tested, works
-	move	(%a5)+,%d0
-	lea.l	(-2,%a5,%d0.w),%a3
+	move	(%a5)+,%d1
+	cmp	#1,%d0
+	beq	0f
+	btst	#0,%d1
+	beq	0f
+	| unaligned access--invalid
+	moveq.l	#0,%d0
+	rts
+0:	lea.l	(-2,%a5,%d1.w),%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
@@ -348,40 +409,39 @@ mode	register	addressing mode
 	ext.w	%d2		| d8
 	lsr	#8,%d1		| register number
 	move.l	(SAVED_D0,%fp,%d1.w),%a0
+	| XXX: is Xn word or long? 
+	| TODO: if d8+Xn is odd and size is not 1, return invalid
 	add.w	%a0,%d2
-	lea.l	(%a3,%a0.w),%a3
+	lea.l	(%a3,%a0.w),%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d1,1f	| %d1 == 4?
 	| #<data> -- tested, works
-	| TODO
 	cmp	#4,%d0
 	bne	2f
 	| long
-	lea.l	(%a5),%a3
-	lea.l	(4,%a5),%a5
+	lea.l	(%a5),%a0
+	addq	#4,%a5
 	move	#EA_MEMORY,%d0
 	rts
 2:	cmp	#2,%d0
 	bne	2f
 	| word
-	lea.l	(%a5),%a3
-	lea.l	(2,%a5),%a5
+	lea.l	(%a5),%a0
+	addq	#2,%a5
 	move	#EA_MEMORY,%d0
 	rts
 2:	cmp	#1,%d0
 	bne	2f
 	| byte
-	lea.l	(1,%a5),%a3
-	lea.l	(2,%a5),%a5
+	lea.l	(1,%a5),%a0
+	addq	#2,%a5
 	move	#EA_MEMORY,%d0
 	rts
 2:	| invalid! (not sure how to get this condition)
-	move.l	#0,%a3
-	move	#EA_MEMORY,%d0
+	moveq	#0,%d0
 	rts
-
 
 	.if 0
 Effective address field:
@@ -398,74 +458,81 @@ mode	register	addressing mode
 110	An		([bd,An],Xn,od)		not on 68000
 	.endif
 
-3:	lsl	#2,%d1
+3:	lsl	#2,%d1	| %d1 = 4 * register number
 	dbra	%d2,1f	| %d2 == 0?
-	| Dn -- tested, works
+	| Dn -- TEST AGAIN
+	cmp	#4,%d0
+	ble	0f
+	moveq.l	#0,%d0	| invalid size for Dn
+	rts
+0:	| add (4-size) to offset into register (byte: 3, word: 2, long: 0)
+	subq	#4,%d0
+	sub	%d0,%d1
 	
-	| add (4-size) to offset into register (byte: 3, word: 2, long: 0)
-	neg	%d0
-	add	#4,%d0
-	add	%d0,%d1
-	
-	lea.l	(SAVED_D0,%fp,%d1.w),%a3
+	lea.l	(SAVED_D0,%fp,%d1.w),%a0
 	move	#EA_DATAREG+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d2,1f	| %d2 == 1?
 	| An
-	lea.l	(SAVED_A0,%fp,%d1.w),%a3
+	cmp	#4,%d0
+	beq	0f
+	moveq.l	#0,%d0	| invalid size for An
+	rts
+0:	lea.l	(SAVED_A0,%fp,%d1.w),%a0
 	move	#EA_ADDRREG+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d2,1f	| %d2 == 2?
 	| (An) -- tested, works
-	move.l	(SAVED_A0,%fp,%d1.w),%a3
+	move.l	(SAVED_A0,%fp,%d1.w),%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
+	| TODO: check alignment of %a0
 	rts
 
 1:	dbra	%d2,1f	| %d2 == 3?
 	| (An)+ -- tested, works
-	lea.l	(SAVED_A0,%fp,%d1.w),%a0
+	lea.l	(SAVED_A0,%fp,%d1.w),%a3
+
 	cmp	#4*7,%d1	| is this A7?
 	bne	0f
 	cmp	#1,%d0		| is the size 1?
 	bne	0f
-	add.l	%d0,(%a0)	| (A7)+ with size=1
-	| XXX: is a byte in the upper or lower half of a word on the stack?
-0:
-	move.l	(%a0),%a3
-	ext.l	%d0
-	add.l	%d0,(%a0)
+	moveq	#2,%d0		| (A7)+ with size=1
+	| N.B. a byte is stored in the upper half of a word on the stack,
+	| such that %sp points to the byte after "move.b #0,-(%sp)" executes
+0:	move.l	(%a3),%a0	| get (An)
+	add.w	%d0,(%a3)	| postincrement An
 	move	#EA_POSTINC+EA_MEMORY+EA_WRITABLE,%d0
+	| TODO: check alignment of %a0
 	rts
 
 1:	dbra	%d2,1f	| %d2 == 4?
 	| -(An) -- tested, works
-	lea.l	(SAVED_A0,%fp,%d1.w),%a0
-	ext.l	%d0
-	sub.l	%d0,(%a0)
-	move.l	(%a0),%a3
+	lea.l	(SAVED_A0,%fp,%d1.w),%a3
+
 	cmp	#4*7,%d1
 	bne	0f
 	cmp	#1,%d0
 	bne	0f
-	sub.l	%d0,(%a0)	| -(A7) with size=1
-	| XXX: is a byte in the upper or lower half of a word on the stack?
-0:
+	moveq	#2,%d0		| -(A7) with size=1
+0:	sub.w	%d0,(%a3)	| predecrement An
+	move.l	(%a3),%a0	| get (An)
 	move	#EA_PREDEC+EA_MEMORY+EA_WRITABLE,%d0
 	rts
 
 1:	dbra	%d2,1f	| %d2 == 5?
 	| (d16,An) -- tested, works
-	move.l	(SAVED_A0,%fp,%d1.w),%a3
+	move.l	(SAVED_A0,%fp,%d1.w),%a0
 	move	(%a5)+,%d0
-	lea.l	(%a3,%d0.w),%a3
+	lea.l	(%a0,%d0.w),%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
+	| TODO: check alignment of %a0
 	rts
 
 1:	| %d2 == 6
 	| (d8,An,Xn)
-	move.l	(SAVED_A0,%fp,%d1.w),%a3
+	move.l	(SAVED_A0,%fp,%d1.w),%a0
 	move	(%a5)+,%d0
 	move	%d0,%d1		| index register field
 	move	%d0,%d2		| d8 field
@@ -477,41 +544,49 @@ mode	register	addressing mode
 	bne	3f
 	ext.l	%d2		| treat Xn register as word
 3:
-	add	%d2,%a0		| Xn + d8
-	move.l	(%a3,%d1.l),%a3
+	add	%d2,%a3		| Xn + d8
+	move.l	(%a0,%d1.l),%a0
 	move	#EA_MEMORY+EA_WRITABLE,%d0
+	| TODO: check alignment of %a0
 	rts
 	
 
 | input:
 |  %d7 = first instruction word
 |  %d6 = second instruction word
-|  %d0 = size of operand
 | output:
-|  %a3 = pointer to source
+|  %d0-%d2 = source value
+|  Z flag is set if source is invalid
+|  %d3 is clobbered
 get_src:
-	btst	#14,%d6		| R/M bit
-	bne	get_ea
+	| get src format
+	move	%d6,%d0
+	rol	#6,%d0
+	and	#7,%d0
 
-1:
-	| get the source fp register
-	move	%d6,%d1
-	.if fpregsize == 16
-	lsr	#10-4,%d1	| multiplied by 16
-	and	#7*16,%d1
-	.elseif fpregsize == 12
-	lsr	#10-2,%d1
-	move	%d1,%d0
-	lsl	#1,%d1
-	add	%d0,%d1		| multiplied by 12
-	and	#7*12,%d1
-	.else
-	.error
-	.endif
-	lea.l	fpregs,%a3
-	lea.l	(%a3,%d1.w),%a3
-	|move	#FORMAT_REAL_EXT,%d2
+	move	%d0,%d3		| save format
+	move.b	(format_sizes,%pc,%d0.w),%d0	| get the format size
+	ext.w	%d0
+	btst	#14,%d6		| R/M bit
+	beq	0f
+
+	| get ea
+	jbsr	get_ea		| get source from memory
+	beq	9f		| Z flag is set on error
+	move	%d3,%d0		| restore format
+	jbsr	convert_to_ext
+	moveq	#1,%d3
 	rts
+
+
+0:	| get the source fp register
+	mulu	#12,%d3
+
+	lea.l	fpregs,%a0
+	lea.l	(%a0,%d3.w),%a0
+	movem.l	(%a0),%d0-%d2
+	moveq	#1,%d3		| clear Z flag (source is valid)
+9:	rts
 
 | input:
 |  %d6 = second instruction word
@@ -520,8 +595,13 @@ get_src:
 get_dst:
 	| get the destination fp register
 	move	%d6,%d0
-	lsr	#7-4,%d0
-	and	#7*16,%d0
+
+	lsr	#7-3,%d0
+	and	#7*8,%d0
+	move	%d0,%d1
+	lsr	#1,%d0
+	add	%d1,%d0		| multiplied by 12
+
 	lea.l	fpregs,%a4
 	lea.l	(%a4,%d0.w),%a4
 	rts
@@ -538,16 +618,13 @@ get_format:
 	and	#7,%d0
 	rts
 
-| copy extended-precision floating-point value from src to dst
 | input:
-|  %a0 = src
-|  %a1 = dst
+|  %d0 = format (L/S/X/P/W/D/B)
 | output:
-|  %a0 and %a1 point to the next pair of values
-copyfp:
-	move.l	(%a0)+,(%a1)+
-	move.l	(%a0)+,(%a1)+
-	move.l	(%a0)+,(%a1)+
+|  %d0 = size of format
+get_format_size:
+	move.b	(format_sizes,%pc,%d0.w),%d0
+	ext.w	%d0
 	rts
 
 format_sizes:
@@ -562,81 +639,77 @@ format_sizes:
 
 instr_gen:
 	move	(%a5)+,%d6	| get next instruction word
-	move	%d6,%d0
-	and	#0xa000,%d0
-	bne	1f	| fmove
-	bsr	get_dst
-	bsr	get_format
-	move	%d0,%d3
-	cmp	#7,%d0
-	beq	2f	| fmovecr
-	.if 0
-	bsr	get_format_size
-	.else
-	move.b	(format_sizes,%pc,%d0.w),%d0	| get the format size
-	ext.w	%d0
-	.endif
-	bsr	get_src
-	move	%d6,%d0
-	and	#127,%d0
-	lsl	#2,%d0
-	move.l	(7f,%pc,%d0.w),%a0
-	|bsr	get_format
-	move	%d3,%d0
-	jmp	(%a0)
-	|jsr	(%a0)
-	|rts
-
-| fmove (memory to register):
-| 1111iii000eeeeee
-| 0r0sssddd0000000
-| 
-| (fmovecr = fmove mem-reg with sss = 111)
-| 
-| fmovecr:
-| 1111iii000000000
-| 010111dddooooooo
-| 
-| fmove (register to memory):
-| 1111iii000eeeeee
-| 011dddssskkkkkkk
-| 
-| fmovem (system control registers)
-| 1111iii000eeeeee
-| 10drrr0000000000
-| 
-| fmovem (data registers):
-| 1111iii000eeeeee
-| 11dmm000rrrrrrrr
-|
-| fmove mem-reg: 0r0
-| fmovecr: 010
-| fmove reg-mem: 011
-| fmovem system control registers: 10d
-| fmovem data registers: 11d
-
-1:	| fmove
-	| TODO:
-	| fmove treats the EA differently than other instructions
-	|cmp	#
-	rts
-
-
-2:	| fmovecr
-	| we have the dst already in %a4
 	
-	| get the rom offset
 	move	%d6,%d0
-	and	#127,%d0
-	lsl	#2,%d0
-	lea.l	(constant_rom,%pc,%d0.w),%a0
-	move.l	%a4,%a1
-	| %a0 = src (constant rom)
-	| %a1 = dst
-	jbra	copyfp
+	and	#0xfc00,%d0	| get the top 6 bits of second instruction word
+	
+	cmp	#0x5c00,%d0	| 010111
+	beq	fmovecr		| fmovecr
+	
+	and	#0xa000,%d0	| 101000 <- either bit set
+	bne	fmove_misc	| misc fmove
+	
+	| regular arithmetic instruction
+	| steps to complete an arithmetic instruction:
+	| 1. get src (converted to extended-precision)
+	| 2. get pointer to dst
+	| 3. call the specific arithmetic operation handler (eg, instr_gen_fadd etc)
+	| 4. the handler loads operands as needed and calls the proper operator (eg, fadd)
+	| 5. the operator routine performs the operation and sets exceptions
+	| 5a. operator routine also rounds and then normalizes the result
+	| 6. the handler then (typically) saves the result in the destination, tests the
+	|    result (ftst) to set condition codes, and returns back here
+	| step 5 is separate from the instruction handler so as to make aritmetic operations
+	| reusable in higher-level operations (eg, fetox, fsin)
+	bsr	get_dst
+	bsr	get_src
+	beq	instr_invalid	| valid?
+	move	%d6,%d3
+	and	#127,%d3
+	lsl	#2,%d3
+	move.l	%a4,%a1		| destination fp register
+	
+	| %d0-%d2 = source extended-precision value
+	| %a1 = destination register
+	move.l	(7f,%pc,%d3.w),%a3
+	| movem.l	(%a1),%d3-%d5	| pre-load destination value
+	jsr	(%a3)
+	| TODO: set exception byte and condition codes in %d6 in each
+	| arithmetic routine, then move that to fpsr here and take an exception
+	| if any exceptions are set and enabled
+	rts
+/*
+ * All arithmetic instruction handlers take the source value in %d0-%d2
+ * (signficand in %d1-%d2, unbiased exponent in %d0.w, and sign in bit 16 of
+ * %d0.l).
+ * TODO: change code to use an unbiased exponent and bit 16 of %d0 for the sign.
+ * XXX: an unbiased exponent makes inf and nan more difficult to represent.
+ * We should also set a bit or two in the upper word of %d0 to indicate that
+ * it's inf or nan. One bit (eg, bit 17) should suffice because inf and nan are
+ * differentiated by the significand (inf: fraction is zero, nan: fraction is
+ * non-zero).
+ * 
+ * The low-level arithmetic routines generally accept values in %d0-%d2 (source)
+ * and %d3-%d5 (destination) which simplifies call sequences.
+ * 
+ * N.B. All arithmetic routines, with the exception of fcmp for some reason,
+ * set the condition codes the same way. fcmp always clears the I condition
+ * code since it's not used in any conditional predicate. If we are willing to
+ * sacrifice a slight bit of accuracy here we can set condition codes in a
+ * common place (eg, at the end of instr_gen).
+ * 
+ * TODO: see whether keeping the exponent and sign in the same word in %d0 or
+ * separate (eg, LSW=exponent, MSW=sign) is more efficient and easier to work
+ * with overall. %d0 has to store the exponent and sign in the MSW by the time
+ * it's written to the destination (via an instruction like
+ * movem.l %d0-%d2,(%a3)), but they can be separate up to that point. Perhaps
+ * each arithmetic instruction handler can do its own separation (or call a
+ * common routine) if it desires.
+ */
+
 
 7:	| instr_gen table
-	.long instr_gen_fmovem	| 0
+	.long instr_gen_fmove	| 0
 	.long instr_gen_fint
 	.long instr_gen_fsinh
 	.long instr_gen_fintrz
@@ -765,117 +838,422 @@ instr_gen:
 	.long instr_gen_invalid
 	.long instr_gen_invalid
 
-instr_gen_fmovem:
+
+
+fmove_misc:	| misc fmove
+	| TODO
+	| these fmove instructions may treat the EA as the destination
+| 001 invalid?
+| 011 fmove reg-mem
+| 10D fmovem system control registers
+| 11D fmovem data registers
+	
+	move	%d6,%d0
+	and	#0xe000,%d0	| get the top 3 bits of second instruction word
+	
+	cmp	#0x6000,%d0	| 011 fmove reg-mem
+	beq	0f
+	and	#0xc000,%d0	| top 2 bits
+	cmp	#0x8000,%d0	| 10 fmovem system control registers
+	beq	1f
+	cmp	#0xc000,%d0	| 11 fmovem data registers
+	jbne	instr_invalid
+	
+	| fmovem data registers
+| fmovem (data registers):
+| 1111iii000eeeeee
+| 11Dmm000rrrrrrrr
+|
+| D = direction of data transfer
+|  0=from memory to fpu
+|  1=from fpu to memory
+| mm = mode
+|  00 static register list, predecrement addressing mode (reg-mem only)
+|  01 dynamic register list, predecrement addressing mode (reg-mem only)
+|  10 static register list, postincrement or control addressing mode
+|  11 dynamic register list, postincrement or control addressing mode
+| rrrrrrrr = register list
+| 
+	| TODO
 	rts
+1:	| fmovem system control registers
+| fmovem (system control registers)
+| 1111iii000eeeeee
+| 10Drrr0000000000
+| 
+| rrr = register list
+|  100 floating-point control register (FPCR)
+|  010 floating-point status register (FPSR)
+|  001 floating-point instruction address register (FPIAR)
+| 
+	| TODO
+	rts
+0:	| fmove reg-mem
+| fmove (register to memory):
+| 1111iii000eeeeee
+| 011dddssskkkkkkk
+| kkkkkkk = k-factor (required only for packed decimal destination)
+| 
+	bsr	get_dst		| this actually gets the source fp register
+	bsr	get_format	| get format of destination
+	move	%d0,-(%sp)
+	.if 1
+	jbsr	get_format_size
+	.else
+	lea.l	(format_sizes,%pc),%a0
+	move.b	(%a0,%d0.w),%d0
+	ext.w	%d0
+	.endif
+	move	%d0,-(%sp)
+	bsr	get_ea		| get destination ea
+	beq	instr_invalid	| valid?
+	move	(%sp)+,%d1	| format size
+	move	(%sp)+,%d2	| format
+	| %a4 = source reg
+	| %a0 = dest ea
+	| %d0 = EA type
+	| %d1 = format size
+	| %d2 = format
+	
+	| verify that destination type is compatible with format
+	bsr	ea_is_valid_dst
+	bne	instr_invalid
+	
+	move	%d2,%d6	| format
+	movem.l	(%a4),%d0-%d2	| load dst register
+	move.l	%a0,%a1	| destination
+	|jbsr	ftst
+	jbra	convert_from_ext
+
+| input:
+|  %d0 = EA type
+|  %d1 = format size
+| output:
+|  zero is set if valid
+| %d3 is clobbered
+ea_is_valid_dst:
+	btst	#EA_WRITABLE_BIT,%d0
+	beq	1f
+	| fall through (a valid dst is also a valid src--most of the time)
+
+| input:
+|  %d0 = EA type
+|  %d1 = format size
+| output:
+|  zero is set if valid
+| %d3 might be clobbered
+ea_is_valid_src:
+	btst	#EA_ADDRREG_BIT,%d0		| address registers are not allowed as src or dst
+	bne	2f
+	btst	#EA_MEMORY_BIT,%d0
+	bne	0f
+	| it's a data register; verify that format size is <= 4
+	cmp	#4,%d1
+	ble	0f
+1:	move	#1,%d3		| invalid
+	rts
+0:	move	#0,%d3		| valid
+2:	rts
+
+| fmove reg-reg or mem-reg
+instr_gen_fmove:
+| fmove (memory/register to register):
+| 1111iii000eeeeee
+| 0R0sssdddooooooo
+|
+| sss = source register or format
+| ddd = destination register
+| ooooooo = opmode
+|  0000000 fmove  rounding precision specified by the floating-point control register
+|  1000000 fsmove single-precision rounding specified *
+|  1000100 fdmove double-precision rounding specified *
+|  * supported by MC68040 only
+| 
+| R = R/M field
+|  0 = source is register
+|  1 = source is <ea>
+| 
+	| %d0-%d2 = src
+	| %a1 = dst
+	| fall through
+
+| input:
+|  %d0-%d2 = value to save
+|  %a1 = destination
+| output:
+|  condition codes are set
+| This routine is called by nearly all arithmetic instruction handlers to set
+| condition codes and then save the result to the destination register.
+| TODO: round using current rounding mode and precision
+ftst_and_save_dst:
+	jbsr	ftst
+save_dst:
+	movem.l	%d0-%d2,(%a1)
+	rts
+
+
+| check and try to handle nan
+| input:
+|  %d0-%d2 = src
+|  %d3-%d5 = dst
+| output:
+|  %d0-%d2 = result
+|  zero is clear if nan handled
+|  %d6 is clobbered
+| 
+| src  dst  result
+| ?    nan  nan (from dst)
+| nan  n    nan (from src)
+| 
+| signaling nan is converted to quiet nan
+check_nan:
+	btst.l	#EXT_NAN_BIT,%d3
+	beq	3f	| dst is not nan
+	| dst is nan; copy it to result
+	move.l	%d3,%d0
+	move.l	%d4,%d1
+	move.l	%d5,%d2
+1:	| result is nan
+	bset.l	#30,%d1	| set quiet bit (clears z flag)
+	rts
+3:	| dst is not nan; check src
+	btst.l	#EXT_NAN_BIT,%d0
+	bne	1b
+	rts		| z flag is set
 
 | y = integer part of x
 instr_gen_fint:
+	| TODO
 	rts
 
 | y = sinh(x)
 instr_gen_fsinh:
+	| TODO
 	rts
 
 | y = integer part of x, round to zero
 instr_gen_fintrz:
+	| TODO
 	rts
 
 | y = sqrt(x)
 instr_gen_fsqrt:
+	| TODO
 	rts
 
 | y = ln(x+1)
 instr_gen_flognp1:
+	| TODO
 	rts
 
 | y = e^(x-1)
 instr_gen_fetoxm1:
+	| TODO
 	rts
 
 | y = tanh(x)
 instr_gen_ftanh:
+	| TODO
 	rts
 
 | y = atan(x)
 instr_gen_fatan:
+	| TODO
 	rts
 
 | y = asin(x)
 instr_gen_fasin:
+	| TODO
 	rts
 
 | y = atanh(x)
 instr_gen_fatanh:
+	| TODO
 	rts
 
 | y = sin(x)
 instr_gen_fsin:
+	| TODO
 	rts
 
 | y = tan(x)
 instr_gen_ftan:
+	| TODO
 	rts
 
 | y = e^x
 instr_gen_fetox:
+	| TODO
 	rts
 
 | y = 2^x
 instr_gen_ftwotox:
+	| TODO
 	rts
 
 | y = 10^x
 instr_gen_ftentox:
+	| TODO
 	rts
 
 | y = ln(x)
 instr_gen_flogn:
+	| TODO
 	rts
 
 | y = log10(x)
 instr_gen_flog10:
+	| TODO
 	rts
 
 | y = log2(x)
 instr_gen_flog2:
+	| TODO
 	rts
 
 | y = abs(x)
 instr_gen_fabs:
+	clr.b	fpsrexc
+	bclr	#EXT_SIGN_BIT,%d0
+	jbra	ftst_and_save_dst
+
+| input:
+|  %d0-%d2 = ext float
+| output:
+|  %d0-%d2 = ext float with its sign cleared
+fabs:
+	bclr	#EXT_SIGN_BIT,%d0
 	rts
 
 | y = cosh(x)
 instr_gen_fcosh:
+	| TODO
 	rts
 
 | y = acos(x)
 instr_gen_facos:
+	| TODO
 	rts
 
 | y = cos(x)
 instr_gen_fcos:
+	| TODO
 	rts
 
 | y = getexp(x)
 instr_gen_fgetexp:
+	| TODO
 	rts
 
 | y = getman(x)
 instr_gen_fgetman:
+	| TODO
 	rts
 
 | y = y / x
 instr_gen_fdiv:
+	movem.l	(%a1),%d3-%d5	| load dst register
+	jbsr	fdiv
+	jbra	ftst_and_save_dst
+
+| y = y / x
+| input:
+|  %d0-%d2 = x
+|  %d3-%d5 = y
+| output:
+|  %d3-%d5 = y / x
+fdiv:
+	| TODO
 	rts
+
+	.if 0
+	| single precision divide (core code from libgcc)
+	moveq	FLT_MANT_DIG+1,%d3
+1:	cmp.l	%d1,%d0
+	blo	2f
+	bset	%d3,%d6
+	sub.l	%d1,%d0
+	beq	3f
+2:	add.l	%d0,%d0
+	dbra	%d3,1b
+
+	| find the sticky bit
+	moveq	#FLT_MANT_DIG,%d3
+1:	cmp.l	%d0,%d1
+	ble	2f
+	add.l	%d0,%d0
+	dbra	%d3,1b
+	
+	moveq.l	#0,%d1
+	bra	3f
+2:	moveq.l	#0,%d1
+	add	#31-FLT_MANT_DIG,%d3
+	bset	%d3,%d1
+
+	|
+3:
+	move.l	%d6,%d0		| put the ratio in %d0-%d1
+	move.l	%a0,%d7		| get sign back
+
+	btst	FLT_MANT_DIG+1,%d0
+	beq	1f
+	lsr.l	#1,%d0
+	add	#1,%d2
+1:
+	| round etc
+
+
+
+	| extended precision version:
+	| numerator = %d4-%d5
+	| denominator = %d1-%d2
+	| result = %d6:%d7
+	| loop counter = %d3 (or a mask in alternate version)
+	| unused: %d0/%a0-%a7
+	moveq	#0,%d6
+	move.l	%d6,%d7
+
+	moveq	31,%d3
+1:	cmp.l	%d1,%d4
+	blo	2f	| numerator < denominator?
+	bhi	5f	| numerator > denominator?
+	cmp.l	%d2,%d5
+	blo	2f
+5:	bset	%d3,%d6	| numerator >= denominator
+	cmp	%d0,%d0	| set z flag
+	sub.l	%d2,%d5
+	subx.l	%d1,%d4
+	beq	3f	| it's zero
+2:	add.l	%d5,%d5	| shift numerator left 1 bit
+	addx.l	%d4,%d4
+	bcs	6f	| numerator > denominator (guaranteed)
+4:	dbra	%d3,1b
+	bra	8f	| exit
+
+1:	| this loop is used when carry is set after %d4 is shifted left
+	| numerator must be greater than denominator
+	bset	%d3,%d6	| numerator > denominator
+	cmp	%d0,%d0
+	sub.l	%d2,%d5
+	subx.l	%d1,%d4
+	add.l	%d5,%d5	| shift numerator left 1 bit
+	addx.l	%d4,%d4
+	bcc	4b
+6:	dbra	%d3,1b
+8:	| exit
+
+	| repeat the above for the low longword (%d7)
+	| then find the sticky bit
+	.endif
 
 | y = y modulo x (round to zero)
 instr_gen_fmod:
+	| TODO
 	rts
 
 	.global sr64
-	.global sl64
-| s{l,r}64_reg shift the 64-bit integer in %d0:%d1 (%d0 is upper 32 bits) left
-| or right by the unsigned shift amount in %d2.
+| s{l,r}64_reg shift the 64-bit integer in %d1:%d2 (%d1 is upper 32 bits) left
+| or right by the unsigned shift amount in %d0.
 | 
 | If shift amount is 32 or greater, but less than 64, value is first shifted 32
 | bits by moving one register to the other, then the remaining register is
@@ -885,7 +1263,7 @@ instr_gen_fmod:
 |
 | Here is a quick demonstration of how shifting right works:
 | (threshold <= shift amount < 32)
-| %d0  %d1  %d2  %d3
+| %d1  %d2  %d0  %d3
 |  AB   CD            input
 |  BA   0C            rotate %d0 and shift %d1 right by %d2
 |  BA   0C   10   01  compute masks
@@ -897,292 +1275,485 @@ instr_gen_fmod:
 
 | unsigned long long sr64(unsigned long long, unsigned);
 sr64:
-	move.l	(4,%sp),%d0
-	move.l	(8,%sp),%d1
-	move.w	(12,%sp),%d2
+	movem.l	%d2-%d7,-(%sp)
+	move.l	(6*4+4,%sp),%d1
+	move.l	(6*4+8,%sp),%d2
+	move.w	(6*4+12,%sp),%d0
+	bsr	sr64_reg
+	move.l	%d1,%d0
+	move.l	%d2,%d1
+	movem.l	(%sp)+,%d2-%d7
+	rts
 	
 | shift right a 64-bit number
 | input:
-|  %d0:%d1 = 64-bit number (%d0 is upper 32 bits)
-|  %d2.w = shift amount (unsigned)
+|  %d1:%d2 = 64-bit number (%d1 is upper 32 bits)
+|  %d0.w = shift amount (unsigned)
 | output:
-|  %d0:%d1, shifted
+|  %d1:%d2, shifted
+| TODO output:
+|  %d7 = rounding bits (bit #31 is last bit shifted out, bit #30 is second
+|    last, and bits #29 to #0 are "sticky" bits
+| TODO: a nice addition to this would be to save the "rounding" bits, ie, save
+| at least one (two?) bit below the LSb of the result, and save the
+| inclusive OR of all other bits below that. The first bit is the equivalent of
+| the guard and round bits on the 68881, and the last part is the sticky bit.
+| 
+| basic algorithm for shifting right by less than the word width:
+| ab cd
+| ba dc rotated right
+|       dc move low word to rounding bits
+|    dc
+|    01 and
+|    0c
+|       dc
+|       0c eor
+|       d0 final rounding bits
+|    0c
+|    ba eor
+|    b? perturbed low word
+| ba
+| 01 and
+| 0a
+|    b?
+|    0a eor
+|    bc final low word
+| 0a final high word
+| TODO: clean this up and make sure that %d7 contains rounding bits as follows:
+| grssssssssssssssssssssssssss
+| where g=guard, r=round, s=sticky
+| any 's' bit can be set to indicate sticky
 sr64_reg:
-	cmp	#32,%d2
-	bhs	5f
-	ror.l	%d2,%d0
-	lsr.l	%d2,%d1		| 00..xx (upper bits cleared)
+	move.l	#0,%d7
+	tst	%d0
+	beq	9f
+	sub	#32,%d0
+	bhi	5f
+	| 0 <= amount <= 32
+0:	beq	1f
+	| 0 <= amount < 32
+	ror.l	%d0,%d1
+	ror.l	%d0,%d2
 	
-	move.l	%d3,-(%sp)
+	| TODO: test this!
+	| compute mask
+	moveq	#0,%d6
+	neg	%d0
+	bset	%d0,%d6
+	subq.l	#1,%d6		| 00..11 (lower bits)
+
+	move.l	%d2,%d7		| rounding bits
+	and.l	%d6,%d2
+	eor.l	%d2,%d7		| final rounding bits
+	eor.l	%d1,%d2		| perturbed low word
+	and.l	%d6,%d1		| final high word
+	eor.l	%d1,%d2		| final low word
 	
-	| compute masks
-	moveq	#-1,%d3
-	lsr.l	%d2,%d3		| 00..11 (lower bits)
-	move.l	%d3,%d2
-	not.l	%d2		| 11..00 (upper bits)
-	
-	and.l	%d0,%d2		| only upper bits from %d0
-	or.l	%d2,%d1		| put upper bits from %d0 into %d1
-	and.l	%d3,%d0		| clear upper bits in %d0
-	
-	move.l	(%sp)+,%d3
+9:	rts
+1:	| amount = 32
+	move.l	%d2,%d7
+	move.l	%d1,%d2
+	move.l	#0,%d1
 	rts
 
-	| shift amount is >= 32
 5:
-	cmp	#64,%d2
-	bhs	6f
-	sub	#32,%d2
-	move.l	%d0,%d1
-	lsr.l	%d2,%d1
-	moveq	#0,%d0
+	cmp	#32,%d0
+	bhi	6f
+	| 32 < amount <= 64
+	bsr	0b	| shift right using above code
+	| collapse sticky bits into one bit
+	tst.l	%d7
+	beq	2f
+	moveq.l	#1,%d7
+2:	or.l	%d2,%d7	| rounding bits
+	move.l	%d1,%d2
+	move.l	#0,%d1
 	rts
 
+6:
+	| 64 < amount
+	cmp	#65-32,%d0
+	bhi	1f
+	| amount = 65
+	move.l	#0,%d7
+	lsr.l	#1,%d1
+	roxr.l	#1,%d2
+	addx.l	%d7,%d7	| preserve carried bit
+	or.l	%d2,%d7
+3:	beq	2f
+	moveq.l	#1,%d7
+2:	or.l	%d1,%d7	| rounding bits
+	bra	9f
+1:	| amount > 65
+	or.l	%d1,%d2
+	move.l	%d2,%d7
+	beq	2f
+	move.l	#1,%d7
+2:
+9:	| all bits in original value are shifted out
+	moveq.l	#0,%d1
+	move.l	%d1,%d2
+	rts
+
+
+	.global sl64
 | unsigned long long sl64(unsigned long long, unsigned);
 sl64:
-	move.l	(4,%sp),%d0
-	move.l	(8,%sp),%d1
-	move.w	(12,%sp),%d2
+	move.l	(4,%sp),%d1
+	move.l	(8,%sp),%d2
+	move.w	(12,%sp),%d0
 	
 | shift left a 64-bit number
 | input:
-|  %d0:%d1 = 64-bit number (%d0 is upper 32 bits)
-|  %d2.w = shift amount (unsigned)
+|  %d1:%d2 = 64-bit number (%d1 is upper 32 bits)
+|  %d0.w = shift amount (unsigned)
 | output:
-|  %d0:%d1, shifted
+|  %d1:%d2, shifted
+| %d6 is clobbered
 sl64_reg:
-	cmp	#32,%d2
+	cmp	#32,%d0
 	bhs	5f
-	rol.l	%d2,%d1
-	lsl.l	%d2,%d0		| xx..00 (lower bits cleared)
+	| 0 <= amount < 32
+	rol.l	%d0,%d2
+	lsl.l	%d0,%d1		| xx..00 (lower bits cleared)
 	
-	move.l	%d3,-(%sp)
-	
-	.if 0
-	| compute masks
-	moveq	#-1,%d3		| mask
-	lsl.l	%d2,%d3		| 11..00 (upper bits)
-	move.l	%d3,%d2
-	not.l	%d2		| 00..11 (lower bits)
-	
-	and.l	%d1,%d2		| only lower bits from %d1
-	or.l	%d2,%d0		| put lower bits from %d1 into %d0
-	and.l	%d3,%d1		| clear lower bits in %d1
-	.else
 	| awesome optimized code from Samuel Stearley (thanks man!)
-	| TODO: adapt this for sr64
-
 	| compute masks
-	moveq   #-1,%d3
-	bclr.l  %d2,%d3
-	addq.l  #1,%d3     | 11..00 (upper bits)
+	moveq   #-1,%d6
+	bclr.l  %d0,%d6
+	addq.l  #1,%d6     | 11..00 (upper bits)
 
-	eor.l  %d1,%d0     | fill in the lower bits and perturb the upper bits
-	and.l  %d3,%d1     | clear the lower bits
-	eor.l  %d1,%d0     | un-perturb the upper bits.
-	.endif
+	eor.l  %d2,%d1     | fill in the lower bits and perturb the upper bits
+	and.l  %d6,%d2     | clear the lower bits
+	eor.l  %d2,%d1     | un-perturb the upper bits.
 	
-	move.l	(%sp)+,%d3
 	rts
 
-	| shift amount is >= 32
 5:
-	cmp	#64,%d2
+	cmp	#64,%d0
 	bhs	6f
-	sub	#32,%d2
-	move.l	%d1,%d0
-	lsl.l	%d2,%d0
-	moveq	#0,%d1
+	| 32 <= amount < 64
+	sub	#32,%d0
+	move.l	%d2,%d1
+	lsl.l	%d0,%d1
+	moveq	#0,%d2
 	rts
 
-	| shift amount is >= 64
 6:
-	moveq.l	#0,%d0
-	move.l	%d0,%d1
+	| 64 <= amount
+	moveq.l	#0,%d1
+	move.l	%d1,%d2
 	rts
 
-	.if 0
-| add fractions
+| TODO: write a routine to get types of src and dst (stored in %d0-%d2 and
+| %d3-%d5) and return types in %d6 or %d7 (leave %d0-%d5 untouched) so it can be
+| used as an index into jump tables in any arith operation that wants to do so.
+| types: zero, in-range, inf, nan
+| each type fits in 2 bits
+| this will give a 4x4 (16 entry) jump table
+
+| TODO: write a routine or routines to round %d0-%d2 to a given precision.
+| This will require at least two bits "below" %d2: guard bit and sticky bit.
+| These bits can be supplied in another data register (eg, %d6 or %d7).
+| fmul can supply these extra bits easily, but for fadd to work, sr64 must
+| save the bits that are shifted out.
+
 | input:
-|  %a0 = src
-|  %a1 = dst
-add_fracs:
-	move.l	(%a0)+,%d1
-	move.l	(%a1)+,%d2
-	add.l	%d
+|  none
+| output:
+|  %d0-%d2 = quiet nan
+nan:	move.l	#EXT_NAN,%d0
+	move.l	#0xc0000000,%d1
+	move.l	#0,%d2
 	rts
-	.endif
 
 | y = y + x
 instr_gen_fadd:
-	move.l	%a3,%a0
-	move.l	#srcfpreg,%a1
-	bsr	convert_to_ext	| convert the source to ext
-	move.l	%a4,%a1
-	|bra	fadd
+	clr.b	fpsrexc
+	movem.l	(%a1),%d3-%d5	| load dst register
+	jbsr	fadd
+	jbra	ftst_and_save_dst
+
+| y = y - x
+| input:
+|  %d0-%d2 = x
+|  %d3-%d5 = y
+| output:
+|  %d3-%d5 = y - x
+fsub:
+	bchg	#EXT_SIGN_BIT,%d0	| negate x and fall through to fadd
 	| fall through
 
 | input:
-|  %a0 = ext float src
-|  %a1 = ext float dst
+|  %d0-%d2 = x
+|  %d3-%d5 = y
 | output:
-|  %a0 = ext float = dst+src
+|  %d0-%d2 = y + x
+| TODO: fix this to use the new internal ext float format (unbiased exponents
+| etc)
 fadd:
-	rts
-	| TODO
-	move	(%a0),%d0
-	move	(%a1),%d1
-	and	#0x7fff,%d0	| get the exponents of each operand
-	and	#0x7fff,%d1
-	eor	%d0,(%a0)+	| remove the exponents from both operands
-	eor	%d1,(%a1)+
-	lea.l	(2,%a0),%a0
-	lea.l	(2,%a1),%a1
-	| TODO: test for inf and nan here
-	
-	| let's put the bigger number in the dst
-	| so we can shift the smaller number in the src to the right
-	| until the exponents match, and then we can add the fractions together
-	cmp	%d0,%d1
-	bgt	5f
-	move.l	(%a1),%d2
-	cmp	(%a0),%d2
-	bgt	5f
-	move.l	(4,%a1),%d2
-	cmp	(4,%a0),%d2
-	bge	5f
-	| swap src and dst
-	exg	%d0,%d1		| swap the exponents
-	.if 0
-	move.l	(%a0),%d2
-	move.l	(%a1),(%a0)+
-	move.l	%d2,(%a1)+
-	move.l	(%a0),%d2
-	move.l	(%a1),(%a0)+
-	move.l	%d2,(%a1)+
-	lea.l	(-8,%a0),%a0
-	lea.l	(-8,%a1),%a1
-	.else
-	move.l	(%a0)+,-(%sp)
-	move.l	(%a0)+,-(%sp)
-	move.l	(%a1)+,-(%sp)
-	move.l	(%a1)+,-(%sp)
-	move.l	(%sp)+,-(%a0)
-	move.l	(%sp)+,-(%a0)
-	move.l	(%sp)+,-(%a1)
-	move.l	(%sp)+,-(%a1)
-	.endif
-5:
-	| dst >= src by this point
-	| shift src right by the difference in exponents
-	sub	%d0,%d1		| difference in %d1
-	add	%d1,%d0		| dst's exp in %d0
-	| TODO shift src right by %d0
-	move	%d0,-(%sp)
-	move	%d1,%d2
-	move.l	(%a0)+,%d0
-	move.l	(%a0)+,%d1
-	bsr	sr64
-	
-	move	(-12,%a0),%d2
-	cmp	(-4,%a1),%d2
+	jbsr	check_nan
 	beq	0f
-	| signs are different; negate %d1:%d2
-	| TODO there must be a faster and shorter way to negate a 64-bit number
-	not.l	%d0
-	not.l	%d1
-	moveq.l	#1,%d2
-	add.l	%d2,%d1
-	addx.l	%d2,%d0
+	rts
 0:
-	| now dst and src have the same exponent
-	| TODO add the fractions together
-	move.l	(%a1)+,%d2
-	move.l	(%a1)+,%d3	| %d2:%d3 = dst
-	add.l	%d3,%d1
-	addx.l	%d2,%d0
-	
-	bvc	7f
-	| on overflow, shift fraction right once and increment the exponent
-	| put the result into dst
-	
-	| TODO the carry bit is set here, right?
-	roxr.l	#1,%d1
-	roxr.l	#1,%d0
-	|bset.l	#31,%d0		| set the explicit integer bit
-	move.l	(%sp)+,%d2
-	addq	#1,%d2
-	|
-	bra	8f
-7:
-	move.l	(%sp)+,%d2	| restore dst's exp
-	| if %d0:%d1 < integer 1, shift it left until it is >= integer 1
-	tst.l	%d0
-	beq	8f
-	bra	1f
-0:
-	subq	#1,%d2		| --exponent
-	| TODO if exponent goes negative, we need to jump out, set it to 0,
-	| and shift the fraction right once
-	lsl.l	#1,%d1
-	roxl.l	#1,%d0
+	| put the bigger number in dst (%d3:%d4:%d5)
+	| compare exponents
+	cmp	%d3,%d0
+	blt	0f
+	bgt	1f
+	| compare fractional parts
+	cmp.l	%d4,%d1
+	blo	0f
+	bhi	1f
+	cmp.l	%d5,%d2
+	bls	0f
+	| swap operands
 1:
-	bpl	0b
+	exg.l	%d0,%d3
+	exg.l	%d1,%d4
+	exg.l	%d2,%d5
+0:
+	| abs(dst) >= abs(src) (excluding sign)
+	| check for infinities
+	| since dst >= src, if dst is not infinity, src is also not infinity
+	btst	#EXT_INF_BIT,%d3
+	beq	0f		| if dst is not inf, src cannot be inf
+	| dst is inf
+	eor.l	%d3,%d0
+	btst	#EXT_INF_BIT,%d0
+	bne	8f		| src is not inf?
+	btst	#EXT_SIGN_BIT,%d0
+	bne	nan		| signs are different?
 
-8:
-	| TODO put fraction and exponent back in dst
-	| %a1 points to dst+12
-	move.l	%d1,-(%a1)
-	move.l	%d0,-(%a1)
-	subq	#6,%a1
-	or	%d2,(%a1)	| sign bit should be set in (%a1) already
-9:
-	move.l	%a1,%a0
-	bra	ftst
+8:	| only dst is inf, or src is inf and has the same sign
+	| copy dst (which is inf) to result
+	move.l	%d3,%d0
+	move.l	%d4,%d1
+	move.l	%d5,%d2
+	rts
+
+0:
+	btst	#EXT_Z_BIT,%d3
+	beq	0f
+	| if dst = 0, then src = 0
+	and.l	%d3,%d0		| -0 only if dst = -0 and src = -0
+	bra	fadd_zero
+0:
+	btst	#EXT_Z_BIT,%d3
+	beq	0f
+	| src is 0; return dst
+	move.l	%d3,%d0
+	bra	fadd_end
+
+0:
+	| denormalize the smaller operand so its exponent equals the
+	| larger operand's exponent
+	sub	%d3,%d0
+	neg	%d0		| exponent difference
+	| shift %d1:%d2 right by %d0 bits
+	bsr	sr64_reg
+	| sr64 should save our rounding bits so we can use them for rounding
+0:
+	exg.l	%d3,%d0		| move our exponent to %d0
+	| %d3.l still contains a sign bit
+
+
+	| if signs are the same, add the fractions and normalize
+	| otherwise subtract the smaller fraction from the larger and
+	| keep the sign of the larger one
+	.if 1
+	eor.l	%d0,%d3
+	btst	#EXT_SIGN_BIT,%d3
+	bne	0f	| signs are different?
+	.else
+	swap	%d0
+	swap	%d3
+	cmp	%d0,%d3
+	bne	0f
+	swap	%d3
+	.endif
+	| signs are the same; add and normalize if carry
+
+	add.l	%d5,%d2
+	addx.l	%d4,%d1
+	bcc	1f
+	| result is supernormal; shift fraction right and increment exponent
+	roxr.l	#1,%d1
+	roxr.l	#1,%d2
+	roxr.l	#1,%d7
+	bcc	77f
+	or	#1,%d7	| preserve carried bit
+77:
+	add	#1,%d0	| add 1 to exponent
+1:	| TODO: round here
+	rts
+0:
+	| signs are different; subtract src from dst
+
+	neg.l	%d7		| negate rounding bits
+	subx.l	%d2,%d5
+	subx.l	%d1,%d4
+	beq	0f
+	bmi	1f
+	| shift in our guard digit
+	add.l	%d7,%d7
+	addx.l	%d5,%d5
+	addx.l	%d4,%d4
+	sub	#1,%d0
+	bra	1f
+0:	bset.l	#EXT_Z_BIT,%d0
+	bclr.l	#EXT_SIGN_BIT,%d0	| x - x = +0 (except in RM round mode)
+fadd_zero:
+	move.l	%d4,%d1
+	move.l	%d5,%d2
+	rts
+1:
+fadd_end:
+	| result is in %d0:%d4:%d5
+	| move it to %d0:%d1:%d2
+	move.l	%d4,%d1
+	move.l	%d5,%d2
+9:	|bra	round
+	| fall through
+
+| input:
+|  %d0-%d2 = value to round
+|  %d7 = rounding bits
+| output:
+|  %d0-%d2 = rounded and normalized value
+round:
+	tst.l	%d7
+	beq	9f	| rounding bits are zero => exact
+	bset	#EXC_INEX2_BIT,fpsrexc
+	| XXX: for now we assume round-to-nearest (RN) rounding mode
+	move.l	%d2,%d3
+	and.l	#1,%d3	| get lsb of significand (round to even on 0.5)
+	add.l	#0x7fffffff,%d3	| %d3 is either 0.5 or 1 ulp less, depending on lsb of significand
+	add.l	%d3,%d7
+	move.l	#0,%d3
+	addx.l	%d3,%d2
+	addx.l	%d3,%d1
+	bcc	9f
+	| supernormal; shift right and increment exponent
+	roxl.l	#1,%d1
+	roxl.l	#1,%d2
+	add.l	#1,%d0
+9:	| normalize and return
+	bra	normalize
 
 | y = y * x
 instr_gen_fmul:
+	movem.l	(%a1),%d3-%d5	| load dst register
+	move.l	%a1,-(%sp)
+	jbsr	fmul
+	move.l	(%sp)+,%a1
+	jbra	ftst_and_save_dst
+
+| y = y * x
+| input:
+|  %d0-%d2 = x
+|  %d3-%d5 = y
+| output:
+|  %d0-%d2 = y * x
+fmul:
+	| TODO: check for nan, inf, zero, etc
+	movem.l	%d0/%d3,-(%sp)
+	move.l	%d1,%d0
+	move.l	%d2,%d1
+	move.l	%d4,%d2
+	move.l	%d5,%d3
+	jbsr	mulu64c
+	move.l	%d2,%d4
+	move.l	%d1,%d2
+	move.l	%d0,%d1
+	movem.l	(%sp)+,%d0/%d3
+	add.w	%d3,%d0		| add exponents
+	| TODO: check bounds of exponent here
+	tst.l	%d1
+	bmi	0f
+	| high bit of fraction is clear
+	add.l	%d4,%d4
+	addx.l	%d2,%d2
+	addx.l	%d1,%d1
+	sub	#1,%d0		| decrement exponent
+0:
+	| shift exponents back
+	lsr.l	#1,%d0
+	clr.w	%d3		| clear exponent
+	lsr.l	#1,%d3
+	| fix the sign bit
+	eor.l	%d3,%d0
 	rts
 
 | y = y / x (single-precision)
 instr_gen_fsgldiv:
+	| TODO
 	rts
 
 | y = y modulo x (round to nearest)
 instr_gen_frem:
+	| TODO
 	rts
 
 | y = y * 2^int(x)
 instr_gen_fscale:
+	| TODO
 	rts
 
 | y = y * x (single-precision)
 instr_gen_fsglmul:
+	| TODO
 	rts
 
 | y = y - x
 instr_gen_fsub:
-	rts
+	movem.l	(%a1),%d3-%d5	| load dst register
+	jbsr	fsub
+	jbra	ftst_and_save_dst
 
 | c = cos(x)
 | y = sin(x)
 instr_gen_fsincos:
+	| TODO: store cos(x) in c, then store sin(x) in y (in that order)
+	| OR store sin(x) in y and skip cos(x) if c == y
 	rts
 
+| input:
+|  %d0-%d2 = value to normalize
+| output:
+|  %d0-%d2 = normalized value
+| TODO: test and optimize this
+normalize:
+	move.l	%d1,%d3
+	bmi	9f
+	or.l	%d2,%d3
+	beq	0f
+
+| %d0-%d2 has been tested and found to be denormal
+normalize2:
+	| it's not zero
+	| shift significand left until MSB is 1
+	moveq	#1,%d3
+1:	sub	%d3,%d0
+	add.l	%d2,%d2		| shift it left 1 bit
+	addx.l	%d1,%d1
+	bpl	1b
+	rts
+0:	| it's zero
+	bset #EXT_Z_BIT,%d0
+9:	rts
+
 | convert any format to extended-precision real format
-| put it in srcfpreg
 | input:
 |  %a0 = pointer to data
-|  %a1 = pointer to destination
 |  %d0 = format of data
 | output:
-|  %a0 = extended-precision real destination
+|  %d0:%d1:%d2 = extended-precision real value
 | note: 
 convert_to_ext:
-	move.l	%a0,%a2
 	lsl	#2,%d0
-	move.l	(7f,%pc,%d0.w),%a0	| handler table
-	jmp	(%a0)
+	move.l	(7f,%pc,%d0.w),%a1	| handler table
+	jmp	(%a1)
 7:
 	.long	ctxl
 	.long	ctxs
@@ -1193,146 +1764,131 @@ convert_to_ext:
 	.long	ctxb
 
 ctxx:
-	move.l	%a2,%a0
-	| copy it to %a1
-	|lea.l	srcfpreg,%a1
-	move.l	%a1,-(%sp)
-	bsr	copyfp
-	move.l	(%sp)+,%a0
-	| normalize it
+	movem.l	(%a0),%d0-%d2
+	clr.w	%d0
+	bclr	#15,%d0
+	beq	0f
+	bset	#EXT_SIGN_BIT,%d0
+0:	swap	%d0
+	cmp.w	#0x7fff,%d0
+	beq	2f		| inf or nan?
+	| normal, subnormal, or zero
+	sub.w	#EXT_EXP_BIAS,%d0
+	bra	normalize
+2:	| inf or nan
+	| move	#EXT_EXP_MAX-1-EXT_EXP_BIAS,%d0
+	move.l	%d1,%d3
+	or.l	%d2,%d3
+	bne	8f
+	| inf
+	bset	#EXT_INF_BIT,%d0
+	rts
+8:	| nan
+	bset	#EXT_NAN_BIT,%d0
 	rts
 
+| single-precision:
+| +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| |s|e|e|e|e|e|e|e|e|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|f|
+| +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| s eeeeeeee fffffffffffffffffffffff
+| shift fraction left 8 bits
+| shift exponent right 23 bits (or swap + right 7 bits)
+| shift sign right 15 bits, or shift sign left 8 bits after shifting it along
+| with the exponent
 ctxs:
-	move.l	(%a2),%d0
-	swap	%d0		| single with words swapped
+	move.l	(%a0),%d0
 	move.l	%d0,%d1
-	not	%d1
-	and	#0x7f80,%d1	| exponent with bias
-	bne	0f
-	| inf or nan
-	move	%d0,%d1
-	or	#0x7fff,%d1	| expand the exponent field
-	and	#0xff,%d0	| mask out the fraction
+	lsl.l	#8,%d1		| fraction
+	bclr	#31,%d1		| clear lsb of exponent
+	clr.w	%d0
 	swap	%d0
-	lsl.l	#8,%d0
-	
-	move	%d1,(%a1)+	| sign and exponent
-	clr	(%a1)+		| zero
-	move.l	%d0,(%a1)+	| fraction
-	clr.l	(%a1)
-	lea.l	(-8,%a1),%a0
-	rts
-	
-0:	| number is in range
-	clr.l	(8,%a1)		| we don't use the last long
-	move	%d0,%d2
-	and	#0x8000,%d2	| sign bit
-	move	%d0,%d1
-	and	#0x7f,%d0	| mask out fraction
-	bset	#7,%d0		| explicit integer bit
-	lsr	#7,%d1
-	and	#0xff,%d1
-	bne	0f
-	| subnormal
-	addq	#1,%d1		| ++exponent
-	bclr	#7,%d0		| no implicit integer bit
-	tst.l	%d0
-	beq	8f		| zero?
-0:
-	swap	%d0		| put fraction field back in place
-	rol.l	#8,%d0
-	sub	#127,%d1
-	
-	| normalize the fraction
-	bra	7f
-
-8:	| it's zero
-	move	%d2,(%a1)	| sign bit
-	clr.l	(4,%a1)
-	lea.l	(%a1),%a0
+	bclr	#15,%d0
+	beq	0f
+	bset	#EXT_SIGN_BIT,%d0
+0:	lsr.w	#7,%d0		| right-align the exponent
+	beq	1f		| subnormal or zero?
+	cmp	#0xff,%d0
+	beq	2f		| inf or nan?
+	| normal
+	bset.l	#31,%d1		| integer bit
+	sub.w	#SNG_EXP_BIAS,%d0	| remove exponent bias
+	moveq	#0,%d2		| low 32 bits are always 0
 	rts
 
-ctxd:
-	move.l	(%a2),%d0	| exponent and upper 20 bits of fraction
-	move.l	(4,%a2),%d4	| lower 32 bits of fraction
-	swap	%d0
-	swap	%d4
-	move.l	%d0,%d2
-	move.l	%d0,%d3
-	and	#0x000f,%d3	| mask out the fraction
-	bset	#4,%d3		| explicit integer bit
-	ror.l	#5,%d3		| upper 21 bits of fraction
-	
-	ror.l	#5,%d4
-	move	%d3,%d1
-	and	#0x07ff,%d1
-	or	%d1,%d3		| %d3 = upper 32 bits of fraction
-	and	#0xf800,%d4	| %d4 = lower 21 bits of fraction
-	
-	move.l	%d0,%d1
-	not	%d1
-	and	#0x7ff0,%d1
-	bne	0f
-	| inf or nan
-	or	#0x7fff,%d0	| expand exponent
-	move	%d0,(%a1)+
-	clr	(%a1)+
-	move.l	%d3,(%a1)+
-	move.l	%d4,(%a1)
-	lea.l	(-8,%a1),%a0
-	rts
-0:
-	| number is in range
-	move	%d0,%d1
-	move	%d0,%d2
-	and	#0x8000,%d2	| sign bit
-	and	#0x7ff0,%d1
-	lsr	#4,%d1		| exponent with bias
-	bne	3f
-	| subnormal or zero
-	addq	#1,%d1		| ++exponent
-	bclr.l	#31,%d3		| no implicit integer bit
-	tst.l	%d3
-	bne	0f
-	tst.l	%d4
+1:	| subnormal or zero
+	sub.w	#SNG_EXP_BIAS,%d0	| remove exponent bias
+	add.l	%d1,%d1
+	bra	normalize32	| subnormal--normalize it
+2:	| inf or nan
+	moveq	#0,%d2
+	| move	#EXT_EXP_MAX-1-EXT_EXP_BIAS,%d0
+	tst.l	%d1
 	beq	8f
-0:
-	| subnormal
-	| normalize the fraction
-	tst.l	%d3
-	bra	1f
-0:
-	subq	#1,%d1		| --exponent
-	| shift left
-	lsl.l	#1,%d4
-	roxl.l	#1,%d3
-1:
-	bpl	0b		| loop until negative (MSB set)
-
-3:	| normal
-	add	#EXT_EXP_BIAS-1023,%d1
-	or	%d1,%d2
-	move	%d2,(%a1)+
-	clr	(%a1)+
-	move.l	%d3,(%a1)+
-	move.l	%d4,(%a1)
-	lea.l	(-8,%a1),%a0
+	| nan
+	bset.l	#EXT_NAN_BIT,%d0
+	rts
+8:	| inf
+	bset.l	#EXT_INF_BIT,%d0
 	rts
 
-8:	| it's zero
-	move	%d2,(%a1)+
-	clr	(%a1)+
-	clr.l	(%a1)+
-	clr.l	(%a1)
-	lea.l	(-8,%a1),%a0
+| double (1.11.52)
+| word 0: seeeeeeeeeeeffff ffffffffffffffff
+| word 1: ffffffffffffffff ffffffffffffffff
+ctxd:
+	movem.l	(%a0),%d0/%d2
+	move.l	%d0,%d1
+
+	swap	%d1
+| ffffffffffffffff seeeeeeeeeeeffff
+	ror.l	#5,%d1
+	move	#0xf800,%d3	| mask
+	and.w	%d3,%d1		| clear sign/exponent
+| 1fffffffffffffff fffff00000000000
+
+	swap	%d2
+	ror.l	#5,%d2
+	eor.w	%d2,%d1
+	and.w	%d3,%d2
+	eor.w	%d2,%d1
+
+	clr.w	%d0
+	swap	%d0
+| 0000000000000000 seeeeeeeeeeeffff
+	| TODO: change this to set bit #EXP_SIGN_BIT here
+	bclr	#15,%d0
+	beq	0f
+	bset	#EXT_SIGN_BIT,%d0
+0:	lsr.w	#4,%d0		| right-align exponent
+	beq	1f		| subnormal/zero?
+	cmp	#DBL_EXP_MAX-1,%d0
+	beq	2f		| inf/nan?
+	| normal
+	bset.l	#31,%d1		| explicit integer bit
+	sub.w	#DBL_EXP_BIAS,%d0
 	rts
 
+1:	| subnormal/zero
+	sub	#DBL_EXP_BIAS-1,%d0
+	bra	normalize
+
+2:	| inf/nan
+	| move	#EXT_EXP_MAX-1-EXT_EXP_BIAS,%d0
+	move.l	%d1,%d3
+	or.l	%d2,%d3
+	beq	8f
+	| nan
+	bset	#EXT_NAN_BIT,%d0
+	rts
+8:	| inf
+	bset	#EXT_INF_BIT,%d0
+	rts
+	
 ctxp:
 	| TODO
-	move.l	#0x7fffffff,(%a1)+
-	move.l	#0xffffffff,(%a1)+
-	move.l	#0xffffffff,(%a1)+
-	lea.l	(-12,%a1),%a0
+	move.l	#0x00020000,%d0
+	moveq.l	#0xffffffff,%d1
+	move.l	%d1,%d2
 	rts
 	.if 0
 packed decimal format:
@@ -1352,83 +1908,189 @@ packed decimal format:
 
 
 ctxl:
-	move.l	(%a2),%d0
-	move	#31,%d1
-	bra	5f
+	moveq.l	#31,%d0
+	move.l	(%a0),%d1
+	bne	0f
+	bra	9f
 
 ctxb:
-	moveq	#0,%d0
-	move.b	(%a2),%d0
-	ror.l	#8,%d0		| put the byte in MSB of long
-	move	#7,%d1
-	bra	5f
+	moveq.l	#7,%d0
+	moveq	#0,%d1
+	move.b	(%a0),%d1
+	ror.l	#8,%d1		| put the byte in MSB of long
+	bne	0f
+	bra	9f
 
 ctxw:	| this is probably the most common case
-	moveq	#0,%d0
-	move.w	(%a2),%d0
-	swap	%d0
-	move	#15,%d1
+	moveq.l	#15,%d0
+	moveq	#0,%d1
+	move.w	(%a0),%d1
+	swap	%d1		| put the word in MSB of long
+	beq	9f
 
 | all integer conversions go here
-5:	lea.l	(12,%a1),%a1
-	
-	clr.l	-(%a1)
-	clr.l	-(%a1)
-	clr.l	-(%a1)
-	
+0:
 	| sign
-	moveq	#0,%d2
-	tst.l	%d0
-	beq	9f	| zero -- we're all set
-	bpl	7f
-	bset	#15,%d2
-	neg.l	%d0
+	bpl	2f
+	bset	#EXT_SIGN_BIT,%d0	| set sign bit
+	neg.l	%d1
 
+| normalize a 32-bit fraction
+| fraction is assumed to be tested (eg, tst.l %d1) before this is called
+normalize32:
+	bmi	8f
+	beq	9f
 	| normalize the significand
-	| good entry point for all formats with a significand
-	| that fits in 32 bits
-7:
-	tst.l	%d0
-	bra	1f
-0:	sub	#1,%d1		| --exponent
-	lsl.l	#1,%d0		| shift fraction left
-1:
-	bpl	0b		| loop until negative (MSB set)
-	
-	| store the fraction
-	move.l	%d0,(4,%a1)
-	
-8:
-	| this could be a good common entry point for all formats
-	| %d1.w = exponent (without bias)
-	| %d2.w = sign bit (MSB)
-	
-	| store the exponent
-	add	#EXT_EXP_BIAS,%d1
-	or	%d1,%d2
-	move	%d2,(%a1)
-	
-	move.l	%a1,%a0
-9:	rts
+2:	moveq	#1,%d2
+1:	sub	%d2,%d0		| --exponent
+	add.l	%d1,%d1		| shift fraction left
+	bpl	1b		| loop until negative (MSB set)
+8:	moveq.l	#0,%d2		| clear lower 32 bits of fraction (it's always 0)
+	rts
 
-	
+9:	bset	#EXT_Z_BIT,%d0
+	move.w	%d1,%d0		| zero out the exponent and significand
+	move.l	%d1,%d2
+	rts
+
+
+
+| convert extended-precision real format to any format
+| input:
+|  %d0-%d2 = source
+|  %a1 = pointer to destination
+|  %d6 = format of destination
+| output:
+|  none
+convert_from_ext:
+	lsl	#2,%d6
+	move.l	(7f,%pc,%d6.w),%a2	| handler table
+	jmp	(%a2)
+7:
+	.long	cfxl
+	.long	cfxs
+	.long	cfxx
+	.long	cfxp
+	.long	cfxw
+	.long	cfxd
+	.long	cfxb
+
+cfxx:	| extended (1.15.64)
+	add.w	#EXT_EXP_BIAS,%d0
+	btst	#EXT_SIGN_BIT,%d0
+	beq	0f
+	bset	#15,%d0
+0:	btst	#EXT_NAN_BIT,%d0
+	bne	2f
+	btst	#EXT_INF_BIT,%d0
+	bne	2f
+	btst	#EXT_Z_BIT,%d0
+	bne	0f
+	| normal
+9:	swap	%d0
+	clr.w	%d0
+	movem.l	%d0-%d2,(%a1)
+	rts
+2:	| inf or nan
+	or.w	#0x7fff,%d0
+	bra	9b
+0:	| zero
+	and.w	#0x8000,%d0
+	bra	9b
+
+cfxd:	| double-precision (1.11.52)
+	| TODO
+	move.l	#-1,(%a1)+
+	move.l	#-1,(%a1)
+	rts
+
+	.long 0xcafebabe
+cfxs:	| single-precision (1.8.23)
+	| TODO: round to single-precision
+	add	#SNG_EXP_BIAS,%d0
+	and	#0xff,%d0
+	btst	#EXT_SIGN_BIT,%d0
+	beq	0f
+	bset	#8,%d0
+0:	
+	moveq	#0,%d3
+	move.w	%d0,%d3
+	swap	%d3
+	rol.l	#7,%d3		| exponent in place
+
+	bclr.l	#31,%d1		| implicit integer bit
+	lsr.l	#8,%d1
+	or.l	%d1,%d3
+	btst	#EXT_NAN_BIT,%d0
+	bne	2f
+	btst	#EXT_INF_BIT,%d0
+	bne	2f
+	btst	#EXT_Z_BIT,%d0
+	bne	0f
+	| normal
+9:	move.l	%d3,(%a1)
+	rts
+2:	| inf or nan
+	or.l	#0x7f800000,%d3
+	move.l	%d3,(%a1)
+	rts
+0:	| zero
+	and.l	#0x807fffff,%d3
+	move.l	%d3,(%a1)
+	rts
+
+cfxp:
+	| TODO
+	rts
+
+cfxl:
+	| TODO
+	move.l	#-1,(%a1)
+	rts
+
+cfxw:
+	| TODO
+	move.w	#-1,(%a1)
+	rts
+
+cfxb:
+	| TODO
+	move.b	#-1,(%a1)
+	rts
+
 
 | y - x (only set condition flags)
 instr_gen_fcmp:
-	move.l	%a3,%a0
-	lea.l	srcfpreg,%a1
-	jbsr	convert_to_ext	| convert %a0 (source) to extended-precision
-	move.l	%a4,%a1
-	|jbsr	fcmp
-	|rts
+	movem.l	(%a1),%d3-%d5	| load dst register
 	| fall through
 
+| y - x (only set condition flags)
+| input:
+|  %d0-%d2 = x
+|  %d3-%d5 = y
+| output:
+|  condition codes are set/cleared as appropriate
 fcmp:
 	| TODO
 	rts
 
+| y = -x
+instr_gen_fneg:
+	clr.b	fpsrexc
+	bchg	#EXT_SIGN_BIT,%d0		| invert the sign
+	jbra	ftst_and_save_dst
+
+| y = -x
+| input:
+|  %d0-%d2 = ext float (x)
+| output:
+|  %d0-%d2 = ext float with sign inverted (y)
+fneg:
+	bchg	#EXT_SIGN_BIT,%d0		| invert the sign
+	rts
+
 | set fpsrcc for source (x)
-| x	fpsrcc	fpexc
+| x	fpsrcc	fpsrexc
 | +0	Z
 | -0	Z N
 | +real	none
@@ -1439,142 +2101,29 @@ fcmp:
 | -nan	NaN N
 | +snan	NaN	SNaN
 | -snan	NaN N	SNaN
-| input:
-|  %d0 = format
 instr_gen_ftst:
 	clr.b	fpsrexc
-	moveq	#0,%d2		| fpsrcc
-	lea.l	fpsrcc,%a2	| pointer to fpsrcc
-	lsl	#2,%d0
-	move.l	(7f,%pc,%d0.w),%a0	| handler table
-	jmp	(%a0)
-7:
-	.long	ftstl
-	.long	ftsts
-	.long	ftstx
-	.long	ftstp
-	.long	ftstw
-	.long	ftstd
-	.long	ftstb
-ftstp:
-	| not supported (yet)
-	rts
-
-ftstl:
-	move.l	(%a3),%d3
-	bra	0f
-ftstw:
-	move.w	(%a3),%d3
-	bra	1f
-ftstb:
-	move.b	(%a3),%d3
-2:	ext.w	%d3
-1:	ext.l	%d3
-0:	
-	| test for zero
-	tst.l	%d3
-	beq	1f
-	| it's not zero
-	bpl	9f
-	| it's negative
-	bset	#FPCC_N_BIT,%d2
-	bra	9f
-1:	| it's zero
-	bset	#FPCC_Z_BIT,%d2
-9:	| write to fpsrcc and return
-	move.b	%d2,(%a2)
-	rts
-
-| y = -x
-instr_gen_fneg:
-	move.l	%a3,%a0
-	move.l	%a4,%a1
-	bsr	convert_to_ext
-	|bra	fneg
 	| fall through
 
 | input:
-|  %a0 = ext float
+|  %d0-%d2 = ext float source in internal format
 | output:
-|  %a0 = ext float with its sign inverted
-fneg:
-	bchg	#31,(%a0)
-	|bra	ftst
-	| fall through
-
-| input:
-|  %a0 = pointer to ext float
-| output:
-|  fpsrcc flags set according to value of operand
+|  fpsrcc and fpsrexc flags set according to value of operand
+| TODO: clean this up and optimize it
 ftst:
-	clr.b	fpsrexc
-	move	%a0,%a3
-	moveq	#0,%d2		| fpsrcc
-	lea.l	fpsrcc,%a2	| pointer to fpsrcc
-	| fall through
-ftstx:
-	move	(%a3),%d3
-	not	%d3
-	and	#0x7fff,%d3		| isolate the exponent field
-	bne	1f
-	| it's infinity or nan
-	move.l	(4,%a3),%d3
-	bclr.l	#31,%d3			| ignore MSB (explicit integer bit)
-	or.l	(8,%a3),%d3
-	bra	6f
-1:	| it's in range; test for zero
-	move.l	(4,%a3),%d3		| upper 32 bits of fraction
-	or.l	(8,%a3),%d3		| lower 32 bits of fraction
-	bra	5f
-ftsts:
-	| test for infinity/nan/zero for double-precision here
-	move	(%a3),%d3
-	not	%d3
-	and	#0x7f80,%d3		| isolate the exponent field
-	bne	1f
-	| it's infinity or nan
-	move.l	(%a3),%d3
-	and.l	#0x007fffff,%d3		| fraction field
-	bra	6f
-1:	| it's in range; test for zero
-	move.l	(%a3),%d3
-	and.l	#0x007fffff,%d3		| fraction field
-	bra	5f
-ftstd:
-	| test for infinity/nan/zero for double-precision here
-	move	(%a3),%d3
-	not	%d3
-	and	#0x7ff0,%d3		| isolate the exponent field
-	bne	1f
-	| it's infinity or nan
-	move.l	(%a3),%d3
-	and.l	#0x000fffff,%d3		| upper 20 bits of fraction
-	or.l	(4,%a3),%d3		| lower 32 bits of fraction
-	bra	6f
-1:	| it's in range; test for zero
-	move.l	(%a3),%d3
-	and.l	#0x000fffff,%d3		| upper 20 bits of fraction
-	or.l	(4,%a3),%d3		| lower 32 bits of fraction
-
-	| float is in range (common for all float types)
-5:	bne	0f
-	bset	#FPCC_Z_BIT,%d2
-	| test for negative
-0:	move	(%a3),%d3
-	btst	#15,%d3
+	move.l	%d0,%d5		| fp type bits correspond to condition code bits
+	swap	%d5
+	move.b	%d5,fpsrcc
+	btst	#CC_NAN_BIT,%d5
 	beq	9f
-	| it's negative
-	bset	#FPCC_N_BIT,%d2
-9:	move.b	%d2,(%a2)
-	rts
+	| set SNAN if this is a signaling NAN
+	btst	#30,%d1			| test quiet bit
+	bne	9f
+	bset	#EXC_SNAN_BIT,fpsrexc
+9:	rts
 
-6:	| float is inf or nan (common for all float types)
-	bne	1f
-	bset	#FPCC_I_BIT,%d2
-	bra	0b	| test for negative
-1:	bset	#FPCC_NAN_BIT,%d2
-	| set SNAN in fpsrexc byte if this is a signaling NAN 
-	bra	0b	| test for negative
+
+
 
 instr_gen_invalid:
 	rts
@@ -1589,151 +2138,6 @@ instr_gen_invalid:
 |  eg:
 |    beq xxx | branch if condition is true
 | this could probably be done with some bit voodoo
-	.if 0
-test_condition:
-	move.b	fpsrcc,%d1
-	and	#15,%d0
-	
-	cmp	#0x0,%d0	| false
-	beq	0f
-	cmp	#0xf,%d0	| true
-	beq	1f
-	cmp	#0x1,%d0	| EQ = Z
-	bne	2f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-2:	cmp	#0x2,%d0	| GT = !NAN x !Z x !N
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0x3,%d0	| GE = !NAN x (!N + Z)
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	rts	| same as bne 1f; bra 0f
-2:	cmp	#0x4,%d0	| LT = !NAN x N x !Z
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0x5,%d0	| LE = !NAN x (N + Z)
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	rts
-2:	cmp	#0x6,%d0	| GL = !NAN x !Z
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0x7,%d0	| GLE = !NAN
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0xe,%d0	| NEQ = !Z
-	bne	2f
-	btst	#FPCC_Z_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f		| NAN bit makes the remaining predicates true
-	
-	cmp	#0xd,%d0	| NGT = NAN + Z + N
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	bne	1f
-	bra	0f
-	rts
-2:	cmp	#0xc,%d0	| NGE = NAN + (N x !Z)
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0xb,%d0	| NLT = NAN + (!N + Z)
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	beq	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	rts
-2:	cmp	#0xa,%d0	| NLE = NAN + (!N x !Z)
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
-	rts
-	beq	1f
-	bra	0f
-2:	cmp	#0x9,%d0	| NGL = NAN + Z
-	bne	2f
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	rts
-2:				| NGLE = NAN
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	bra	0f
-	|cmp	#0x8,%d0	| NGLE = NAN
-	|bne	2f
-	|bra	0f	|XXX
-|2:
-
-1:	| branch here if true
-	move	#0,%d1
-	tst	%d1
-	rts
-0:	| branch here if false
-	move	#1,%d1
-	tst	%d1
-	rts
-.else
-| somewhat optimized version
 | each predicate gets 32 bytes to test the condition and return
 test_condition:
 	move.b	fpsrcc,%d1
@@ -1744,177 +2148,185 @@ test_condition:
 
 	.balign 32
 0:	| 0 False
-	bra	0f
+	move	#1,%d1
+	rts
 
 	.balign 32
 	| 1 EQ = Z
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-
-	.balign 32
-	| 2 GT = !NAN x !Z x !N
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
+	not	%d1
+	andi	#CC_Z,%d1
 	rts
-	|beq	1f
-	|bra	0f
 
 	.balign 32
-	| 3 GE = !NAN x (!N + Z)
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-
-	.balign 32
-	| 4 LT = !NAN x N x !Z
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
-	rts	| same as beq 1f; bra 0f
-	|beq	1f
-	|bra	0f
-
-	.balign 32
-	| 5 LE = !NAN x (N + Z)
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_N_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-
-	.balign 32
-	| 6 GL = !NAN x !Z
-	btst	#FPCC_NAN_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
+	| 2 GT = !NAN x !Z x !N = !(NAN + Z + N)
+	andi	#CC_NAN+CC_Z+CC_N,%d1
 	rts
-	|beq	1f
-	|bra	0f
+
+	.balign 32
+	| 3 GE = Z + !(NAN + N) = Z + !NAN x !N  !!!!TEST THIS!!!!
+	btst	#CC_Z_BIT,%d1
+	bne	1f
+	andi	#CC_NAN+CC_N,%d1
+	rts	| same as beq 1f; bra 0b
+
+	.balign 32
+	| 4 LT = N x !(NAN + Z) = N x !NAN x !Z
+	| = !(!N + (NAN + Z)) = !(!N + NAN + Z)
+	| truth table:
+	| Z NAN N  LT
+	| 0  0  0  0
+	| 0  0  1  1
+	| 0  1  0  0
+	| 0  1  1  0
+	| 1  0  0  0
+	| 1  0  1  0
+	| 1  1  0  0
+	| 1  1  1  0
+	eori	#CC_N,%d1
+	andi	#CC_N+CC_NAN+CC_Z,%d1
+	rts
+
+	.balign 32
+	| 5 LE = Z + (N x !NAN) = Z + (!!N x !NAN) = Z + !(!N + NAN)  !!!!TEST THIS!!!!
+	| truth table:
+	| Z NAN N  LE
+	| 0  0  0  0
+	| 0  0  1  1
+	| 0  1  0  0
+	| 0  1  1  0
+	| 1  0  0  1
+	| 1  0  1  1
+	| 1  1  0  1
+	| 1  1  1  1
+	btst	#CC_Z_BIT,%d1
+	bne	1f
+	eori	#CC_N,%d1
+	andi	#CC_N+CC_NAN,%d1
+	rts
+
+	.balign 32
+	| 6 GL = !(NAN + Z) = !NAN x !Z
+	andi	#CC_NAN+CC_Z,%d1
+	rts
 
 	.balign 32
 	| 7 GLE = !NAN
-	btst	#FPCC_NAN_BIT,%d1
+	andi	#CC_NAN,%d1
 	rts
-	|beq	1f
-	|bra	0f
 
 	.balign 32
 	| 8 NGLE = NAN
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	bra	0f
+	not	%d1
+	andi	#CC_NAN,%d1
+	rts
 
 	.balign 32
 	| 9 NGL = NAN + Z
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	|rts
-
-	.balign 32
-	| a NLE = NAN + (!N x !Z)
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	bne	0f
-	btst	#FPCC_Z_BIT,%d1
+	not	%d1
+	andi	#CC_NAN+CC_Z,%d1
 	rts
-	|beq	1f
-	|bra	0f
 
 	.balign 32
-	| b NLT = NAN + (!N + Z)
-	btst	#FPCC_NAN_BIT,%d1
+	| a NLE = NAN + !(N + Z) = NAN + !N x !Z
+	| truth table:
+	| Z NAN N  NLE
+	| 0  0  0  1
+	| 0  0  1  0
+	| 0  1  0  1
+	| 0  1  1  1
+	| 1  0  0  1
+	| 1  0  1  0
+	| 1  1  0  0
+	| 1  1  1  0
+	btst	#CC_NAN_BIT,%d1
 	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	beq	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	bra	0f
-	|rts
-
-	.balign 32
-	| c NGE = NAN + (N x !Z)
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	beq	0f
-	btst	#FPCC_Z_BIT,%d1
+	andi	#CC_N+CC_Z,%d1
 	rts
-	|beq	1f
-	|bra	0f
+
+	.balign 32
+	| b NLT = NAN + Z + !N
+	| truth table:
+	| Z NAN N  NLT LT
+	| 0  0  0  1  0
+	| 0  0  1  0  1
+	| 0  1  0  1  0
+	| 0  1  1  1  0
+	| 1  0  0  1  0
+	| 1  0  1  1  0
+	| 1  1  0  1  0
+	| 1  1  1  1  0
+	eori	#CC_NAN+CC_Z,%d1
+	andi	#CC_NAN+CC_Z+CC_N,%d1
+	rts
+
+	.balign 32
+	| c NGE = NAN + (N x !Z) = NAN + !(!N + Z)
+	btst	#CC_NAN_BIT,%d1
+	bne	1f
+	eori	#CC_N,%d1
+	andi	#CC_N+CC_Z,%d1
+	rts
 
 	.balign 32
 	| d NGT = NAN + Z + N
-	btst	#FPCC_NAN_BIT,%d1
-	bne	1f
-	btst	#FPCC_Z_BIT,%d1
-	bne	1f
-	btst	#FPCC_N_BIT,%d1
-	bne	1f
-	bra	0f
-	|rts
+	not	%d1
+	andi	#CC_NAN+CC_Z+CC_N,%d1
+	rts
 
 	.balign 32
 	| e NEQ = !Z
-	btst	#FPCC_Z_BIT,%d1
+	andi	#CC_Z,%d1
 	rts
-	|beq	1f
-	|bra	0f
 
 	.balign 32
-	| f True
-	|bra	1f
-
-
-1:	| branch here if true
+1:	| f True
 	move	#0,%d1
-	tst	%d1
 	rts
-0:	| branch here if false
-	move	#1,%d1
-	tst	%d1
-	rts
-.endif
+
 	.if 0
-mnemonic	predicate (4LSB)	equation
-EQ		0001			Z
-NE		1110			!Z
+mnemonic	predicate	equation
+IEEE Nonaware Tests:
+EQ		00001		Z
+NE		01110		!Z
+GT		10010		!(NAN + Z + N) = !NAN x !Z x !N
+NGT		11101		NAN + Z + N
+GE		10011		Z + !(NAN + N) = Z + !NAN x !N
+NGE		11100		NAN + (N x !Z)
+LT		10100		N x !(NAN + Z) = N x !NAN x !Z
+NLT		11011		NAN + (Z + !N)
+LE		10101		Z + (N x !NAN)
+NLE		11010		NAN + !(N + Z) = NAN + !N x !Z
+GL		10110		!(NAN + Z) = !NAN x !Z
+NGL		11001		NAN + Z
+GLE		10111		!NAN
+NGLE		11000		NAN
 
-GT		0010			!NAN x !Z x !N
-NGT		1101			NAN + Z + N
+IEEE Aware Tests:
+EQ		00001		Z
+NE		01110		!Z
+OGT		00010		!(NAN + Z + N) = !NAN x !Z x !N
+ULE		01101		NAN + Z + N
+OGE		00011		Z + !(NAN + N) = Z + !NAN x !N
+ULT		01100		NAN + (N x !Z)
+OLT		00100		N x !(NAN + Z) = N x !NAN x !Z
+UGE		01011		NAN + Z + !N
+OLE		00101		Z + (N x !NAN)
+UGT		01010		NAN + !(N + Z) = NAN + !N x !Z
+OGL		00110		!(NAN + Z) = !NAN x !Z
+UEQ		01001		NAN + Z
+OR		00111		!NAN
+UN		01000		NAN
 
-GE		0011			!NAN x (!N + Z)
-NGE		1100			NAN + (N x !Z)
+Miscellaneous Tests:
+F		00000		False
+T		01111		True
+SF		10000		False
+ST		11111		True
+SEQ		10001		Z
+SNE		11110		!Z
 
-LT		0100			!NAN x N x !Z
-NLT		1011			NAN + (!N + Z)
+Note: IEEE aware and IEEE unaware tests are the same except for bit 4 of the predicate. BSUN is set if bit 4 of the predicate is set and NAN is set: BSUN = P[5] x NAN
 
-LE		0101			!NAN x (N + Z)
-NLE		1010			NAN + (!N x !Z)
-
-GL		0110			!NAN x !Z
-NGL		1001			NAN + Z
-
-GLE		0111			!NAN
-NGLE		1000			NAN
-
-F		0000			False
-T		1111			True
 	.endif
 
 | Scc/DBcc
@@ -1939,6 +2351,7 @@ instr_scc:
 	| fscc
 	move	#1,%d0	| size=1 (byte)
 	bsr	get_ea
+	beq	instr_invalid	| valid?
 	move	(%a5)+,%d0
 	jbsr	test_condition
 	seq	(%a0)
@@ -1960,12 +2373,11 @@ instr_scc:
 	cmp	#-1,(%a1)
 	beq	1f
 	.else
-	bvs	1f	| -1 => overflow (FIXME: is this the correct condition?)
+	bcs	1f	| -1 => borrow (FIXME: is this the correct condition?)
 	.endif
 	| Dn.w != -1
 	| add displacement to PC
-	sub	#2,%d3
-	lea.l	(%a5,%d3.w),%a5
+	lea.l	(-2,%a5,%d3.w),%a5
 1:
 
 	rts
@@ -1974,23 +2386,20 @@ instr_scc:
 |1111iii01spppppp
 |dddddddddddddddd
 |dddddddddddddddd
-instr_bcc:
-	move	%d7,%d0
-	and	#0x0040,%d0	| size field
-	bne	0f
+instr_bcc_w:
 	move.w	(%a5)+,%d3	| branch displacement
-	sub	#2,%d3
 	ext.l	%d3
-	bra	1f
-0:	move.l	(%a5)+,%d3
-	sub	#4,%d3
-1:	
-	move	%d7,%d0
+	bra	0f
+
+instr_bcc_l:
+	move.l	(%a5)+,%d3
+	sub	#2,%d3
+0:	move	%d7,%d0
 	jbsr	test_condition
 	bne	1f
 	| condition is true
 	| branch!
-	lea.l	(%a5,%d3.l),%a5
+	lea.l	(-2,%a5,%d3.l),%a5
 1:	rts
 
 instr_save:
@@ -2000,74 +2409,95 @@ instr_restore:
 	rts
 
 instr_invalid:
+	| TODO: send SIGILL signal to process
 	rts
 
 
+fmovecr:
+	| move constant ROM value to register
+	
+	bsr	get_dst
+	| get the rom offset
+	and	#127,%d6
+	mulu	#12,%d6
+	lea.l	(constant_rom,%pc,%d6.w),%a0
+	| copy value to dst (%a4)
+	movem.l	(%a0),%d0-%d2
+	move.l	%a4,%a1
+	jbra	ftst_and_save_dst
+
+| N.B. constant_rom is stored in the internal extended precision format
 constant_rom:
-	.long 0x40000000,0xc90fdaa2,0x2168c235  | 00 pi
-	.long 0x00000000,0x00000000,0x00000000  | 01
-	.long 0x00000000,0x00000000,0x00000000  | 02
-	.long 0x00000000,0x00000000,0x00000000  | 03
-	.long 0x00000000,0x00000000,0x00000000  | 04
-	.long 0x00000000,0x00000000,0x00000000  | 05
-	.long 0x00000000,0x00000000,0x00000000  | 06
-	.long 0x00000000,0x00000000,0x00000000  | 07
-	.long 0x00000000,0x00000000,0x00000000  | 08
-	.long 0x00000000,0x00000000,0x00000000  | 09
-	.long 0x00000000,0x00000000,0x00000000  | 0a
-	.long 0x3ffd0000,0x9a209a84,0xfbcff798  | 0b log10(2)
-	.long 0x40000000,0xadf85458,0xa2bb4a9a  | 0c e
-	.long 0x3fff0000,0xb8aa3b29,0x5c17f0bc  | 0d log2(e)
-	.long 0x3ffd0000,0xde5bd8a9,0x37287195  | 0e log10(e)
-	.long 0x00000000,0x00000000,0x00000000  | 0f 0.0
-	.long 0x00000000,0x00000000,0x00000000  | 10
-	.long 0x00000000,0x00000000,0x00000000  | 11
-	.long 0x00000000,0x00000000,0x00000000  | 12
-	.long 0x00000000,0x00000000,0x00000000  | 13
-	.long 0x00000000,0x00000000,0x00000000  | 14
-	.long 0x00000000,0x00000000,0x00000000  | 15
-	.long 0x00000000,0x00000000,0x00000000  | 16
-	.long 0x00000000,0x00000000,0x00000000  | 17
-	.long 0x00000000,0x00000000,0x00000000  | 18
-	.long 0x00000000,0x00000000,0x00000000  | 19
-	.long 0x00000000,0x00000000,0x00000000  | 1a
-	.long 0x00000000,0x00000000,0x00000000  | 1b
-	.long 0x00000000,0x00000000,0x00000000  | 1c
-	.long 0x00000000,0x00000000,0x00000000  | 1d
-	.long 0x00000000,0x00000000,0x00000000  | 1e
-	.long 0x00000000,0x00000000,0x00000000  | 1f
-	.long 0x00000000,0x00000000,0x00000000  | 20
-	.long 0x00000000,0x00000000,0x00000000  | 21
-	.long 0x00000000,0x00000000,0x00000000  | 22
-	.long 0x00000000,0x00000000,0x00000000  | 23
-	.long 0x00000000,0x00000000,0x00000000  | 24
-	.long 0x00000000,0x00000000,0x00000000  | 25
-	.long 0x00000000,0x00000000,0x00000000  | 26
-	.long 0x00000000,0x00000000,0x00000000  | 27
-	.long 0x00000000,0x00000000,0x00000000  | 28
-	.long 0x00000000,0x00000000,0x00000000  | 29
-	.long 0x00000000,0x00000000,0x00000000  | 2a
-	.long 0x00000000,0x00000000,0x00000000  | 2b
-	.long 0x00000000,0x00000000,0x00000000  | 2c
-	.long 0x00000000,0x00000000,0x00000000  | 2d
-	.long 0x00000000,0x00000000,0x00000000  | 2e
-	.long 0x00000000,0x00000000,0x00000000  | 2f
-	.long 0x3ffe0000,0xb17217f7,0xd1cf79ac  | 30 ln(2)
-	.long 0x40000000,0x935d8ddd,0xaaa8ac17  | 31 ln(10)
-	.long 0x3fff0000,0x80000000,0x00000000  | 32 10^0
-	.long 0x40020000,0xA0000000,0x00000000  | 33 10^1
-	.long 0x40050000,0xC8000000,0x00000000  | 34 10^2
-	.long 0x400C0000,0x9C400000,0x00000000  | 35 10^4
-	.long 0x40190000,0xBEBC2000,0x00000000  | 36 10^8
-	.long 0x40340000,0x8E1BC9BF,0x04000000  | 37 10^16
-	.long 0x40690000,0x9DC5ADA8,0x2B70B59E  | 38 10^32
-	.long 0x40D30000,0xC2781F49,0xFFCFA6D5  | 39 10^64
-	.long 0x41A80000,0x93BA47C9,0x80E98CE0  | 3a 10^128
-	.long 0x43510000,0xAA7EEBFB,0x9DF9DE8E  | 3b 10^256
-	.long 0x46A30000,0xE319A0AE,0xA60E91C7  | 3c 10^512
-	.long 0x4D480000,0xC9767586,0x81750C17  | 3d 10^1024
-	.long 0x5A920000,0x9E8B3B5D,0xC53D5DE5  | 3e 10^2048
-	.long 0x75250000,0xC4605202,0x8A20979B  | 3f 10^4096
+	.long 0x00000001,0xc90fdaa2,0x2168c235  | 00 pi
+
+	| following can store constants for calculating sin(x) and cos(x)
+	.long 0x00040000,0x00000000,0x00000000  | 01
+	.long 0x00040000,0x00000000,0x00000000  | 02
+	.long 0x00040000,0x00000000,0x00000000  | 03
+	.long 0x00040000,0x00000000,0x00000000  | 04
+	.long 0x00040000,0x00000000,0x00000000  | 05
+	.long 0x00040000,0x00000000,0x00000000  | 06
+	.long 0x00040000,0x00000000,0x00000000  | 07
+	.long 0x00040000,0x00000000,0x00000000  | 08
+	.long 0x00040000,0x00000000,0x00000000  | 09
+	.long 0x00040000,0x00000000,0x00000000  | 0a
+
+	.long 0x0000fffe,0x9a209a84,0xfbcff798  | 0b log10(2)
+	.long 0x00000001,0xadf85458,0xa2bb4a9a  | 0c e
+	.long 0x00000000,0xb8aa3b29,0x5c17f0bc  | 0d log2(e)
+	.long 0x0000fffe,0xde5bd8a9,0x37287195  | 0e log10(e)
+	.long 0x00040000,0x00000000,0x00000000  | 0f 0.0
+
+	| following can store constants for calculating log2(x) and 2^x
+	.long 0x00040000,0x00000000,0x00000000  | 10
+	.long 0x00040000,0x00000000,0x00000000  | 11
+	.long 0x00040000,0x00000000,0x00000000  | 12
+	.long 0x00040000,0x00000000,0x00000000  | 13
+	.long 0x00040000,0x00000000,0x00000000  | 14
+	.long 0x00040000,0x00000000,0x00000000  | 15
+	.long 0x00040000,0x00000000,0x00000000  | 16
+	.long 0x00040000,0x00000000,0x00000000  | 17
+	.long 0x00040000,0x00000000,0x00000000  | 18
+	.long 0x00040000,0x00000000,0x00000000  | 19
+	.long 0x00040000,0x00000000,0x00000000  | 1a
+	.long 0x00040000,0x00000000,0x00000000  | 1b
+	.long 0x00040000,0x00000000,0x00000000  | 1c
+	.long 0x00040000,0x00000000,0x00000000  | 1d
+	.long 0x00040000,0x00000000,0x00000000  | 1e
+	.long 0x00040000,0x00000000,0x00000000  | 1f
+	.long 0x00040000,0x00000000,0x00000000  | 20
+	.long 0x00040000,0x00000000,0x00000000  | 21
+	.long 0x00040000,0x00000000,0x00000000  | 22
+	.long 0x00040000,0x00000000,0x00000000  | 23
+	.long 0x00040000,0x00000000,0x00000000  | 24
+	.long 0x00040000,0x00000000,0x00000000  | 25
+	.long 0x00040000,0x00000000,0x00000000  | 26
+	.long 0x00040000,0x00000000,0x00000000  | 27
+	.long 0x00040000,0x00000000,0x00000000  | 28
+	.long 0x00040000,0x00000000,0x00000000  | 29
+	.long 0x00040000,0x00000000,0x00000000  | 2a
+	.long 0x00040000,0x00000000,0x00000000  | 2b
+	.long 0x00040000,0x00000000,0x00000000  | 2c
+	.long 0x00040000,0x00000000,0x00000000  | 2d
+	.long 0x00040000,0x00000000,0x00000000  | 2e
+	.long 0x00040000,0x00000000,0x00000000  | 2f
+
+	.long 0x0000ffff,0xb17217f7,0xd1cf79ac  | 30 ln(2)
+	.long 0x00000001,0x935d8ddd,0xaaa8ac17  | 31 ln(10)
+	.long 0x00000000,0x80000000,0x00000000  | 32 10^0
+	.long 0x00000003,0xA0000000,0x00000000  | 33 10^1
+	.long 0x00000006,0xC8000000,0x00000000  | 34 10^2
+	.long 0x0000000d,0x9C400000,0x00000000  | 35 10^4
+	.long 0x0000001a,0xBEBC2000,0x00000000  | 36 10^8
+	.long 0x00000035,0x8E1BC9BF,0x04000000  | 37 10^16
+	.long 0x0000006a,0x9DC5ADA8,0x2B70B59E  | 38 10^32
+	.long 0x000000D4,0xC2781F49,0xFFCFA6D5  | 39 10^64
+	.long 0x000001A9,0x93BA47C9,0x80E98CE0  | 3a 10^128
+	.long 0x00000352,0xAA7EEBFB,0x9DF9DE8E  | 3b 10^256
+	.long 0x000006A4,0xE319A0AE,0xA60E91C7  | 3c 10^512
+	.long 0x00000D49,0xC9767586,0x81750C17  | 3d 10^1024
+	.long 0x00001A93,0x9E8B3B5D,0xC53D5DE5  | 3e 10^2048
+	.long 0x00003526,0xC4605202,0x8A20979B  | 3f 10^4096
 
 
 	.if 0
@@ -2129,57 +2559,78 @@ cpRESTORE
 ************************************************************************
 
 
+| fmove (memory/register to register):
+| 1111iii000eeeeee
+| 0R0sssdddooooooo
+|
+| sss = source register or format (111 = fmovecr)
+| ddd = destination register
+| ooooooo = opmode
+|  0000000 fmove  rounding precision specified by the floating-point control register
+|  1000000 fsmove single-precision rounding specified *
+|  1000100 fdmove double-precision rounding specified *
+|  * supported by MC68040 only
+| 
+| R = R/M field
+|  0 = source is register
+|  1 = source is <ea>
+| 
+| fmove (register to memory):
+| 1111iii000eeeeee
+| 011dddssskkkkkkk
+| kkkkkkk = k-factor (required only for packed decimal destination)
+| 
+| fmovecr:
+| 1111iii000000000
+| 010111dddooooooo
+| 
+| ooooooo = ROM offset
+| 
+| ddd = destination format
+| sss = source register
+| 
+| fmovem (system control registers)
+| 1111iii000eeeeee
+| 10Drrr0000000000
+| 
+| rrr = register list
+|  100 floating-point control register (FPCR)
+|  010 floating-point status register (FPSR)
+|  001 floating-point instruction address register (FPIAR)
+| 
+| fmovem (data registers):
+| 1111iii000eeeeee
+| 11Dmm000rrrrrrrr
+|
+| D = direction of data transfer
+|  0=from memory to fpu
+|  1=from fpu to memory
+| mm = mode
+|  00 static register list, predecrement addressing mode (reg-mem only)
+|  01 dynamic register list, predecrement addressing mode (reg-mem only)
+|  10 static register list, postincrement or control addressing mode
+|  11 dynamic register list, postincrement or control addressing mode
+| rrrrrrrr = register list
+| 
+| 
+| list type		register list format
+| static, -(An)		FP7	FP6	FP5	FP4	FP3	FP2	FP1	FP0
+| static, (An)+,	FP0	FP1	FP2	FP3	FP4	FP5	FP6	FP7
+|  or Control
+| dynamic		0	r	r	r	0	0	0	0
+| 
+| dynamic: rrr is data register
+| 
+| top 3 bits of second instruction word:
+| 000 fmove reg-reg
+| 001 
+| 010 fmove mem-reg OR fmovecr (cr-mem)
+| 011 fmove reg-mem
+| 100 fmovem memory to system control registers
+| 101 fmovem system control registers to memory
+| 110 fmovem memory to data registers
+| 111 fmovem data registers to memory
 
-fmove (register to memory):
-1111iii000eeeeee
-011dddssskkkkkkk
-
-ddd = destination format
-sss = source register
-kkkkkkk = k-factor (if required (only for destination format of packed decimal))
-
-fmovem (system control registers)
-1111iii000eeeeee
-10drrr0000000000
-
-d = dr (direction of the data transfer)
- 0=from <ea> to system control register
- 1=from system control register to <ea>
-rrr = register list - specifies the system control registers to be moved
- 100 floating-point control register
- 010 floating-point status register
- 001 floating-point instruction address register
-
-
-fmovecr:
-1111iii000000000
-010111dddooooooo
-
-ddd = destination register
-ooooooo = ROM offset
-
-
-fmovem (data registers):
-1111iii000eeeeee
-11dmm000rrrrrrrr
-
-d = dr (direction)
- 0=from memory to fpu
- 1=from fpu to memory
-mm = mode
- 00 static register list, predecrement addressing mode
- 01 dynamic register list, predecrement addressing mode
- 10 static register list, postincrement or control addressing mode
- 11 dynamic register list, postincrement or control addressing mode
-rrrrrrrr = register list
-
-list type	register list format
-static, -(An)	FP7	FP6	FP5	FP4	FP3	FP2	FP1	FP0
-static, (An)+,	FP0	FP1	FP2	FP3	FP4	FP5	FP6	FP7
- or Control
-dynamic		0	r	r	r	0	0	0	0
-
-dynamic: rrr is data register
 
 
 fsincos:
@@ -2222,12 +2673,12 @@ mode	register	addressing mode
 110	An		([bd,An],Xn,od)		not on 68000
 111	000		(xxx).W
 111	001		(xxx).L
-111	100		#<data>
 111	010		(d16,PC)
 111	011		(d8,PC,Xn)
 111	011		(bd,PC,Xn)		not on 68000
 111	011		([bd,PC,Xn],od)		not on 68000
 111	011		([bd,PC],Xn,od)		not on 68000
+111	100		#<data>
 
 Predicates:
 mnemonic definition			predicate	BSUN bit set?
@@ -2271,46 +2722,5 @@ SF       Signaling False		010000		Yes
 ST       Signaling True			011111		Yes
 SEQ      Signaling Equal		010001		Yes
 SNE      Signaling Not Equal		011110		Yes
-
-definition			equation
-Equal				Z
-Not Equal			!Z (???)
-Greater Than			!(!NAN || !Z || !N)
-Not Greater Than		NAN || Z || N
-Greater Than or Equal		Z || !(!NAN || !N)
-Not Greater Than or Equal	NAN || (N && !Z)
-Less Than			N && !(!NAN || !Z)
-Not Less Than			NAN || (Z || !N)
-Less Than or Equal		Z || (N && !NAN)
-Not Less Than or Equal		NAN || !(!N || !Z)
-Greater or Less Than		!(!NAN || !Z)
-Not Greater or Less Than	NAN || Z
-Greater, Less or Equal		!NAN (???)
-Not Greater, Less or Equal	NAN
-
-predicate (4LSB)	equation
-0001			Z
-1110			!Z (???)
-
-0010			!(!NAN || !Z || !N)
-1101			NAN || Z || N
-
-0011			Z || !(!NAN || !N)
-1100			NAN || (N && !Z)
-
-0100			N && !(!NAN || !Z)
-1011			NAN || (Z || !N)
-
-0101			Z || (N && !NAN)
-1010			NAN || !(!N || !Z)
-
-0110			!(!NAN || !Z)
-1001			NAN || Z
-
-0111			!NAN (???)
-1000			NAN
-
-0000			False
-1111			True
 
 	.endif

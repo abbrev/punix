@@ -73,10 +73,6 @@ static void endvfork()
 	P.p_flag &= ~P_VFORK;
 	wakeup(current);
 #if 0
-	while (!(P.p_flag&P_VFDONE))
-		slp(pp, 0);
-#endif
-#if 0
 	P.p_dsize = pp->p_dsize = 0; /* are these necessary? */
 	P.p_ssize = pp->p_ssize = 0; /* " */
 #endif
@@ -198,13 +194,14 @@ void sys_execve()
 	
 	/* XXX */
 	void sh_start(), init_start(), bittybox_start(), time_start();
-	void getty_start(), login_start(), uterm_start();
+	void getty_start(), login_start(), uterm_start(), cat_start();
 	void tests_start();
+	void top_start();
+	void busyloop_start();
+	void nice_start();
 	if (!strcmp(pathname, "init") || !strcmp(pathname, "/etc/init"))
 		text = init_start;
-	else if (!strcmp(pathname, "cat") ||
-	         !strcmp(pathname, "echo") ||
-	         !strcmp(pathname, "top") ||
+	else if (!strcmp(pathname, "echo") ||
 	         !strcmp(pathname, "false") ||
 	         !strcmp(pathname, "true") ||
 	         !strcmp(pathname, "clear") ||
@@ -228,6 +225,14 @@ void sys_execve()
 		text = uterm_start;
 	else if (!strcmp(pathname, "tests"))
 		text = tests_start;
+	else if (!strcmp(pathname, "top"))
+		text = top_start;
+	else if (!strcmp(pathname, "cat"))
+		text = cat_start;
+	else if (!strcmp(pathname, "busyloop"))
+		text = busyloop_start;
+	else if (!strcmp(pathname, "nice"))
+		text = nice_start;
 	else if (!strcmp(pathname, "bflt"))
 		bflt = &bflt_header;
 	else {
@@ -398,7 +403,7 @@ error_noent: ;
 }
 
 /* fill in the rusage structure from the proc */
-static void krusage_to_rusage(struct krusage *kp, struct rusage *rp)
+static void krusage_to_rusage(struct krusage const *kp, struct rusage *rp)
 {
 	int x = splclock();
 	rp->ru_utime.tv_sec = kp->kru_utime / HZ;
@@ -515,7 +520,6 @@ void sys_pause()
 	slp(sys_pause, 1);
 }
 
-/* XXX: fix this to conform to the new vfork() method */
 void sys_exit()
 {
 	struct a {
@@ -593,7 +597,7 @@ void sys_vfork()
 	
 	cp->p_kstack = kstack - kstacksize;
 	cp->p_flag |= P_VFORK;
-	cp->p_status = P_VFORKING;
+	cp->p_status = P_NEW;
 
 	void return_from_vfork();
 	cp->p_ctx = *P.p_syscall_ctx;
@@ -614,10 +618,6 @@ void sys_vfork()
 		slp(cp, 0);
 	
 	/* reclaim our stuff */
-#if 0
-	cp->p_flag |= P_VFDONE;
-	wakeup(current); /* ??? */
-#endif
 	return;
 kstackp:
 	pfree(cp);
@@ -657,12 +657,12 @@ loop:
 			continue;
 		if ((options & WCONTINUED) && p->p_status == P_RUNNING && (p->p_flag & P_WAITED)) {
 			/* return with this proc */
-			p->p_status &= ~P_WAITED;
+			p->p_flag &= ~P_WAITED;
 			goto found;
 		}
 		if ((options & WUNTRACED) && p->p_status == P_STOPPED && !(p->p_flag & P_WAITED)) {
 			/* return with this proc */
-			p->p_status |= P_WAITED;
+			p->p_flag |= P_WAITED;
 			goto found;
 		}
 		if (p->p_status == P_ZOMBIE) {
@@ -763,7 +763,34 @@ void sys_getpgrp()
 
 void sys_getppid()
 {
-	P.p_retval = P.p_pptr->p_pid;
+	P.p_retval = P.p_pptr ? P.p_pptr->p_pid : 0;
+}
+
+void sys_setsid()
+{
+	struct proc *p;
+	if (P.p_pid == P.p_pgrp) {
+		/* we are a process group leader. fail. */
+		P.p_error = EPERM;
+		return;
+	}
+	list_for_each_entry(p, &G.proc_list, p_list) {
+		if (p != current && p->p_pgrp == P.p_pid) {
+			/*
+			 * the process group ID of a process other than the
+			 * calling process matches the process ID of the
+			 * calling process
+			 */
+			P.p_error = EPERM;
+			return;
+		}
+	}
+	P.p_retval = P.p_sid = P.p_pgrp = P.p_pid;
+}
+
+void sys_setpgid()
+{
+	P.p_error = ENOSYS;
 }
 
 static void donice(struct proc *p, int n)
@@ -782,6 +809,7 @@ static void donice(struct proc *p, int n)
 		return;
 	}
 	p->p_nice = n;
+	sched_set_nice(p, n);
 }
 
 void sys_nice()

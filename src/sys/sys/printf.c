@@ -2,62 +2,391 @@
  *								15 Jan 1994
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <limits.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "punix.h"
 #include "globals.h"
 
 #undef fflush
 
+int *_geterrnop()
+{
+	return &P.user.u_errno;
+}
+
+FILE **_getstream(int n)
+{
+	return (FILE **)&P.user.streams[n];
+}
+
+#undef errno
+#define errno (P.user.u_errno)
+
 void seterrno(int e)
 {
 	errno = e;
 }
 
-/* el-cheapo buffered output */
-int fflush(FILE *stream)
+// bit flags for FILE_t.flags
+enum {
+	FILE_EOF     = 0x0001,
+	FILE_ERROR   = 0x0002,
+	FILE_READ    = 0x0004,
+	FILE_WRITE   = 0x0008,
+	FILE_TRUNC   = 0x0010,
+	FILE_APPEND  = 0x0020,
+	FILE_WRITING = 0x0040, // set if buffer contains unflushed write data
+	FILE_BUF     = 0x0080, // buffered
+	FILE_LBUF    = 0x0100, // line buffered (FILE_BUF must be set too)
+};
+
+#define FILE_BUF_SIZE 64
+struct FILE_t {
+	int fd;
+	int flags;
+	char buf[FILE_BUF_SIZE];
+	int bufsize;
+};
+
+static FILE *newFILE()
 {
-	char *b = P.user.charbuf;
-	ssize_t s = P.user.charbufsize;
-	while (s > 0) {
-		ssize_t n = write(1, b, s);
-		if (n < 0) break;
-		b += n;
-		s -= n;
+	FILE *f = malloc(sizeof(FILE));
+	if (!f) {
+		return NULL;
 	}
-		
-	P.user.charbufsize = 0;
+	f->bufsize = 0;
+	f->flags = 0;
+	return f;
+}
+
+/*
+ * get file flags and (if oflagp is non-NULL) open's oflag
+ * return flags, or set errno and return 0 on error
+ */
+static int getflags(const char *mode, int *oflagp)
+{
+	const char *p;
+	int oflag = 0;
+	int flags = 0;
+	int rw = 0;
+	for (p = mode; *p != '\0'; ++p) {
+		switch (*p) {
+		case 'r':
+			if (flags & (FILE_READ|FILE_WRITE)) {
+				errno = EINVAL; return 0;
+			}
+			flags |= FILE_READ;
+			rw = O_RDONLY;
+			break;
+		case 'w':
+			if (flags & (FILE_READ|FILE_WRITE)) {
+				errno = EINVAL; return 0;
+			}
+			flags |= FILE_WRITE|FILE_TRUNC;
+			oflag = O_CREAT;
+			rw = O_WRONLY;
+			break;
+		case 'a':
+			if (flags & (FILE_READ|FILE_WRITE)) {
+				errno = EINVAL; return 0;
+			}
+			flags |= FILE_WRITE|FILE_APPEND;
+			oflag = O_APPEND|O_CREAT;
+			rw = O_WRONLY;
+		case '+':
+			if (!(flags & (FILE_READ|FILE_WRITE))) {
+				errno = EINVAL; return 0;
+			}
+			flags |= FILE_READ|FILE_WRITE;
+			rw = O_RDWR;
+			break;
+		case 'b':
+			if (!(flags & (FILE_READ|FILE_WRITE))) {
+				errno = EINVAL; return 0;
+			}
+			break;
+		}
+	}
+	if (!(flags & (FILE_READ|FILE_WRITE))) {
+		errno = EINVAL; return 0;
+	}
+	oflag |= rw;
+	if (oflagp) *oflagp = oflag;
+	return flags;
+}
+
+/* el-cheapo buffered output */
+static int _fflush(FILE *f)
+{
+	if (!f) {
+		errno = EBADF;
+		return -1;
+	}
+	char *b = f->buf;
+	ssize_t s = f->bufsize;
+	int err = 0;
+	if (f->flags & FILE_WRITING) {
+		while (s > 0) {
+			ssize_t n = write(f->fd, b, s);
+			if (n < 0) {
+				err = -1;
+				break;
+			}
+			b += n;
+			s -= n;
+		}
+	}
+	
+	f->bufsize = 0;
+	if (err) {
+		f->flags |= FILE_ERROR;
+	}
+	return err;
+}
+
+int fflush(FILE *f)
+{
+	if (f) {
+		return _fflush(f);
+	} else {
+		// TODO: flush all streams
+		_fflush(stdout);
+		_fflush(stderr);
+	}
 	return 0;
 }
 
-STARTUP(int fputc(int c, FILE *stream))
+static FILE *_fdopen(int fd, int flags)
 {
-	return -1; /* not implemented yet! */
+	FILE *file = newFILE();
+	if (!file) return NULL;
+	file->fd = fd;
+	file->flags = flags;
+	return file;
 }
 
-STARTUP(int putchar(int c))
+FILE *fdopen(int fd, const char *mode)
 {
-	P.user.charbuf[P.user.charbufsize++] = c;
-	if (P.user.charbufsize >= 128 || c == '\n')
-		fflush(NULL);
+	int flags = getflags(mode, NULL);
+	if (!flags) {
+		return NULL;
+	}
+	return _fdopen(fd, flags);
+}
+
+FILE *fopen(const char *name, const char *mode)
+{
+	FILE *f;
+	int fd;
+	int flags = 0;
+	int oflag = 0;
+
+	flags = getflags(mode, &oflag);
+	if (!flags) goto error;
+
+	fd = open(name, oflag, 0666);
+	if (fd < 0) goto error;
+
+	f = _fdopen(fd, flags);
+	if (!f) goto close;
+
+	return f;
+
+close:
+	close(fd);
+error:
+	return NULL;
+}
+
+int fclose(FILE *f)
+{
+	if (_fflush(f)) return -1;
+	close(f->fd);
+	free(f);
+	return 0;
+}
+
+int fputc(int c, FILE *f)
+{
+	if (!f || !(f->flags & FILE_WRITE)) {
+		errno = EBADF;
+		return EOF;
+	}
+	if (!(f->flags & FILE_WRITING)) {
+		// switch to writing mode
+		_fflush(f);
+		f->flags |= FILE_WRITING;
+	}
+	f->buf[f->bufsize++] = c;
+	if (!(f->flags & FILE_BUF) ||
+	    f->bufsize >= sizeof(f->buf) ||
+	    ((f->flags & FILE_LBUF) && c == '\n'))
+		_fflush(f);
 	return (unsigned char)c;
 }
 
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+#undef putc
+int putc(int c, FILE *f)
+{
+	return fputc(c, f);
+}
+
+#undef putchar
+int putchar(int c)
+{
+	return fputc(c, stdout);
+}
+
+int fgetc(FILE *f)
+{
+	if (!f || !(f->flags & FILE_READ)) {
+		errno = EBADF;
+		return EOF;
+	}
+	if (feof(f))
+		return EOF;
+	/*
+	 * this shouldn't be needed (a conforming application will call fflush
+	 * or fseek before doing input after doing output
+	 */
+	if (f->flags & FILE_WRITING) {
+		_fflush(f);
+		f->flags &= ~FILE_WRITING;
+	}
+	if (f == stdin) {
+		_fflush(stdout);
+		_fflush(stderr);
+	}
+	if (f->bufsize == 0) {
+		// read up to half of our buffer size to leave room for ungetc
+		ssize_t n = read(f->fd, f->buf, sizeof(f->buf)/2);
+		if (n == 0)
+			f->flags |= FILE_EOF;
+		if (n < 0)
+			f->flags |= FILE_ERROR;
+		if (n <= 0)
+			return EOF;
+		f->bufsize = n;
+	}
+	int c = (unsigned char)f->buf[0];
+	memmove(f->buf, f->buf+1, --f->bufsize);
+	return c;
+}
+
+#undef getc
+int getc(FILE *f)
+{
+	return fgetc(f);
+}
+
+#undef getchar
+int getchar()
+{
+	return fgetc(stdin);
+}
+
+int ungetc(int c, FILE *f)
+{
+	if (c == EOF)
+		return EOF;
+	if (!f || !(f->flags & FILE_READ)) {
+		errno = EBADF;
+		return EOF;
+	}
+	if (f->flags & FILE_WRITING) {
+		_fflush(f);
+		f->flags &= ~FILE_WRITING;
+	}
+	if (f->bufsize >= sizeof(f->buf))
+		return EOF; // XXX: what are we supposed to return?
+	f->flags &= ~FILE_EOF;
+	memmove(f->buf+1, f->buf, f->bufsize++);
+	f->buf[0] = c;
+	return (unsigned char)c;
+}
+
+int feof(FILE *f)
+{
+	if (!f) {
+		errno = EBADF;
+		return -1;
+	}
+	return (f->flags & FILE_EOF) != 0;
+}
+
+int ferror(FILE *f)
+{
+	if (!f) {
+		errno = EBADF;
+		return -1;
+	}
+	return (f->flags & FILE_ERROR) != 0;
+}
+
+void clearerr(FILE *f)
+{
+	if (!f) {
+		errno = EBADF;
+		return;
+	}
+	f->flags &= ~FILE_ERROR;
+}
+
+int fseek(FILE *f, long offset, int whence)
+{
+	if (_fflush(f)) return -1; // flush out write buffer
+	off_t pos = lseek(f->fd, offset, whence);
+	if (pos == (off_t)-1) {
+		return -1;
+	}
+	return 0;
+}
+
+void rewind(FILE *f)
+{
+	fseek(f, 0, SEEK_SET);
+}
+
+int setvbuf(FILE *f, char *buf, int type, size_t size)
+{
+	switch (type) {
+	case _IOFBF: f->flags |= FILE_BUF; f->flags &= ~FILE_LBUF; break;
+	case _IOLBF: f->flags |= FILE_BUF|FILE_LBUF; break;
+	case _IONBF: f->flags &= ~(FILE_BUF|FILE_LBUF); break;
+	}
+	// TODO: use buf and size if buf is not null
+	return 0;
+}
+
+void setbuf(FILE *f, char *buf)
+{
+	setvbuf(f, buf, buf ? _IOFBF : _IONBF, BUFSIZ);
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *f)
 {
 	size_t m = nmemb;
+	if (!f || !(f->flags & FILE_WRITE)) {
+		errno = EBADF;
+		return EOF;
+	}
+	// we're lazy; flush current buffer and call the write syscall directly
+	_fflush(f);
 	while (m) {
 		ssize_t n;
 		size_t s = size;
 
 		while (s) {
-			n = write(1, ptr, s);
+			n = write(f->fd, ptr, s);
 			if (n < 0) goto out;
 			ptr += n;
 			s -= n;
@@ -82,17 +411,19 @@ typedef int (*vcbscanf_unget_callback_t)(int c, void *arg);
 static int vcbnprintf(vcbnprintf_callback_t cb, void *arg,
                       size_t size, const char *fmt, va_list argp);
 
+#if 0
 static int vcbscanf(vcbscanf_get_callback_t get, void *getarg,
                     vcbscanf_unget_callback_t unget, void *ungetarg,
 	            const char *fmt, va_list argp);
+#endif
 
 #define PUT(c) do { \
 	if (count++ < size || size == (size_t)-1) \
 		put(c, cbarg); \
 } while (0)
 
-STARTUP(static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
-                              size_t size, const char *fmt, va_list argp))
+static int vcbnprintf(vcbnprintf_callback_t put, void *cbarg,
+                      size_t size, const char *fmt, va_list argp)
 {
 	int c;
 	enum { LEFT, RIGHT } adjust;

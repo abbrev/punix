@@ -25,6 +25,7 @@
 
 #define EOF	(-1)
 
+#if 0
 /* modified from /usr/include/libio.h: */
 typedef struct {
 	int flags;
@@ -63,13 +64,25 @@ typedef struct {
 	_IO_lock_t *_lock;
 #endif
 } FILE;
+#else
+typedef struct FILE_t FILE;
+#endif
 
 extern FILE *stderr;
 extern FILE *stdin;
 extern FILE *stdout;
+
+// XXX
+FILE **_getstream(int);
+#define stdin  (*_getstream(0))
+#define stdout (*_getstream(1))
+#define stderr (*_getstream(2))
+
+#if 0
 #define stdin	stdin
 #define stdout	stdout
 #define stderr	stderr
+#endif
 
 typedef off_t	fpos_t;
 
@@ -99,14 +112,18 @@ off_t	ftello(FILE *__stream);
 size_t	fwrite(const void *__buf, size_t __size, size_t __nmemb,
 		FILE *__stream);
 int	getc(FILE *__stream);
+#define getc(s) fgetc(s)
 int	getchar(void);
+#define getchar() fgetc(stdin)
 char	*gets(char *__s);
 int	pclose(FILE *__stream);
 void	perror(const char *__s);
 FILE	*popen(const char *__command, const char *__type);
 int	printf(const char *__format, ...);
 int	putc(int __c, FILE *__stream);
+#define putc(c, s) fputc(c, s)
 int	putchar(int __c);
+#define putchar(c) fputc(c, stdout)
 int	puts(const char *__s);
 int	remove(const char *__path);
 int	rename(const char *__oldpath, const char *__newpath);

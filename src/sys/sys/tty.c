@@ -39,8 +39,9 @@ void ttyopen(dev_t dev, struct tty *tp)
 			tp->t_pgrp = P.p_pid;
 		P.p_pgrp = tp->t_pgrp;
 	}
-	qclear(&tp->t_rawq);
-	qclear(&tp->t_canq);
+	qinit(&tp->t_rawq.q, LOG2TTYQSIZE);
+	qinit(&tp->t_canq.q, LOG2TTYQSIZE);
+	qinit(&tp->t_outq.q, LOG2TTYQSIZE);
 }
 
 void ttychars(struct tty *tp)
@@ -62,8 +63,8 @@ void ttychars(struct tty *tp)
 void flushtty(struct tty *tp)
 {
 	/* FIXME */
-	qclear(&tp->t_rawq);
-	qclear(&tp->t_canq);
+	qclear(&tp->t_rawq.q);
+	qclear(&tp->t_canq.q);
 }
 
 void wflushtty(struct tty *tp)
@@ -138,16 +139,16 @@ void ttyread(struct tty *tp)
 	int ch;
 	int lflag = tp->t_lflag;
 	cc_t *cc = tp->t_termios.c_cc;
-	struct queue *qp;
+	queue *qp;
 	int havec = 0;
 	
-	qp = (lflag & ICANON) ? &tp->t_canq : &tp->t_rawq;
+	qp = (lflag & ICANON) ? &tp->t_canq.q : &tp->t_rawq.q;
 	
 loop:
 	/* TODO: also check for the tty closing */
 	spl1();  // inhibit soft interrupts
 	while (qisempty(qp)) {
-		slp(&tp->t_rawq, 1);
+		slp(&tp->t_rawq.q, 1);
 	}
 	spl0();
 	
@@ -155,7 +156,7 @@ loop:
 		if ((lflag & ICANON)) {
 			int numc = tp->t_numc;
 			tp->t_numc = !TTBREAKC(ch);
-			if (ch == cc[VEOF]) {
+			if (cc[VEOF] && ch == cc[VEOF]) {
 				//kprintf("numc=%d havec=%d\n", numc, havec);
 				if (numc && !havec) {
 					//kprintf("goto loop\n");
@@ -197,38 +198,31 @@ void ttywakeup(struct tty *tp)
 		pgsignal(tp->t_pgrp, SIGIO, 1);
 */
 	TRACE();
-	wakeup((void *)&tp->t_rawq);
+	wakeup((void *)&tp->t_rawq.q);
 }
 
 
 /* Following functions should be moved into some other file */
 
-#if 0
-struct queue {
-	unsigned long q_head, q_tail;
-	char q_buf[QSIZE];
-};
-#endif
-
 /* copy buffer to queue. return number of bytes copied */
 #if 1
-int b_to_q(char *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, queue *qp)
 {
 	int n = count;
-	unsigned long head = qp->q_head & QMASK;
-	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long head = qp->q_head & qp->q_mask;
+	unsigned long tail = qp->q_tail & qp->q_mask;
 	/* limit n to the free size of our queue */
 	if (n > qfree(qp))
 		n = qfree(qp);
 	if (n == 0)
 		return 0;
 	
-	if (head < tail || head + n <= QSIZE) {
+	if (head < tail || head + n <= qsize(qp)) {
 		/* easy case: one contiguous block */
 		memmove(qp->q_buf + head, bp, n);
 	} else {
 		/* split case: two separate blocks */
-		int y = QSIZE - head; /* upper block byte count */
+		int y = qsize(qp) - head; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
 		memmove(qp->q_buf + head, bp, y); /* copy upper block */
 		memmove(qp->q_buf, bp + y, z); /* copy lower block */
@@ -239,7 +233,7 @@ int b_to_q(char *bp, int count, struct queue *qp)
 }
 #else
 /* unoptimized version */
-int b_to_q(char *bp, int count, struct queue *qp)
+int b_to_q(char const *bp, int count, queue *qp)
 {
 	int n = count;
 	
@@ -253,10 +247,10 @@ int b_to_q(char *bp, int count, struct queue *qp)
 /* copy queue to buffer. return number of bytes copied */
 #if 1
 /* XXX: this has NOT been tested */
-int q_to_b(struct queue *qp, char *bp, int count)
+int q_to_b(queue *qp, char *bp, int count)
 {
 	int n = count;
-	unsigned long tail = qp->q_tail & QMASK;
+	unsigned long tail = qp->q_tail & qp->q_mask;
 	unsigned long used = qused(qp);
 	/* limit n to the used size of our queue */
 	if (n > used)
@@ -264,12 +258,12 @@ int q_to_b(struct queue *qp, char *bp, int count)
 	if (n == 0)
 		return 0;
 	
-	if (tail < (qp->q_head & QMASK) || tail + n <= QSIZE) {
+	if (tail < (qp->q_head & qp->q_mask) || tail + n <= qsize(qp)) {
 		/* single block */
 		memmove(bp, qp->q_buf + tail, n);
 	} else {
 		/* two blocks */
-		int y = QSIZE - tail; /* upper block byte count */
+		int y = qsize(qp) - tail; /* upper block byte count */
 		int z = n - y; /* lower block byte count */
 		memmove(bp, qp->q_buf + tail, y); /* copy upper block */
 		memmove(bp + y, qp->q_buf, z); /* copy lower block */
@@ -280,7 +274,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 }
 #else
 /* unoptimized version */
-int q_to_b(struct queue *qp, char *bp, int count)
+int q_to_b(queue *qp, char *bp, int count)
 {
 	int n = 0;
 	int ch;
@@ -296,7 +290,7 @@ int q_to_b(struct queue *qp, char *bp, int count)
 
 /* concatenate from queue 'from' to queue 'to' */
 /* TODO: this can also be optimized much as b_to_q and q_to_b can */
-void catq(struct queue *from, struct queue *to)
+void catq(queue *from, queue *to)
 {
 	int ch;
 	while ((ch = qgetc(from)) >= 0) {

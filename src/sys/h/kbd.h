@@ -1,13 +1,14 @@
 #ifndef _KBD_H_
 #define _KBD_H_
 
-#ifdef TI89
-#define KEY_NBR_ROW		 7	/* 10 for 92+/v200, 7 for 89 */
-#elif defined(TI92P)
-#define KEY_NBR_ROW		 10	/* 10 for 92+/v200, 7 for 89 */
+#if CALC_HAS_QWERTY_KBD
+#define KEY_NBR_ROW 10
+#define HELPKEYS_KEY (KEY_DIAMOND|'k')
 #else
-#error TI89 and TI92P are undefined!
+#define KEY_NBR_ROW 7
+#define HELPKEYS_KEY (KEY_DIAMOND|KEY_EE)
 #endif
+
 
 #if 0
 /* these keycodes are the same as ASCII */
@@ -107,11 +108,5 @@ enum {
 	KEY_ALPHA   = 0x8000,
 };
 
-
-#ifdef TI89
-#define HELPKEYS_KEY (KEY_DIAMOND|KEY_EE)
-#elif defined(TI92P)
-#define HELPKEYS_KEY (KEY_DIAMOND|'k')
-#endif
 
 #endif

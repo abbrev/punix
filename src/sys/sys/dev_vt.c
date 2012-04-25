@@ -147,41 +147,21 @@ static void transition(int ch, int newstate,
 
 static const struct glyphset glyphsets[] = {
 #ifdef SMALLGLYPHS
-{
 #include "glyphsets/small-upper.inc"
-},
-{
 #include "glyphsets/uk.inc"
-},
-{
 #include "glyphsets/small-us.inc"
-},
-{
 #include "glyphsets/sg.inc"
-},
 /* alt char ROM standard chars here */
-{
 /* alt char ROM special graphics (technical character set) */
 #include "glyphsets/tcs.inc" 
-},
 #else
-{
 #include "glyphsets/upper.inc"
-},
-{
 #include "glyphsets/uk.inc"
-},
-{
 #include "glyphsets/us.inc"
-},
-{
 #include "glyphsets/sg.inc"
-},
 /* alt char ROM standard chars here */
-{
 /* alt char ROM special graphics (technical character set) */
 #include "glyphsets/tcs.inc" 
-},
 #endif
 };
 
@@ -191,13 +171,14 @@ static void invertcursor(struct tty *tp)
 {
 	(void)tp;
 	xorcursor(G.vt.pos.row,
-	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column);
+	          G.vt.pos.column > MARGINRIGHT ? MARGINRIGHT : G.vt.pos.column,
+	          G.lcd.grayplanes[0] ? : LCD_MEM);
 }
 
 /* move screen contents up */
-extern void scrolldown(int n);
+extern void scrolldown(int n, void *lcd);
 /* move screen contents down */
-extern void scrollup(int n);
+extern void scrollup(int n, void *lcd);
 
 #if 1
 static void cursor(struct tty *tp)
@@ -217,11 +198,15 @@ static void scroll(struct tty *tp)
 	int rows;
 	if (G.vt.pos.row < 0) {
 		rows = -G.vt.pos.row;
-		scrollup(rows);
+		scrollup(rows, G.lcd.grayplanes[0] ? : LCD_MEM);
+		if (G.lcd.grayplanes[1])
+			scrollup(rows, G.lcd.grayplanes[1]);
 		G.vt.pos.row = 0;
 	} else if (G.vt.pos.row > MARGINBOTTOM) {
 		rows = G.vt.pos.row - MARGINBOTTOM;
-		scrolldown(rows);
+		scrolldown(rows, G.lcd.grayplanes[0] ? : LCD_MEM);
+		if (G.lcd.grayplanes[1])
+			scrolldown(rows, G.lcd.grayplanes[1]);
 		G.vt.pos.row = MARGINBOTTOM;
 	}
 }
@@ -332,9 +317,9 @@ static void defaultparams(int n, struct tty *tp)
 static void drawgl(struct glyph *glyph, int row, int col)
 {
 	if (G.vt.gr & GR_INVERSE)
-		drawglyphinv(glyph, row, col);
+		drawglyphinv(glyph, row, col, G.lcd.grayplanes[0] ? : LCD_MEM);
 	else
-		drawglyph(glyph, row, col);
+		drawglyph(glyph, row, col, G.lcd.grayplanes[0] ? : LCD_MEM);
 }
 
 static void print(int ch, struct tty *tp)
@@ -609,7 +594,9 @@ static void clearrows(int top, int bottom)
 {
 	int n = bottom - top + 1;
 	if (n <= 0) return;
-	memset(LCD_MEM+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
+	memset((G.lcd.grayplanes[0] ? : LCD_MEM)+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
+	if (G.lcd.grayplanes[1])
+		memset(G.lcd.grayplanes[1]+180*top, -!!(G.vt.gr & GR_INVERSE), 180*n);
 }
 
 static void csi_dispatch(int ch, struct tty *tp)
@@ -1195,7 +1182,7 @@ void vtinit()
 {
 	short *horline;
 	
-#ifdef TI92P
+#if CALC_HAS_LARGE_SCREEN
 	for (horline = (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS];
 	 horline < (short *)&LCD_MEM[LCD_INCY*6*NUMCELLROWS+LCD_INCY];
 	  ++horline)
@@ -1216,9 +1203,12 @@ void vtinit()
 	G.vt.bell = 0;
 	G.cpubusy = 1;
 	showstatus();
-	qclear(&G.vt.vt[0].t_rawq);
-	qclear(&G.vt.vt[0].t_canq);
-	qclear(&G.vt.vt[0].t_outq);
+	qinit(&G.vt.vt[0].t_rawq.q, LOG2TTYQSIZE);
+	qinit(&G.vt.vt[0].t_canq.q, LOG2TTYQSIZE);
+	qinit(&G.vt.vt[0].t_outq.q, LOG2TTYQSIZE);
+	kbinit();
+	kprintf("grayplanes[0]=%p\n", G.lcd.grayplanes[0]);
+	kprintf("grayplanes[1]=%p\n", G.lcd.grayplanes[1]);
 }
 
 /* FIXME: use the tty structure */
@@ -1250,10 +1240,11 @@ static void dovtoutput(int ch, struct tty *tp)
 
 static void vtoutput(int ch, struct tty *tp)
 {
+#if 1
 	int c;
 	int x = spl7();
 	if (G.vt.lock) {
-		qputc(ch, &tp->t_outq);
+		qputc(ch, &tp->t_outq.q);
 		splx(x);
 		return;
 	}
@@ -1262,17 +1253,20 @@ static void vtoutput(int ch, struct tty *tp)
 
 	dovtoutput(ch, tp);
 	x = spl7();
-	while ((c = qgetc(&tp->t_outq)) != -1) {
+	while ((c = qgetc(&tp->t_outq.q)) != -1) {
 		splx(x);
 		dovtoutput(c, tp);
 		x = spl7();
 	}
 	G.vt.lock = 0;
 	splx(x);
+#else
+	dovtoutput(ch, tp);
+#endif
 }
 
 /*
- * this version of ttyoutput bypasses the t_outq FIFO, handling
+ * this version of ttyoutput bypasses the t_outq.q FIFO, handling
  * all terminal output in the same context as the current process.
  */
 static void ttyoutput(int ch, struct tty *tp)
@@ -1387,44 +1381,46 @@ static void ttyinput(int ch, struct tty *tp)
 			ch = '\n';
 	} else if (ch == '\n' && iflag & INLCR)
 		ch = '\r';
-	if (ch == cc[VSTART]) {
-		if (tp->t_state & TTSTOP) {
-			tp->t_state &= ~TTSTOP;
-			/*ttstart(tp);*/
-		}
-		return;
-	}
-	if (ch == cc[VSTOP]) {
-		if (!(tp->t_state & TTSTOP)) {
-			tp->t_state |= TTSTOP;
-			/*cdevsw[MAJOR(tp->t_dev)].d_stop(tp);*/
-		}
-		return;
-	}
-	if (ch == cc[VSUSP]) {
-		ttyecho(ch, tp);
-		if (lflag & ECHO) {
-			ttyoutput('\n', tp);
-		}
-		if (lflag & ISIG) {
-			gsignal(tp->t_pgrp, SIGTSTP);
-			if (!(lflag & NOFLSH))
-				flushtty(tp);
+	if (ch != '\0') {
+		if (ch == cc[VSTART]) {
+			if (tp->t_state & TTSTOP) {
+				tp->t_state &= ~TTSTOP;
+				/*ttstart(tp);*/
+			}
 			return;
 		}
-	}
-	if (ch == cc[VINTR] || ch == cc[VQUIT]) {
-		ttyecho(ch, tp);
-		if (lflag & ECHO) {
-			ttyoutput('\n', tp);
-		}
-		if (lflag & ISIG) {
-			gsignal(tp->t_pgrp,
-				ch == cc[VQUIT] ? SIGQUIT : SIGINT);
-			gsignal(tp->t_pgrp, SIGCONT);
-			if (!(lflag & NOFLSH))
-				flushtty(tp);
+		if (ch == cc[VSTOP]) {
+			if (!(tp->t_state & TTSTOP)) {
+				tp->t_state |= TTSTOP;
+				/*cdevsw[MAJOR(tp->t_dev)].d_stop(tp);*/
+			}
 			return;
+		}
+		if (ch == cc[VSUSP]) {
+			ttyecho(ch, tp);
+			if (lflag & ECHO) {
+				ttyoutput('\n', tp);
+			}
+			if (lflag & ISIG) {
+				gsignal(tp->t_pgrp, SIGTSTP);
+				if (!(lflag & NOFLSH))
+					flushtty(tp);
+				return;
+			}
+		}
+		if (ch == cc[VINTR] || ch == cc[VQUIT]) {
+			ttyecho(ch, tp);
+			if (lflag & ECHO) {
+				ttyoutput('\n', tp);
+			}
+			if (lflag & ISIG) {
+				gsignal(tp->t_pgrp,
+					ch == cc[VQUIT] ? SIGQUIT : SIGINT);
+				gsignal(tp->t_pgrp, SIGCONT);
+				if (!(lflag & NOFLSH))
+					flushtty(tp);
+				return;
+			}
 		}
 	}
 	if (1 && (tp->t_state & TTSTOP)) {
@@ -1433,36 +1429,38 @@ static void ttyinput(int ch, struct tty *tp)
 	}
 
 	if (lflag & ICANON) {
+		if (ch == '\0') goto putchar;
 		if (ch == cc[VERASE]) {
-			if (!qisempty(&tp->t_rawq))
-				ttyrub(qunputc(&tp->t_rawq), tp);
+			if (!qisempty(&tp->t_rawq.q))
+				ttyrub(qunputc(&tp->t_rawq.q), tp);
 			goto endcase;
 		}
 		if (ch == cc[VKILL]) {
 #if 1
 			if ((lflag & ECHOKE) /* && ... */)
-				while (!qisempty(&tp->t_rawq))
-					ttyrub(qunputc(&tp->t_rawq), tp);
-			else {
+				while (!qisempty(&tp->t_rawq.q))
+					ttyrub(qunputc(&tp->t_rawq.q), tp);
+			else
 #endif
+			{
 				ttyecho(ch, tp);
 				if ((lflag & ECHOK) /*|| (lflag & ECHOKE)*/ )
 					ttyecho('\n', tp);
-				qclear(&tp->t_rawq); /* ??? */
+				qclear(&tp->t_rawq.q); /* ??? */
 				//tp->t_rocount = 0;
 			}
 			goto endcase;
 		}
 		if (ch == cc[VWERASE]) {
 			/* first erase whitespace */
-			while ((ch = qunputc(&tp->t_rawq)) == ' ' || ch == '\t')
+			while ((ch = qunputc(&tp->t_rawq.q)) == ' ' || ch == '\t')
 				ttyrub(ch, tp);
 			while (ch != -1 && ch != ' ' && ch != '\t') {
 				ttyrub(ch, tp);
-				ch = qunputc(&tp->t_rawq);
+				ch = qunputc(&tp->t_rawq.q);
 			}
 			if (ch != -1)
-				qputc(ch, &tp->t_rawq);
+				qputc(ch, &tp->t_rawq.q);
 			goto endcase;
 		}
 		if (lflag & IEXTEN) {
@@ -1480,15 +1478,16 @@ static void ttyinput(int ch, struct tty *tp)
 #endif
 		}
 
+putchar:
 		/*
 		 * put the character on the character queue
 		 */
 		TRACE();
 		if (TTBREAKC(ch) ||
 		    !(iflag & IMAXBEL) ||
-		    (qused(&tp->t_rawq) + 1) < qfree(&tp->t_canq)) {
+		    (qused(&tp->t_rawq.q) + 1) < qfree(&tp->t_canq.q)) {
 		TRACE();
-			if (qputc(ch, &tp->t_rawq) < 0) {
+			if (qputc(ch, &tp->t_rawq.q) < 0) {
 				flushtty(tp);
 				return;
 			}
@@ -1499,7 +1498,7 @@ static void ttyinput(int ch, struct tty *tp)
 		TRACE();
 		if (TTBREAKC(ch)) {
 			//tp->t_rocount = 0;
-			catq(&tp->t_rawq, &tp->t_canq);
+			catq(&tp->t_rawq.q, &tp->t_canq.q);
 			defer(ttywakeup, tp);
 		} /*else if (tp->t_rocount++ == 0)
 			tp->t_rocol = tp->t_column;*/
@@ -1525,12 +1524,12 @@ static void ttyinput(int ch, struct tty *tp)
 #endif
 /*
 		if (ch == cc[VEOL] || ch == cc[VEOF]) {
-			catq(&tp->t_rawq, &tp->t_canq);
+			catq(&tp->t_rawq.q, &tp->t_canq.q);
 			defer(ttywakeup, tp);
 		}
 */
 	} else {
-		if (qputc(ch, &tp->t_rawq) < 0) {
+		if (qputc(ch, &tp->t_rawq.q) < 0) {
 			flushtty(tp);
 			return;
 		}

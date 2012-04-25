@@ -5,16 +5,17 @@
 #include <signal.h>
 #include <sys/resource.h>
 
-#define WIFEXITED(s)   (WTERMSIG(s) == 0)
-#define WEXITSTATUS(s) (((s) & 0xff00) >> 8)
+#define WIFEXITED(s)     (((s) & 0xff) == 0x00)
+#define WEXITSTATUS(s)   (((s) >> 8) & 0xff)
 
-#define WIFSIGNALED(s) (((signed char) (((s) & 0x7f) + 1) & ~1) > 0)
-#define WTERMSIG(s)    ((s) & 0x7f)
+#define WIFSIGNALED(s)   (((s) & 0x7f) == 0x01)
+#define WTERMSIG(s)      WEXITSTATUS(s)
+#define WCOREDUMP(s)     ((s) & 0x80) /* not in POSIX */
 
-#define WIFSTOPPED(s)  (((s) & 0xff) == 0x7f)
-#define WSTOPSIG(s)    WTERMSIG(s)
+#define WIFSTOPPED(s)    (((s) & 0xff) == 0x02)
+#define WSTOPSIG(s)      WEXITSTATUS(s)
 
-#define WIFCONTINUED(s)     ((s) == 0xff)
+#define WIFCONTINUED(s)  (((s) & 0xff) == 0x03)
 
 /* flags for "options" argument */
 #define WNOHANG    001

@@ -1,11 +1,13 @@
 bytes in status returned by wait*() routines (these are set in the appropriate
 places, eg, in stop(), exit(), psig(), etc)
 
-exit normally:
-	[ signal ] [ exit status ] // signal == 0
-killed by signal:
-	[ signal ] [ exit status ] // exit status == 0
-stop by signal:
-	[ signal ] [ 0x7f ]
-continued:
-	[ 0xff ] [ 0xff ]
+format:
+	[ exit status ] [C] [ type ]
+	exit status/signal (8 bits)
+	core dumped (1 bit)
+	type (7 bits):
+	  0 = exit normally
+	  1 = terminated by signal
+	  2 = stopped by signal
+	  3 = continued
+

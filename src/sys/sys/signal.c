@@ -78,11 +78,17 @@ static const char sigprop[NSIG + 1] = {
 #undef S
 #undef C
 
-STARTUP(void stop(struct proc *p))
+STARTUP(static void stop(struct proc *p, int sig))
 {
 	sched_stop(p);
 	p->p_flag &= ~P_WAITED;
-	wakeup(p->p_pptr);
+	p->p_waitstat = W_STOPCODE(sig);
+#if 0
+	if (p->p_pptr) {
+		procsignal(p->p_pptr, SIGCHLD);
+		//wakeup(p->p_pptr);
+	}
+#endif
 }
 
 STARTUP(int CURSIG(struct proc *p))
@@ -96,7 +102,7 @@ STARTUP(int CURSIG(struct proc *p))
 	}
 }
 
-STARTUP(int cansignal(struct proc *p, int signum))
+STARTUP(int cansignal(struct proc const *p, int signum))
 {
 	if (P.p_euid == 0 ||           /* c effective root */
 	    P.p_ruid == p->p_ruid ||   /* c real = t real */
@@ -155,9 +161,11 @@ STARTUP(void procsignal(struct proc *p, int sig))
 		}
 	}
 	
+#if 0
 	if (p->p_nice > NZERO && action == SIG_DFL && (prop & SA_KILL)
 	    && (p->p_flag & P_TRACED) == 0)
 		p->p_nice = NZERO;
+#endif
 	
 	if (prop & SA_CONT)
 		p->p_signals.sig_pending &= ~STOPSIGMASK;
@@ -195,7 +203,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 			p->p_ptracesig = sig;
 			if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
 				procsignal(p->p_pptr, SIGCHLD);
-			stop(p);
+			stop(p, sig);
 			goto out;
 		}
 		goto run;
@@ -229,6 +237,7 @@ run:
 	//if (p->p_pri > PUSER)
 		//p->p_pri = PUSER;
 	//kprintf("procsignal(): gonna run setrun()\n");
+	TRACE();
 	setrun(p);
 out:
 	splx(s);
@@ -275,7 +284,7 @@ STARTUP(int issignal(struct proc *p))
 			p->p_ptracesig = sig;
 			procsignal(p->p_pptr, SIGCHLD);
 			do {
-				stop(p);
+				stop(p, sig);
 				swtch();
 			} while (!procxmt() && p->p_flag & P_TRACED);
 			
@@ -317,7 +326,7 @@ STARTUP(int issignal(struct proc *p))
 					p->p_ptracesig = sig;
 					if (!(p->p_pptr->p_flag & P_NOCLDSTOP))
 						procsignal(p->p_pptr, SIGCHLD);
-					stop(p);
+					stop(p, sig);
 					swtch();
 				}
 			} else if (prop & SA_IGNORE) {

@@ -1,16 +1,21 @@
+#ifndef _GLOBALS_H_
+#define _GLOBALS_H_
+
 #include <termios.h>
 #include <setjmp.h>
 
+#include "heap.h"
 #include "flash.h"
 #include "callout.h"
 #include "queue.h"
 #include "inode.h"
 #include "tty.h"
-#include "heap.h"
 #include "buf.h"
 #include "kbd.h"
 #include "glyph.h"
 #include "sched.h"
+#include "audio.h"
+#include "link.h"
 
 struct globals {
 	long seconds; /* XXX: see entry.s */
@@ -18,7 +23,7 @@ struct globals {
 	
 	/* all RAM below here can (should) be cleared on boot. see start.s */
 	char exec_ram[60]; /* XXX: see flash.s */
-	char fpram[8*12+3*4]; /* XXX: see fpuem.s */
+	char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
 	int onkey; /* set to 1 when ON key is pressed. see entry.s */
 	int powerstate; /* set to 1 when power is off. see entry.s */
 	/*
@@ -63,23 +68,25 @@ struct globals {
 
 	struct {
 		unsigned char samp; /* current samples */
-		int samples; /* number of samples within that byte */
+		char samples; /* number of samples within that byte */
 		int lowat; /* low water level in audio queue */
 		int play; /* flag to indicate if audio should play */
 		long long optr;
 		
 		/* we should probably use a more efficient
 		 * structure than a queue for audio */
-		struct queue q;
+		QUEUE(LOG2AUDIOQSIZE) q;
 	} audio;
 	
 	struct {
 		int lowat, hiwat;
-		struct queue readq, writeq;
+		QUEUE(LOG2LINKQSIZE) readq, writeq;
+
 		char control;
-		int readoverflow;
-		int open;
-		int rxtx;
+		char readoverflow;
+		char open;
+		char rxtx;
+		char iserror;
 	} link;
 	
 	/* seed for the pseudo-random number generator */
@@ -94,7 +101,6 @@ struct globals {
 	
 	dev_t rootdev, pipedev;
 	
-	char canonb[CANBSIZ];
 	uid_t mpid;
 	unsigned int pidchecked;
 	struct callout callout[NCALL];
@@ -142,6 +148,7 @@ struct globals {
 		
 		char key_array[KEY_NBR_ROW];
 		short key_mod, key_mod_sticky;
+		short on_key;
 		short key_compose;
 		unsigned char caps_lock;
 		union {
@@ -159,6 +166,15 @@ struct globals {
 		int scroll_lock;
 		int bell;
 	} vt;
+	struct {
+		int third;
+		int planeindex;
+		int fs;
+		void *currentplane;
+		void *grayplanes[2];
+		void *planes[3];
+		int grayinitialized;
+	} lcd;
 	int cpubusy;
 	
 	int batt_level;
@@ -195,3 +211,5 @@ extern int updlock;
 #define uptime   G._uptime
 
 # endif
+
+#endif

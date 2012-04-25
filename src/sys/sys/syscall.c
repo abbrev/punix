@@ -86,27 +86,35 @@ again:
 	
 	if (setjmp(P.p_sigjmp)) {
 		/* we get here if a signal arrives during the system call */
-		if (P.p_error == 0)
+		if (P.p_error == 0) {
+			kprintf("warning: syscall interrupted by a signal but p_error=0!\n");
 			P.p_error = EINTR;
+		}
 	} else {
 		callp->sy_call();
 	}
 	
-	if (P.p_error) {
-		if (P.p_error == ERESTART) {
-			if (callp->sy_flags & SA_RESTART) {
-				goto again;
-			} else {
-				P.p_error = EINTR;
-			}
+	if (P.p_error == ERESTART) {
+		if (callp->sy_flags & SA_RESTART) {
+			/*
+			 * move the user PC backwards so it
+			 * points to the trap instruction.
+			 */
+			retval = callno; // %d0 = callno
+			ctx->pc -= 2; // XXX constant
+		} else {
+			P.p_error = EINTR;
 		}
-		/* return the error */
-		ctx->sr |= PS_C; /* set carry */
-		retval = P.p_error;
-	} else {
+	}
+
+	if (P.p_error == 0) {
 		/* no error */
 		ctx->sr &= ~PS_C; /* clear carry */
 		retval = P.p_retval;
+	} else if (P.p_error != ERESTART) {
+		/* return the error */
+		ctx->sr |= PS_C; /* set carry */
+		retval = P.p_error;
 	}
 	
 	/* another process has a higher priority than us */

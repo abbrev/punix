@@ -1,4 +1,4 @@
-.section _st1, "x"
+.section .text, "x"
 
 | NB: cpuidle() works on both the TI-89 and TI-92+, but it doesn't power off
 | the FlashROM on the 92+
@@ -98,10 +98,21 @@ stacktrace:
 	rts
 
 G = 0x5c00
+
+| long seconds; /* XXX: see entry.s */
+| struct timespec _realtime;
+| 
+| /* all RAM below here can (should) be cleared on boot. see start.s */
+| char exec_ram[60]; /* XXX: see flash.s */
+| char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
+| int onkey; /* set to 1 when ON key is pressed. see entry.s */
+| int powerstate; /* set to 1 when power is off. see entry.s */
+
 seconds = G+0
 realtime = G+4
-onkey = G+180 | see globals.h
-powerstate = G+182 | see globals.h
+onkey = G+4+8+60+9*16+5*4
+powerstate = onkey+2
+
 
 | power off the CPU and LCD, and maintain the realtime clock.
 | wake on int 6 (ON key), int 4 (link activity), and int 3 (1 Hz clock)
@@ -114,20 +125,32 @@ cpupoweroff:
 	sub.l	seconds,%d2
 	move	%d0,%sr
 	
-	lea.l	0x60001c,%a0
-	move.b	(%a0),%d1
-	move.b	#0x3c,(%a0)	| shut off LCD
-	
 	clr	onkey
 	move	#1,powerstate
 	
+	| turn off LCD
+	lea.l	0x600000,%a0
+	lea.l	0x700000,%a1
+	move.b	#0b00111100,0x1c(%a0)	| 0x60001c turn off row sync
+	bset.b	#4,0x1d(%a0)		| 0x60001d disable screen (hw1)
+	bclr.b	#1,0x1d(%a1)		| 0x70001d shut down LCD (hw2)
+	| LCD is off!
+
 0:	move.b	#0x0c,0x600005	| bit 3 => int 4, bit 2 => int 3
 	tst	onkey
 	beq	0b
 	
+	| turn screen back on
+	bset.b	#1,0x1d(%a1)
+	bclr.b	#4,0x1d(%a0)
+	move.b	#0b00100001,0x1c(%a0)
+	movem	%d0/%d2,-(%sp)
+	jbsr	lcd_reset_contrast	| contrast was reset when 0x60001d was modified
+	movem	(%sp)+,%d0/%d2
+	| LCD should be back on!
+
+
 	clr	powerstate
-	
-	move.b  %d1,(%a0)	| turn on LCD
 	
 	move	#0x2700,%sr
 	add.l	seconds,%d2
@@ -154,7 +177,7 @@ unlock:
 	rts
 
 | masklock:
-| 1 byte atomic lock
+| 2 byte atomic lock
 
 | void initmask(masklock *lockp);
 .global initmask
@@ -195,3 +218,75 @@ setmask:
 	move.w	8(%sp),(%a0)
 	rts
 */
+
+.include "lcd.inc"
+
+.global copythird
+| void copythird(void *plane, int offset)
+copythird:
+	move.l	(4,%sp),%a0	| plane
+	move	(8,%sp),%d0	| offset
+	move.l	#LCD_MEM,%a1
+	add	%d0,%a0
+	add	%d0,%a1
+	movem.l	%d2-%d7/%a2-%a6,-(%sp)
+	move	%sr,%d0
+	move	%d0,-(%sp)
+	|move	#0x2700,%sr
+
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6	| move 52 bytes
+	movem.l	%d0-%d7/%a2-%a6,(%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(52,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(104,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(156,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(208,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(260,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(312,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(364,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(416,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(468,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(520,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(572,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(624,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(676,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(728,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(780,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(832,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(884,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(936,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(988,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1040,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1092,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1144,%a1)
+	movem.l	(%a0)+,%d0-%d7/%a2-%a6
+	movem.l	%d0-%d7/%a2-%a6,(1196,%a1)
+	movem.l	(%a0)+,%d0-%d7
+	movem.l	%d0-%d7,(1248,%a1)
+
+	move	(%sp)+,%d0
+	move	%d0,%sr
+	movem.l	(%sp)+,%d2-%d7/%a2-%a6
+	rts
+

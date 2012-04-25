@@ -76,6 +76,8 @@ static const struct exception_signal exception_signals[] = {
 
 #define SIZEOF_SIGNALS (sizeof(exception_signals) / sizeof(exception_signals[0]))
 
+#define ALWAYS_PRINT_EXCEPTIONS 1
+
 STARTUP(void handle_exception(union exception_info *eip, int num))
 {
 	const struct exception_signal *esp;
@@ -85,8 +87,8 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 
 	esp = &exception_signals[num];
 	if (esp->type == EX_BUS) {
-		sr = eip->bus_error.status_register;
-		if (!USERMODE(sr)) {
+		sr = 0; //eip->bus_error.status_register;
+		if (ALWAYS_PRINT_EXCEPTIONS || !USERMODE(sr)) {
 			kprintf("%s exception\n"
 			        "       function code: 0x%04x\n"
 				"      access address: %p\n"
@@ -104,7 +106,7 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 		}
 	} else {
 		sr = eip->other.status_register;
-		if (!USERMODE(sr)) {
+		if (ALWAYS_PRINT_EXCEPTIONS || !USERMODE(sr)) {
 			kprintf("%s exception\n"
 			        "     status register: 0x%04x\n"
 				"     program counter: %p\n"
@@ -143,10 +145,13 @@ STARTUP(void hardclock(unsigned short ps))
 	int whereami;
 	long nsec = TICK;
 	
-	splclock();
+	//splclock(); // this is pointless
 	
 	whereami = G.whereami;
 	++G.ticks;
+
+	extern void updategray();
+	updategray();
 
 	if (current && ++G.spin >= 2) {
 		unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-7*30+whereami*4);
@@ -193,6 +198,8 @@ STARTUP(void hardclock(unsigned short ps))
 		    !itimerdecr(&P.p_itimer[ITIMER_PROF], TICK))
 			procsignal(current, SIGPROF);
 		++current->p_cputime;
+	} else {
+		++*(long *)(0x4c00+0xf00-30*2+4);
 	}
 
 	if (USERMODE(ps)) {
@@ -209,10 +216,23 @@ STARTUP(void hardclock(unsigned short ps))
 	if (G.callout[0].c_func)
 		--G.callout[0].c_dtime;
 	
-	scankb();
+	//scankb();
 }
 
-void calcusage(void *unused)
+/*
+ * XXX: Currently this calculates an exponential moving average of a process's
+ * cpu usage. It might be more desirable to calculate the linear moving average
+ * instead, as follows:
+ * * keep track of a process's cpu usage for the last several time units in a
+ *   small array (in struct proc). a char array could be used.
+ * * also maintain the current sum of the array
+ * * each time this routine runs, subtract the "head" value from the sum and
+ *   add the p_cputime to the sum
+ * * write the p_cputime to the head of the array and clear p_cputime
+ * * this will maintain the numerator of the average with O(1) complexity
+ * * divide the numerator (sum) by a fixed denominator, ideally a power of 2
+ */
+void calcusage(const void *unused)
 {
 #define CPUTICKS (HZ/2)
 #define DECAY_NUM 3
@@ -315,6 +335,8 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 
 	if (!USERMODE(ps))
 		return;
+
+	G.whereami = WHEREAMI_USER;
 
 	/* preempt a running user process */
 	if (G.need_resched)

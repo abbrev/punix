@@ -13,10 +13,10 @@ STARTUP(int lcd_set_contrast(int cont))
 		cont = 0;
 	else if (CONTRASTMAX < cont)
 		cont = CONTRASTMAX;
-#ifdef TI89
-	ch = CONTRAST_VMUL | cont;
-#else
+#if CALC_HAS_LARGE_SCREEN
 	ch = CONTRAST_VMUL | ~cont;
+#else
+	ch = CONTRAST_VMUL | cont;
 #endif
 	CONTRASTPORT = ch;
 	G.contrast = cont;
@@ -31,6 +31,11 @@ STARTUP(int lcd_inc_contrast())
 STARTUP(int lcd_dec_contrast())
 {
 	return lcd_set_contrast(G.contrast-1);
+}
+
+STARTUP(int lcd_reset_contrast())
+{
+	return lcd_set_contrast(G.contrast);
 }
 
 STARTUP(void lcdinit())

@@ -20,7 +20,7 @@
 #define MS_TO_TICKS(t) (((long)(t) * HZ + 500) / 1000)
 
 /* RR_INTERVAL is the round-robin interval in milliseconds */
-#define RR_INTERVAL (1000L) //(1000L*16/HZ)
+#define RR_INTERVAL (20L) //(1000L*16/HZ)
 /* TIME_SLICE is the same as RR_INTERVAL but measured in ticks */
 #define TIME_SLICE MS_TO_TICKS(RR_INTERVAL)
 
@@ -62,30 +62,35 @@ static struct proc *earliest_deadline_proc(void)
 	int idx = NORMAL_PRIO;
 	struct list_head *queue;
 	
-tryqueue:
-	queue = &G.runqueues[idx];
-	list_for_each_entry(procp, queue, p_runlist) {
-		//kprintf(".");
-		if (idx < MAX_RT_PRIO) {
-			earliest_procp = procp;
-			goto out;
+	do {
+		queue = &G.runqueues[idx];
+		list_for_each_entry(procp, queue, p_runlist) {
+			//kprintf(".");
+			if (idx < MAX_RT_PRIO) {
+				earliest_procp = procp;
+				goto out;
+			}
+			
+			dl = procp->p_deadline;
+#if 0
+			// select a process immediately if its deadline is past
+			if (time_before(dl, G.ticks)) {
+				earliest_procp = procp;
+				goto out;
+			}
+#endif
+			if (earliest_procp == NULL ||
+			    time_before(dl, earliest_deadline)) {
+				earliest_procp = procp;
+				earliest_deadline = dl;
+			}
 		}
-		
-		dl = procp->p_deadline;
-		if (time_before(dl, G.ticks)) {
-			earliest_procp = procp;
-			goto out;
-		}
-		if (earliest_procp == NULL ||
-		    time_before(dl, earliest_deadline)) {
-			earliest_procp = procp;
-			earliest_deadline = dl;
-		}
-	}
-	if (!earliest_procp && ++idx < PRIO_LIMIT)
-		goto tryqueue;
+	} while (!earliest_procp && ++idx < PRIO_LIMIT);
 	
 out:
+	if (!earliest_procp) {
+		++*(long *)(0x4c00+0xf00-30*2);
+	}
 	return earliest_procp;
 }
 
@@ -115,9 +120,9 @@ STARTUP(void swtch())
 			current->p_deadline += longest_deadline_offset();
 	}
 	
-	G.cpubusy = 0;
-	showstatus();
 	while (!(p = earliest_deadline_proc())) {
+		G.cpubusy = 0;
+		showstatus();
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
 		setmask(&G.calloutlock, 0);
@@ -168,9 +173,10 @@ void sched_tick(void)
 
 #if 1
 /* set the state of the process to 'state' */
-static void set_state(struct proc *p, int state)
+static void set_state(struct proc *p, const int state)
 {
 	if (state == p->p_status) return;
+	mask(&G.calloutlock);
 	if (state == P_RUNNING) {
 		++G.numrunning;
 		/* preempt the current process */
@@ -185,10 +191,11 @@ static void set_state(struct proc *p, int state)
 			--G.numrunning;
 			list_del(&p->p_runlist);
 		} else {
-			kprintf("set_state from not P_RUNNING to another not P_RUNNING\n");
+			//kprintf("set_state from not P_RUNNING to another not P_RUNNING\n");
 		}
 	}
 	p->p_status = state;
+	unmask(&G.calloutlock);
 	/* TODO: anything else? */
 }
 #endif
@@ -198,10 +205,12 @@ void sched_run(struct proc *p)
 {
 	mask(&G.calloutlock);
 	//kprintf("sched_run()\n");
+#if 0
 	if (p->p_status == P_RUNNING) {
 		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
 		panic("trying to run an already running process");
 	}
+#endif
 	if (p->p_status == P_ZOMBIE)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
@@ -235,6 +244,7 @@ void sched_fork(struct proc *childp)
 	childp->p_time_slice = half;
 	current->p_time_slice -= half;
 	childp->p_first_time_slice = 1;
+	//current->p_deadline = G.ticks + prio_deadline_offset(current->p_nice);
 	set_state(childp, P_RUNNING);
 	unmask(&G.calloutlock);
 }
@@ -248,7 +258,7 @@ void sched_exit(struct proc *p)
 {
 	mask(&G.calloutlock);
 	//kprintf("sched_exit(%08lx)\n", p);
-	if (p->p_first_time_slice) {
+	if (p->p_first_time_slice && p->p_pptr) {
 		p->p_pptr->p_time_slice += p->p_time_slice;
 	}
 	set_state(p, P_ZOMBIE);
@@ -265,7 +275,7 @@ int sched_get_scheduler(struct proc *procp)
 }
 #endif
 
-int sched_get_nice(struct proc *p)
+int sched_get_nice(const struct proc *p)
 {
 	return p->p_nice;
 }

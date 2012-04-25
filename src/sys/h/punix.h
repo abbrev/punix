@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include "list.h"
 #include "proc.h"
+#include "calc.h"
 
 #if 0
 #define OS_NAME	"Punix"
@@ -17,7 +18,7 @@ extern int badbuffer(void *base, size_t size);
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
 
-#define TRACE2(f, l) do { *(long *)(0x4c00+0xf00-22) = f " (" STRING(l) ")"; } while (0)
+#define TRACE2(f, l) do { *(long *)(0x4c00+0xf00-22) = (long)(f " (" STRING(l) ")"); } while (0)
 #define TRACE() TRACE2(__FILE__, __LINE__)
 
 /*
@@ -47,7 +48,8 @@ extern int badbuffer(void *base, size_t size);
  *
  * mask() can be nested up to 65535 times (which should be more than enough).
  */
-typedef volatile int masklock;
+typedef int masklock;
+void initmask(masklock *lockp);
 masklock mask(masklock *);
 void unmask(masklock *);
 void setmask(masklock *, masklock v);
@@ -137,8 +139,6 @@ static inline int spl(int x)
 #define spl7() spl(7)
 #define splclock() spl1()
 
-void stop(struct proc *);
-
 void panic(const char *s);
 void warn(const char *s, long value);
 
@@ -149,7 +149,9 @@ int cpass();
 
 int kprintf(const char *, ...);
 
-int inferior(struct proc *);
+int inferior(struct proc const *);
 struct proc *pfind(int pid);
+
+void cpuidle(void);
 
 #endif /* _SYS_PUNIX_H_ */

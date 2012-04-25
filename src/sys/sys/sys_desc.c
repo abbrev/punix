@@ -122,11 +122,12 @@ STARTUP(static void rdwr(int mode, int whichoffset))
 	if (setjmp(P.p_sigjmp)) {
 		n = ap->count - P.p_count;
 		if (n == 0) {
-			P.p_error = EINTR;
+			//P.p_error = EINTR;
+			return;
 		} else {
-			P.p_retval = n;
+			P.p_error = 0;
+			goto out;
 		}
-		return;
 	}
 	
 	offset = (whichoffset == OFFSET_FILE) ? &fp->f_offset : &ap->offset;
@@ -148,6 +149,7 @@ STARTUP(static void rdwr(int mode, int whichoffset))
 		n = fp->f_ops->write(fp, ap->buf, ap->count, offset);
 	}
 
+out:
 	P.p_retval = n;
 }
 

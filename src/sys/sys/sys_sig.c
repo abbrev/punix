@@ -123,7 +123,7 @@ STARTUP(void sys_sigaction())
 		SETFLAG(restart, SA_RESTART);
 		SETFLAG(siginfo, SA_SIGINFO);
 #undef SETFLAG
-		P.p_error = copyout(ap->act, &sa, sizeof(sa));
+		P.p_error = copyout(ap->oldact, &sa, sizeof(sa));
 		if (P.p_error)
 			return;
 	}

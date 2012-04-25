@@ -19,15 +19,7 @@
 #define DEL 127
 
 static const short Translate_Key_Table[][8] = {
-#ifdef TI89
-	{ KEY_UP,KEY_LEFT,KEY_DOWN,KEY_RIGHT,KEY_2ND,KEY_SHIFT,KEY_DIAMOND,KEY_ALPHA, },
-	{  CR,'+','-','*','/','^',KEY_CLEAR,KEY_F5, },
-	{ KEY_SIGN,'3','6','9',',','t',DEL,KEY_F4, },
-	{ '.','2','5','8',')','z',KEY_CATALOG,KEY_F3, },
-	{ '0','1','4','7','(','y',KEY_MODE,KEY_F2, },
-	{ KEY_APPS,TAB,KEY_EE,'|','=','x',KEY_HOME,KEY_F1, },
-	{ ESC,  0,  0,  0,  0,  0,  0,  0, },
-#else
+#if CALC_HAS_QWERTY_KBD
 	{ KEY_2ND,KEY_DIAMOND,KEY_SHIFT,KEY_HAND,KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN, },
 	{   0,'z','s','w',KEY_F8,'1','2','3', },
 	{   0,'x','d','e',KEY_F3,'4','5','6', },
@@ -38,6 +30,14 @@ static const short Translate_Key_Table[][8] = {
 	{ '=','m','k','i',KEY_F5,KEY_CLEAR,KEY_APPS,'*', },
 	{ DEL,KEY_THETA,'l','o','+',KEY_MODE,ESC,  0, },
 	{ '-', CR,'a','q',KEY_F4,'0','.',KEY_SIGN, },
+#else
+	{ KEY_UP,KEY_LEFT,KEY_DOWN,KEY_RIGHT,KEY_2ND,KEY_SHIFT,KEY_DIAMOND,KEY_ALPHA, },
+	{  CR,'+','-','*','/','^',KEY_CLEAR,KEY_F5, },
+	{ KEY_SIGN,'3','6','9',',','t',DEL,KEY_F4, },
+	{ '.','2','5','8',')','z',KEY_CATALOG,KEY_F3, },
+	{ '0','1','4','7','(','y',KEY_MODE,KEY_F2, },
+	{ KEY_APPS,TAB,KEY_EE,'|','=','x',KEY_HOME,KEY_F1, },
+	{ ESC,  0,  0,  0,  0,  0,  0,  0, },
 #endif
 };
 
@@ -78,7 +78,7 @@ static const struct translate Translate_2nd[] = {
 	{ KEY_UP, KEY_PGUP },
 	{ KEY_DOWN, KEY_PGDOWN },
 
-#ifdef TI92P
+#if CALC_HAS_QWERTY_KBD
 	{ 'q','?' },
 	{ 'w','!' },
 	{ 'e',0xe9 }, /* e' */
@@ -150,7 +150,11 @@ static const struct translate Translate_2nd[] = {
 	{ 0, 0 }
 };
 
-#ifdef TI89
+#if CALC_HAS_QWERTY_KBD
+static const struct translate Translate_hand[] = {
+	{ 0, 0 },
+};
+#else
 static const struct translate Translate_alpha[] = {
 	{ '=', 'a' },
 	{ '(', 'b' },
@@ -175,10 +179,6 @@ static const struct translate Translate_alpha[] = {
 	{ '0', 'v' },
 	{ '.', 'w' },
 	{ KEY_SIGN, ' ' },
-	{ 0, 0 },
-};
-#else
-static const struct translate Translate_hand[] = {
 	{ 0, 0 },
 };
 #endif
@@ -376,9 +376,9 @@ static short compose(short key)
 
 /* The status bitmaps and drawmod()/showstatus() are kind of a hack. It would be
  * nice if they were rewritten (but not essential since it works as it is) */
-#ifdef TI92P
-#define STATUSROWS 8
-static const unsigned short status[][4] = {
+#if CALC_HAS_LARGE_SCREEN
+#define STATUSROWS 7
+static const unsigned char status[][STATUSROWS] = {
 #include "glyphsets/status-none.inc"
 #include "glyphsets/status-2nd.inc"
 #include "glyphsets/status-diamond.inc"
@@ -403,7 +403,7 @@ static const unsigned short status[][4] = {
 };
 #else
 #define STATUSROWS 4
-static const unsigned short status[][2] = {
+static const unsigned char status[][STATUSROWS] = {
 #include "glyphsets/status-none-89.inc"
 #include "glyphsets/status-2nd-89.inc"
 #include "glyphsets/status-diamond-89.inc"
@@ -432,7 +432,7 @@ static const unsigned short status[][2] = {
 #define STATUS_2ND         1
 #define STATUS_DIAMOND     2
 #define STATUS_SHIFT       3
-#ifdef TI92P
+#if CALC_HAS_QWERTY_KBD
 #define STATUS_HAND        4
 #define STATUS_HANDLOCK    5
 #else
@@ -456,10 +456,10 @@ static const unsigned short status[][2] = {
 #define STATUS_LINK3      20
 #define STATUS_LAST       20
 
-#ifdef TI92P
-#define MODBASE ((char *)(LCD_MEM+0xf00-7*30-1))
+#if CALC_HAS_LARGE_SCREEN
+#define MODBASE ((char *)((G.lcd.grayplanes[0]?:LCD_MEM)+0xf00-6*30-1))
 #else
-#define MODBASE ((char *)(LCD_MEM+6*NUMCELLROWS*LCD_INCY+19))
+#define MODBASE ((char *)((G.lcd.grayplanes[0]?:LCD_MEM)+6*NUMCELLROWS*LCD_INCY+19))
 #endif
 
 static void drawmod(int pos, int m)
@@ -473,10 +473,8 @@ static void drawmod(int pos, int m)
 	//kprintf("drawmod(%d, %d)\n", pos, m);
 	s = MODBASE - pos;
 	d = (char *)&status[m][0];
-	for (i = 0; i < STATUSROWS; ++i) {
-		*s = *d;
-		s+=30;
-		++d;
+	for (i = 0; i < STATUSROWS; ++i, s += 30) {
+		*s = *d++;
 	}
 }
 
@@ -500,7 +498,7 @@ void showstatus(void)
 	drawmod(3, mod & KEY_DIAMOND ? STATUS_DIAMOND : STATUS_NONE);
 	drawmod(4, mod & KEY_SHIFT ? STATUS_SHIFT : STATUS_NONE);
 	drawmod(5, G.vt.caps_lock ? STATUS_CAPSLOCK : STATUS_NONE);
-#ifdef TI92P
+#if CALC_HAS_QWERTY_KBD
 	drawmod(6, G.vt.hand_lock ? STATUS_HANDLOCK :
 	           mod & KEY_HAND ? STATUS_HAND : STATUS_NONE);
 #else
@@ -539,17 +537,39 @@ static void addkey(unsigned short key)
 	unsigned short mod;
 	short k;
 	
+	if (key == KEY_APPS) {
+#if 0
+		int i;
+		kprintf("\n");
+		for (i = 0; G.callout[i].c_func; ++i) {
+			struct callout *cp = &G.callout[i];
+			kprintf("%2d: dtime=%-6ld func=%p arg=%p\n",
+			        i, cp->c_dtime, cp->c_func, cp->c_arg);
+		}
+
+		
+#elif 1
+		printheaplist();
+#endif
+		return;
+	}
+
 	mod = G.vt.key_mod | G.vt.key_mod_sticky;
+
+	if ((mod & (KEY_2ND|KEY_DIAMOND)) && key == KEY_ON) {
+		cpupoweroff();
+		goto end;
+	}
 	
 	/* translate alpha and hand first */
-#ifdef TI89
-	if (!!(mod & KEY_ALPHA) ^ G.vt.alpha_lock) {
-		k = translate(key, Translate_alpha);
+#if CALC_HAS_QWERTY_KBD
+	if (!!(mod & KEY_HAND) ^ G.vt.hand_lock) {
+		k = translate(key, Translate_hand);
 		if (k) key = k;
 	}
 #else
-	if (!!(mod & KEY_HAND) ^ G.vt.hand_lock) {
-		k = translate(key, Translate_hand);
+	if (!!(mod & KEY_ALPHA) ^ G.vt.alpha_lock) {
+		k = translate(key, Translate_alpha);
 		if (k) key = k;
 	}
 #endif
@@ -564,19 +584,7 @@ static void addkey(unsigned short key)
 	}
 	
 	/* handle alpha/hand lock */
-#ifdef TI89
-	/* cycle alpha->alpha lock->none */
-	if (((mod & KEY_ALPHA) || G.vt.alpha_lock) && key == KEY_ALPHA) {
-		G.vt.alpha_lock = !G.vt.alpha_lock;
-		G.vt.key_mod_sticky &= ~KEY_ALPHA;
-		return;
-	}
-	
-	if (key == KEY_ALPHALOCK) {
-		G.vt.alpha_lock = !G.vt.alpha_lock;
-		goto end;
-	}
-#else
+#if CALC_HAS_QWERTY_KBD
 	/* cycle hand->hand lock->none */
 	if (((mod & KEY_HAND) || G.vt.hand_lock) && key == KEY_HAND) {
 		G.vt.hand_lock = !G.vt.hand_lock;
@@ -586,6 +594,18 @@ static void addkey(unsigned short key)
 	
 	if (key == KEY_HANDLOCK) {
 		G.vt.hand_lock = !G.vt.hand_lock;
+		goto end;
+	}
+#else
+	/* cycle alpha->alpha lock->none */
+	if (((mod & KEY_ALPHA) || G.vt.alpha_lock) && key == KEY_ALPHA) {
+		G.vt.alpha_lock = !G.vt.alpha_lock;
+		G.vt.key_mod_sticky &= ~KEY_ALPHA;
+		return;
+	}
+	
+	if (key == KEY_ALPHALOCK) {
+		G.vt.alpha_lock = !G.vt.alpha_lock;
 		goto end;
 	}
 #endif
@@ -640,7 +660,10 @@ static void addkey(unsigned short key)
 			key = KEY_HOME;
 		} else if (key == KEY_DOWN) {
 			key = KEY_END;
-#ifdef TI89
+#if CALC_HAS_QWERTY_KBD
+		} else if (key == '/') {
+			key = 0x1f;
+#else
 		} else if (key == KEY_MODE) {
 			key = '_';
 		} else if (key == '/') {
@@ -649,9 +672,6 @@ static void addkey(unsigned short key)
 			key = '&';
 		} else if (key == ')') {
 			key = 0xa9; /* copyright */
-#else
-		} else if (key == '/') {
-			key = 0x1f;
 #endif
 		}
 	}
@@ -695,7 +715,8 @@ end:
 #endif
 }
 
-void scankb()
+#define ON_KEY_PORT (*(volatile char *)0x60001a)
+void scankb(void *unused)
 {
 	short rowmask = 1, colmask = 1, key;
 	unsigned char *currow = &G.vt.key_array[0];
@@ -703,6 +724,15 @@ void scankb()
 	short k;
 	unsigned char kdiff;
 	int kp;
+
+	if (G.vt.on_key ^ !(ON_KEY_PORT&2)) {
+		if (G.vt.on_key) {
+			// add ON key on release so it doesn't turn the calc back on immediately
+			addkey(KEY_ON);
+		}
+		G.vt.on_key ^= 1;
+	}
+
 	KBROWMASK = 0;
 	_WaitKeyboard();
 	k = KBCOLMASK;
@@ -756,5 +786,12 @@ void scankb()
 end:
 	showstatus();
 	KBROWMASK = 0x380; /* reset to standard key reading */
-	return;
+	void kbinit();
+	kbinit();
 }
+
+void kbinit()
+{
+	timeout(scankb, NULL, 1);
+}
+

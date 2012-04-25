@@ -43,20 +43,20 @@ void printheaplist()
 {
 	int i;
 	for (i = 0; i < G.heap.heapsize; ++i) {
-		kprintf("%5d: %p %5d %5d %5d (%5d) (0x%06lx)\n",
+		const struct heapentry *h = &G.heap.heaplist[i];
+		kprintf("%2d: start=%p end=%p (%6lx) pid=%d\n",
 		        i,
-			&G.heap.heaplist[i],
-			(int)G.heap.heaplist[i].pid,
-			(int)G.heap.heaplist[i].start,
-			(int)G.heap.heaplist[i].end,
-			(int)G.heap.heaplist[i].end-G.heap.heaplist[i].start,
-			(void *)&G.heap.heap[G.heap.heaplist[i].start]);
+			&G.heap.heap[h->start],
+			&G.heap.heap[h->end],
+			HEAPBLOCKSIZE*(long)(h->end-h->start),
+			(int)h->pid);
 	}
 }
 #endif
 
 #define EACHENTRY(h) ((h) = &G.heap.heaplist[1]; (h) < &G.heap.heaplist[G.heap.heapsize]; ++(h))
 
+#if 0
 static void printfree()
 {
 	int x = 0;
@@ -66,6 +66,7 @@ static void printfree()
 	}
 	kprintf("free: %ld bytes\n", (long)HEAPBLOCKSIZE * x);
 }
+#endif
 
 static size_t largest_unallocated_chunk_size()
 {
@@ -215,7 +216,6 @@ static struct heapentry *allocentry(int size, pid_t pid)
 	if (size <= 0) return NULL;
 	if (G.heap.heapsize >= HEAPSIZE) return NULL;
 	
-loop:
 #define SIZETHRESHOLD 8192L
 	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
 		int prevstart = G.heap.heaplist[G.heap.heapsize-1].start;

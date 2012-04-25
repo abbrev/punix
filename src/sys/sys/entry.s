@@ -64,9 +64,19 @@
 
 | XXX see h/globals.h
 G = 0x5c00
+
+| long seconds; /* XXX: see entry.s */
+| struct timespec _realtime;
+| 
+| /* all RAM below here can (should) be cleared on boot. see start.s */
+| char exec_ram[60]; /* XXX: see flash.s */
+| char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
+| int onkey; /* set to 1 when ON key is pressed. see entry.s */
+| int powerstate; /* set to 1 when power is off. see entry.s */
+
 seconds = G+0
-onkey = G+180
-powerstate = G+182
+onkey = G+4+8+60+9*16+5*4
+powerstate = onkey+2
 
 /*
  * Bus or Address error exception stack frame:
@@ -280,8 +290,7 @@ trapret0:
  *  So, you understand why you don't use it ;)
  *  Write any value to 0x60001B to acknowledge this interrupt.
  */
-Int_2:	move.w	#0x2600,%sr
-	move.w	#0x00FF,0x60001A	| acknowledge Int2
+Int_2:	move.w	#0x00FF,0x60001A	| acknowledge Int2
 oldInt_3:	rte				| Clock for int 3 ?
 
 Int_3:
@@ -345,7 +354,6 @@ _syscall:
 	movem.l	(%sp)+,%d3-%d7/%a1-%a7
 	move.l	%a1,%usp
 
-	|rte
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 	jbra	trapret0
 

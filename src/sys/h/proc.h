@@ -133,6 +133,7 @@ struct proc {
 		struct krusage p_kru;
 		pid_t p_pid;		/* process id */
 		pid_t p_pgrp;		/* process group */
+		pid_t p_sid;		/* session id */
 		struct proc *p_pptr;	/* parent proc */
 		
 		int p_waitstat;		/* status for wait() */
@@ -179,7 +180,7 @@ struct proc {
 	int p_sched_policy;
 	int p_prio;       /* this determines which runqueue this proc runs in */
 	int p_nice;       /* nice is always represented as 0..39 internally */
-	int p_static_prio;
+	//int p_static_prio;
 	int p_time_slice;
 	int p_first_time_slice;
 	unsigned long p_deadline;
@@ -315,21 +316,21 @@ struct proc {
 	 * own data and bss sections) */
 	struct {
 		int u_errno;
-		char charbuf[128];
+		char charbuf[64];
 		int charbufsize;
 		jmp_buf getcalcjmp;
+		void *streams[3];
 	} user;
 };
 
+void procinit();
+
 /* states for p_status */
-/* are these all good? */
-#define P_NEW		0	/* new process (only used by system init) */
-#define	P_FORKING	1	/* process is blocked by child */
-#define P_RUNNING	2
-#define P_SLEEPING	3	/* waiting for an event */
-#define P_STOPPED	4	/**/
-#define P_ZOMBIE	5
-#define P_VFORKING	6
+#define P_RUNNING   0	/* zero so tests are fast and small */
+#define P_SLEEPING  1	/* waiting for an event */
+#define P_STOPPED   2	/**/
+#define P_ZOMBIE    3
+#define P_NEW       4	/* new process (used by system init and vfork) */
 
 /* flags for p_flag */
 #define P_TRACED  001 /* process is being traced */
@@ -339,6 +340,5 @@ struct proc {
 #define P_NOCLDWAIT 020 /* don't wait for children when they terminate */
 #define P_NOCLDSTOP 040 /* don't receive notification of stopped children */
 #define P_VFORK     0100 /* vforking */
-#define P_VFDONE    0200 /* end vfork */
 
 #endif /* _SYS_PROC_H_ */

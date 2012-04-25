@@ -1,6 +1,9 @@
 #ifndef _LINK_H_
 #define _LINK_H_
 
+#define LOG2LINKQSIZE 9
+#define LINKQSIZE (1<<LOG2LINKQSIZE)
+
 void linkinit();
 void linkopen(dev_t dev, int rw);
 void linkclose(dev_t dev, int flag);

@@ -5,34 +5,45 @@ PLATFORMS = ti89 ti92p
 kernel:
 	for p in $(PLATFORMS); do $(MAKE) $$p; done
 
-ti89: punix-89.tib
-ti92p: punix-9x.tib
-
-filesystem: commands mkpfs
-
-punix-89.tib: src/sys/sys/punix-89.tib
-	cp $^ .
-punix-9x.tib: src/sys/sys/punix-9x.tib
-	cp $^ .
-
-src/sys/sys/punix-89.tib: lib
+ti89:
 	$(MAKE) -C src/sys/sys CALC=TI89 scratch
-
-src/sys/sys/punix-9x.tib: lib
+ti92p:
 	$(MAKE) -C src/sys/sys CALC=TI92P scratch
 
 lib:
 	$(MAKE) -C lib
 
 clean:
+	rm -f *.[89]?u *.tib
 	$(MAKE) -C lib clean
 	$(MAKE) -C src/sys/sys clean
+	$(MAKE) -C tools/fs clean
 
 scratch:
 	$(MAKE) clean
 	$(MAKE) all
 
+# make a release!
+# this should be made against a clean copy of the source so it doesn't
+# include anything embarrassing!
+.PHONY: release
+release:
+	$(MAKE) tgz
+	$(MAKE) kernel
+	$(MAKE) filesystem
+
+TGZFILE = punix
+
+# tar+gzip all files into punix.tgz, excluding punix.tgz itself
+# and VCS files, and prefix filenames with punix/
+.PHONY: tgz
+tgz:
+	tar --exclude-vcs --exclude=*.tgz --xform='s,^,$(TGZFILE)/,' -czf $(TGZFILE).tgz *
+
+
 # TODO
+filesystem: commands mkpfs
+
 commands:
 
 mkpfs: tools/fs/mkpfs

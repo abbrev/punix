@@ -31,7 +31,7 @@ FlashWrite:
 	
 	| Check Batt
 	bsr	BatTooLowFlash
-	tst.b	%d0
+	|tst.b	%d0
 	bne	error
 	
 	| We don't check the stack, but we don't use it
@@ -64,7 +64,7 @@ FlashWrite:
 	cmp.l	#0x3FFFF,%a4
 	bhi	error
 	
-	bsr	disableProtection
+	bsr	disable_protection
 	
 	lsr.l	#1,%d3		| Convert Byte to Word
 	
@@ -79,7 +79,7 @@ exec_in_ram:
 	
 	jsr	exec_ram	| Execute code in RAM
 
-	bsr	enableProtection
+	bsr	enable_protection
 	
 	move.w	(%sp)+,%sr
 	movem.l	(%sp)+,%d3-%d4/%a2-%a4	| Pop registers
@@ -115,14 +115,14 @@ FlashWrite_ExecuteInRam_End:
 
 
 | Low Level functions for Flash access (It doesn't use Trap #B for safe reason)
-| short FlashErase(const void *dest asm("%a2"))
+| short FlashErase(void *dest asm("%a2"))
 FlashErase:
 	movem.l	%d3-%d4/%a2-%a4,-(%sp)	| Save Registers
 	move.w	%sr,-(%sp)		| Save %sr
 	
 	| Check Batt
 	bsr	BatTooLowFlash
-	tst.b	%d0
+	|tst.b	%d0
 	bne	error
 	
 	| We don't check the stack, but we don't use it
@@ -132,11 +132,11 @@ FlashErase:
 	cmp.l	#archive-1,%a2
 	bls	error
 	
-	bsr	disableProtection
+	bsr	disable_protection
 	
 	| Round to the upper 64K
 	move.l	%a2,%d0
-	andi.l	#0xFFFF0000,%d0	| would clr.w %d0 be shorter/quicker?
+	clr.w	%d0
 	move.l	%d0,%a2
 	
 	| Copy code to RAM and execute it

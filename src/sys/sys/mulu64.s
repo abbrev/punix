@@ -671,6 +671,7 @@ mulu64b:
 |      ce  cg
 |      ag  bh
 
+.global mulu64c
 | destroys %d4-%d7, %a0-%a1
 mulu64c:
 	| ab:cd  d0:d1

@@ -11,7 +11,7 @@
 #include "globals.h"
 #include "process.h"
 
-#define UPDATE_TIMEOUT (HZ/8)
+#define UPDATE_TIMEOUT (HZ/4)
 
 void updaterxtx(void *unused)
 {
@@ -22,13 +22,21 @@ void updaterxtx(void *unused)
 
 STARTUP(void linkinit())
 {
-	qclear(&G.link.readq);
-	qclear(&G.link.writeq);
+	qinit(&G.link.readq.q, LOG2LINKQSIZE);
+	qinit(&G.link.writeq.q, LOG2LINKQSIZE);
+#if 0
+	kprintf("link: readq:  sizeof=%ld qsize=%d qmask=%04x\n",
+	        sizeof(G.link.readq), qsize(&G.link.readq.q), qmask(&G.link.readq.q));
+	kprintf("link: writeq: sizeof=%ld qsize=%d qmask=%04x\n",
+	        sizeof(G.link.writeq), qsize(&G.link.writeq.q), qmask(&G.link.writeq.q));
+#endif
 	G.link.lowat = G.link.hiwat = -1;
 	G.link.readoverflow = 0;
 	ioport = 0;
 	G.link.open = 0;
 	LINK_CONTROL = LC_DIRECT | LC_TODISABLE;
+	while (untimeout(updaterxtx, NULL))
+		;
 	updaterxtx(NULL);
 }
 
@@ -60,10 +68,10 @@ STARTUP(static void flush())
 {
 	int x = spl4();
 	/* wait until the write queue is empty */
-	while (!qisempty(&G.link.writeq)) {
+	while (!qisempty(&G.link.writeq.q)) {
 		G.link.lowat = 0;
 		txon();
-		slp(&G.link.writeq, 0);
+		slp(&G.link.writeq.q, 0);
 	}
 	splx(x);
 }
@@ -73,7 +81,7 @@ STARTUP(static void recvbyte())
 {
 	int ch;
 	ch = LINK_BUFFER;
-	qputc(ch, &G.link.readq);
+	qputc(ch, &G.link.readq.q);
 	//kprintf("<0x%02x ", ch);
 }
 
@@ -112,6 +120,9 @@ STARTUP(void linkintr())
 		/* LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX | LC_TRIGTX */
 		LINK_CONTROL = 0x8f;
 		
+		qclear(&G.link.writeq.q);
+		txoff();
+		defer(wakeup, &G.link.writeq.q);
 		/* return; */
 	}
 	
@@ -119,7 +130,7 @@ STARTUP(void linkintr())
 #if 0
 	++*(short *)(0x4c00+0xf00-30*4);
 #endif
-		int x = qfree(&G.link.readq);
+		int x = qfree(&G.link.readq.q);
 		//kprintf("Rx ");
 		if (!G.link.open) {
 			//kprintf("not-open ");
@@ -128,19 +139,22 @@ STARTUP(void linkintr())
 		} else if (x == 0) { /* no room for this byte */
 			//kprintf("<.. ");
 			//kprintf("full ");
+			/*
+			 * N.B. The link hardware will not interrupt us again
+			 * for LS_RXBYTE until after we read the existing byte.
+			 * Set readoverflow so linkread gets the byte and
+			 * resumes receiving.
+			 */
+			G.link.readoverflow = 1;
 			rxoff();
 		} else {
-			if (x == 1) {
-				//kprintf("almost-full ");
-				rxoff();
-			}
 			recvbyte();
 			G.link.rxtx |= 2;
 			
 			if (G.link.hiwat >= 0 &&
-			    qused(&G.link.readq) >= G.link.hiwat) {
+			    qused(&G.link.readq.q) >= G.link.hiwat) {
 				/* wakeup any processes reading from the link */
-				defer(wakeup, &G.link.readq);
+				defer(wakeup, &G.link.readq.q);
 				G.link.hiwat = -1;
 			}
 		}
@@ -156,7 +170,7 @@ STARTUP(void linkintr())
 		if (!G.link.open) {
 			//kprintf("not-open ");
 			txoff();
-		} else if ((ch = qgetc(&G.link.writeq)) < 0) { /* nothing to send */
+		} else if ((ch = qgetc(&G.link.writeq.q)) < 0) { /* nothing to send */
 			//kprintf(">.. ");
 			//kprintf("empty ");
 			txoff();
@@ -165,9 +179,9 @@ STARTUP(void linkintr())
 			G.link.rxtx |= 1;
 			//kprintf(">0x%02x ", ch);
 			
-			if (qused(&G.link.writeq) <= G.link.lowat) {
+			if (qused(&G.link.writeq.q) <= G.link.lowat) {
 				/* wakeup any procs writing to the link */
-				defer(wakeup, &G.link.writeq);
+				defer(wakeup, &G.link.writeq.q);
 				G.link.lowat = -1;
 			}
 		}
@@ -182,8 +196,8 @@ STARTUP(int link_open(struct file *fp, struct inode *ip))
 		return -1;
 	}
 	
-	qclear(&G.link.readq);
-	qclear(&G.link.writeq);
+	qclear(&G.link.readq.q);
+	qclear(&G.link.writeq.q);
 	G.link.lowat = G.link.hiwat = -1;
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
 	++ioport; /* block other uses of the IO port */
@@ -191,6 +205,13 @@ STARTUP(int link_open(struct file *fp, struct inode *ip))
 	return 0;
 }
 
+/*
+ * XXX: we shouldn't flush here because a process will stay in an
+ * uninterruptible sleep state until the write queue is drained, which might
+ * be never if nobody else is connected to the link port.
+ * Perhaps a new ioctl could drain the write queue, but it would be
+ * interruptible so the process can be killed.
+ */
 STARTUP(int link_close(struct file *fp))
 {
 	flush();
@@ -208,8 +229,12 @@ STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count, off_t *pos))
 	size_t oldcount = count;
 	
 	while (count) {
+		if (G.link.readoverflow) {
+			G.link.readoverflow = 0;
+			recvbyte();
+		}
 		rxon();
-		while ((ch = qgetc(&G.link.readq)) < 0) {
+		while ((ch = qgetc(&G.link.readq.q)) < 0) {
 			rxon();
 #if 0
 			if (G.link.readoverflow) {
@@ -224,7 +249,7 @@ STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count, off_t *pos))
 			}
 			x = spl4();
 			G.link.hiwat = 1;
-			slp(&G.link.readq, 1);
+			slp(&G.link.readq.q, 1);
 			splx(x);
 		}
 		*(char *)buf++ = ch;
@@ -244,14 +269,14 @@ STARTUP(ssize_t link_write(struct file *fp, void *buf, size_t count, off_t *pos)
 		ch = *(char *)buf++;
 		x = spl4();
 		txon();
-		while (qputc(ch, &G.link.writeq) < 0) {
+		while (qputc(ch, &G.link.writeq.q) < 0) {
 			txon();
-			G.link.lowat = QSIZE - 32; /* XXX constant */
-			slp(&G.link.writeq, 1);
+			G.link.lowat = LINKQSIZE - 32; /* XXX constant */
+			slp(&G.link.writeq.q, 1);
 		}
 		splx(x);
 	}
-	return oldcount;
+	return oldcount - count;
 }
 
 STARTUP(int link_ioctl(struct file *fp, int request, void *arg))

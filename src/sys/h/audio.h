@@ -1,6 +1,9 @@
 #ifndef _AUDIO_H_
 #define _AUDIO_H_
 
+#define LOG2AUDIOQSIZE 7
+#define AUDIOQSIZE (1<<LOG2AUDIOQSIZE)
+
 void audioinit();
 void audioopen(dev_t dev, int rw);
 void audioclose(dev_t dev, int flag);
