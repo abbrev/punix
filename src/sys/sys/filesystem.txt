@@ -1,7 +1,7 @@
 Filesystem on Flash notes
 2010-03-26
 
-The Punix File System (PFS) will be mostly device-agnostic, but it will be designed for flash-type devices which can have bits cleared but not set between sector erases.
+The Punix File System (PFS) will be mostly device-agnostic, but it will be designed for flash-type devices which can have bits cleared but not set between sector erases. The storage mechanisms of the underlying block device (such as the flash device) are not specified here.
 
 Superblock
 
@@ -57,6 +57,38 @@ Here is what a PFS inode looks like on the device:
 +---------------+---------------+---------------+---------------+
 
 A special extent with a starting block of zero is used to store a hole in a file. The length field indicates how many more blocks are contained in the hole. For example, an extent of (0, 5) means a hole of 6 blocks. A hole, when read back, is filled with all zero bytes. The purpose of holes is to allow for sparse files, which theoretically permits a file to be larger than the device itself.
+
+Note: since an extents list is more complicated to implement and slower to scan (as mentioned above) than a flat index list, I might end up using a flat index list after all. I would still use the extent_depth field (renamed to something more appropriate for a block list) to indicate how deep the block list tree is, as I believe it is more useful than having a fixed number of singly-, doubly-, and triply-indirect blocks. Here are some example figures showing how much storage overhead a plain block list would have:
+
+file size   data blocks   pointer blocks   total blocks   total size   overhead (%) (includes slack)
+1           1             0                1              128          12700 (worst case)
+200         2             0                2              256          28
+500         4             0                4              512          2.4
+768         6             0                6              768          0 (largest size for depth 1)
+769         7             1                8              1024         33.16 (worst case for depth 2)
+800         7             1                8              1024         28
+1000        8             1                9              1152         15.2
+5000        40            1                41             5248         4.96
+8192        64            1                65             8320         1.5625
+8193        65            2                67             8576         4.67
+20000       157           3                160            20480        2.4
+700000      5469          86               5555           711040       1.58
+
+In comparison, here are example figures for extents:
+file size   data blocks   pointer blocks   total blocks   total size      overhead (%) (includes slack)
+1           1             0                1              128             12700
+200         2             0                2              256             28
+500         4             0                4              512             2.4
+768         6             0                6              768             0
+769         7             0-1              7-8            896-1024        16.5-33.16
+800         7             0-1              7-8            896-1024        12-28
+1000        8             0-1              8-9            1024-1152       2.4-15.2
+5000        40            0-1              40-41          5120-5248       2.4-4.96
+8192        64            0-2              64-66          8192-8448       0-3.125
+8193        65            0-2              65-67          8320-8576       1.55-4.67
+20000       157           0-4              157-161        20096-20608     0.48-3.04
+700000      5469          1-131            5470-5600      700160-716800   0.023-2.4
+
 
 Directories
 
