@@ -1,0 +1,70 @@
+pselect system call:
+
+int pselect(int nfds, fd_set *readfds, fd_set *writefds,
+            fd_set *exceptfds, const struct timespec *timeout,
+            const sigset_t *sigmask)
+{
+	fd_set outreadfds, outwritefds, outexceptfds;
+	if sigmask is not null
+		save current signal mask
+		set signal mask to sigmask
+	
+	for (;;) {
+		poll each file in each set
+		if one or more files is ready
+			break;
+
+		if timeout is not null
+			set timeout
+		wait on all files (or rather, the inodes)
+	}
+
+out:
+	copy out*fds to *fds sets
+
+	if sigmask is not null
+		restore signal mask
+	
+}
+
+struct event_waiter {
+	list_head list;
+	struct proc *proc;
+};
+
+// add our event_waiter to the event's list
+wait_for_event(struct list_head *e, struct event_waiter *ew)
+{
+	list_add(&ew->list, e);
+}
+
+// remove our event_waiter from the event's list
+unwait_for_event(struct event_waiter *ew)
+{
+	list_del(&ew->list);
+}
+
+// wait for a single event
+wait_for_single_event(struct list_head *e)
+{
+	struct event_waiter ew;
+	ew.proc = current;
+	wait_for_event(e, &ew);
+	sched_sleep(current);
+	unwait_for_event(&ew);
+}
+
+// wakeup all waiters on an event list
+// this can be called from something that generates events
+wakeup_waiters(struct list_head *e)
+{
+	struct event_waiter *ew;
+	list_for_each_entry(ew, e, list) {
+		// XXX make sure proc isn't running already
+		sched_run(ew->proc);
+	}
+}
+
+TODO: make a set of "wait" functions that adds the current process to an event
+list without requiring the caller to allocate an event_waiter beforehand. This
+would simplify callers quite a bit.
