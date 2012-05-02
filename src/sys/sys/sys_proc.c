@@ -677,7 +677,7 @@ loop:
 	if (options & WNOHANG) {
 		goto out;
 	}
-	error = tsleep(current, PWAIT|PCATCH, 0);
+	error = tsleep(current, 1, 0);
 	if (!error) goto loop;
 	P.p_error = error;
 	goto out;
