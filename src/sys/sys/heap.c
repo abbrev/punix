@@ -42,15 +42,18 @@
 void printheaplist()
 {
 	int i;
+	kprintf("\n");
 	for (i = 0; i < G.heap.heapsize; ++i) {
 		const struct heapentry *h = &G.heap.heaplist[i];
-		kprintf("%2d: start=%p end=%p (%6lx) pid=%d\n",
+		kprintf("%3d: %p %5lx/%5lx %-4d  ",
 		        i,
 			&G.heap.heap[h->start],
-			&G.heap.heap[h->end],
 			HEAPBLOCKSIZE*(long)(h->end-h->start),
+			i == G.heap.heapsize-1 ? 0L :
+			 HEAPBLOCKSIZE*(long)(h[1].start-h[0].end),
 			(int)h->pid);
 	}
+	kprintf("\n");
 }
 #endif
 
@@ -68,6 +71,7 @@ static void printfree()
 }
 #endif
 
+#if 0
 static size_t largest_unallocated_chunk_size()
 {
 	int size = 0;
@@ -82,18 +86,7 @@ static size_t largest_unallocated_chunk_size()
 	}
 	return (size_t)size * HEAPBLOCKSIZE;
 }
-
-void printmemstats(void *unused)
-{
-	(void)unused;
-	kprintf("%lu total, ",
-	        heap_get_total());
-	kprintf("%lu used, ",
-	        heap_get_used());
-	kprintf("%lu free\n",
-	        heap_get_free());
-	timeout(printmemstats, NULL, HZ*5L);
-}
+#endif
 
 void meminit()
 {
@@ -102,11 +95,11 @@ void meminit()
 	 * one at the bottom and one at the top of the heap */
 	hp->start = 0;
 	hp->end = 0;
-	hp->pid = -1;
+	hp->pid = 0;
 	++hp;
 	hp->start = ((void *)0x40000 - (void *)G.heap.heap[0]) / HEAPBLOCKSIZE;
 	hp->end = hp->start;
-	hp->pid = -1;
+	hp->pid = 0;
 	G.heap.heapsize = 2;
 	//printmemstats(NULL);
 	
@@ -199,13 +192,17 @@ void meminit()
 }
 
 /* insert an entry before existing entry hp, moving hp and other entries up */
-static void insertentry(struct heapentry *hp, int start, int end, pid_t pid)
+static void insertentry(struct heapentry *hp, int start, int size, pid_t pid)
 {
-	memmove(hp + 1, hp, (void *)&hp[G.heap.heapsize] - (void *)hp);
+	assert(G.heap.heapsize < HEAPSIZE);
+	assert(hp < &hp[G.heap.heapsize]);
+
+	memmove(hp + 1, hp,
+	        (void *)&G.heap.heaplist[G.heap.heapsize] - (void *)hp);
 	++G.heap.heapsize;
 	
 	hp->start = start;
-	hp->end = end;
+	hp->end = start + size;
 	hp->pid = pid;
 }
 
@@ -217,33 +214,31 @@ static struct heapentry *allocentry(int size, pid_t pid)
 	if (G.heap.heapsize >= HEAPSIZE) return NULL;
 	
 #define SIZETHRESHOLD 8192L
-	if (size < SIZETHRESHOLD / HEAPBLOCKSIZE) {
-		int prevstart = G.heap.heaplist[G.heap.heapsize-1].start;
-		for (hp = &G.heap.heaplist[G.heap.heapsize-2]; hp >= &G.heap.heaplist[0]; --hp) {
-			if (size <= (prevstart - hp->end)) {
-				++hp;
-				/*
-				 * insert this entry here and return
-				 * with a pointer to the start of the chunk
-				 */
-				insertentry(hp, prevstart - size, prevstart, pid);
+	if (size >= SIZETHRESHOLD / HEAPBLOCKSIZE) {
+		/* allocate larger requests toward the bottom of memory */
+		int prevend = 0;
+		for (hp = &G.heap.heaplist[0];
+		     hp < &G.heap.heaplist[G.heap.heapsize];
+		     ++hp) {
+			if (size <= hp->start - prevend) {
+				insertentry(hp, prevend, size, pid);
 				return hp;
 			}
-			prevstart = hp->start;
+			prevend = hp->end;
 		}
 	}
-	
-	int prevend = 0;
-	for (hp = &G.heap.heaplist[1]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp) {
-		if (size <= hp->start - prevend) {
-			/*
-			 * insert this entry here and return
-			 * with a pointer to the start of the chunk
-			 */
-			insertentry(hp, prevend, prevend + size, pid);
+
+	/* allocate smaller requests toward the top of memory */
+	int nextstart = G.heap.heaplist[G.heap.heapsize-1].start;
+	for (hp = &G.heap.heaplist[G.heap.heapsize-2];
+	     hp >= &G.heap.heaplist[0];
+	     --hp) {
+		if (size <= (nextstart - hp->end)) {
+			++hp;
+			insertentry(hp, nextstart - size, size, pid);
 			return hp;
 		}
-		prevend = hp->end;
+		nextstart = hp->start;
 	}
 	/* we couldn't find a slot big enough, so let's write out the oldest
 	 * buffer in the avbuflist and try again if we could free that buffer */
@@ -268,7 +263,6 @@ static struct heapentry *allocentry(int size, pid_t pid)
  * chunk is returned in the destination of sizep.
  * 
  * pid is the process id of the process that owns this memory chunk.
- * If pid < 0, memalloc returns the size of the largest unallocated chunk.
  */
 void *memalloc(size_t *sizep, pid_t pid)
 {
@@ -277,11 +271,6 @@ void *memalloc(size_t *sizep, pid_t pid)
 	
 	if (!sizep) {
 		P.p_error = EINVAL;
-		return NULL;
-	}
-	
-	if (pid < 0) {
-		*sizep = largest_unallocated_chunk_size();
 		return NULL;
 	}
 	
@@ -308,7 +297,12 @@ struct heapentry *findentry(void *ptr)
 	struct heapentry *hp;
 	int start;
 	int lower, middle, upper;
-	start = (ptr - (void *)G.heap.heap) / HEAPBLOCKSIZE;
+	off_t offset = ptr - (void *)G.heap.heap;
+	if ((offset % HEAPBLOCKSIZE) != 0) {
+		// pointer is not aligned on a heap block boundary
+		return NULL;
+	}
+	start = offset / HEAPBLOCKSIZE;
 	lower = 1;
 	upper = G.heap.heapsize - 1;
 	
@@ -317,12 +311,13 @@ struct heapentry *findentry(void *ptr)
 		hp = &G.heap.heaplist[middle];
 		if (start < hp->start) {
 			upper = middle;
-			continue;
 		} else if (start >= hp->end) {
 			lower = middle + 1;
-			continue;
+		} else if (start == hp->start) {
+			return hp;
+		} else {
+			break;
 		}
-		return hp;
 	} while (lower < upper);
 	return NULL;
 }
@@ -330,7 +325,8 @@ struct heapentry *findentry(void *ptr)
 /* TODO: make sure this works properly! */
 static void removeentry(struct heapentry *hp)
 {
-	memmove(hp, hp + 1, (void *)&hp[G.heap.heapsize] - (void *)hp);
+	memmove(hp, hp + 1,
+	        (void *)&G.heap.heaplist[G.heap.heapsize] - (void *)hp);
 	--G.heap.heapsize;
 }
 
@@ -402,8 +398,8 @@ void *memrealloc(void *ptr, size_t *newsizep, int direction, pid_t pid)
 			hp->start = hp->end - size;
 			newptr = &G.heap.heap[hp->start];
 			/* move the old block down */
-			memmove(newptr, ptr, (size_t)(hp->end - hp->start) *
-			                              HEAPBLOCKSIZE);
+			memmove(newptr, ptr,
+			        (size_t)(hp->end - hp->start) * HEAPBLOCKSIZE);
 		} else {
 			/* find a new location */
 			newhp = allocentry(size, hp->pid);
@@ -423,15 +419,20 @@ done:
 }
 
 /* free all memory allocations for the given pid */
-static void freeall(pid_t pid)
+void memfreepid(pid_t pid)
 {
 	struct heapentry *hp;
 	
-	for (hp = &G.heap.heaplist[0]; hp < &G.heap.heaplist[G.heap.heapsize]; ++hp)
+	assert(pid > 0);
+
+	for (hp = &G.heap.heaplist[0];
+	     hp < &G.heap.heaplist[G.heap.heapsize];
+	     ++hp) {
 		if (pid == hp->pid) {
 			removeentry(hp);
 			--hp;
 		}
+	}
 }
 
 void memfree(void *ptr, pid_t pid)
@@ -439,8 +440,6 @@ void memfree(void *ptr, pid_t pid)
 	struct heapentry *hp;
 	
 	if (ptr == NULL) {
-		if (pid > 0)
-			freeall(pid);
 		return;
 	}
 	hp = findentry(ptr);
@@ -475,6 +474,20 @@ size_t heap_get_free()
 {
 	return heap_get_total() - heap_get_used();
 }
+
+#if 0
+void printmemstats(void *unused)
+{
+	(void)unused;
+	kprintf("%lu total, ",
+	        heap_get_total());
+	kprintf("%lu used, ",
+	        heap_get_used());
+	kprintf("%lu free\n",
+	        heap_get_free());
+	timeout(printmemstats, NULL, HZ*5L);
+}
+#endif
 
 void sys_kmalloc()
 {
