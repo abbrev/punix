@@ -101,7 +101,7 @@ static void release_resources()
 	
 	/* free our resources */
 #if 1
-	memfree(NULL, P.p_pid); /* free all user allocations */
+	memfreepid(P.p_pid); /* free all user allocations */
 	if (P.p_stack) {
 		memfree(P.p_stack, 0);
 		P.p_stack = NULL;
