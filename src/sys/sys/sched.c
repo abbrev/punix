@@ -126,7 +126,7 @@ STARTUP(void swtch())
 		struct proc *pp = current;
 		current = NULL; /* don't bill any process if they're all asleep */
 		setmask(&G.calloutlock, 0);
-		cpuidle();
+		cpuidle(INT_ALL);
 		setmask(&G.calloutlock, m);
 		current = pp;
 		//istick = 1; /* the next process will start on a tick */

@@ -9,6 +9,7 @@
 #include "inode.h"
 #include "globals.h"
 #include "exception.h"
+#include "lcd.h"
 
 /* These are all called from interrupts in entry.s */
 
@@ -350,3 +351,36 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 	while ((sig = CURSIG(&P)))
 		postsig(sig);
 }
+
+#define LCD_ROW_SYNC (*(char *)0x60001c)
+#define LCD_CONTRAST (*(char *)0x60001d)
+#define LCD_CONTROL  (*(char *)0x70001d)
+
+void cpupoweroff()
+{
+	int x = spl7();
+	long oldrt = realtime.tv_sec - G.seconds;
+	splx(x);
+	
+	G.onkey = 0;
+	G.powerstate = 1;
+	
+	LCD_ROW_SYNC = 0b00111100; // turn off row sync
+	LCD_CONTRAST |= (1<<4);   // disable screen (hw1)
+	LCD_CONTROL &= ~(1<<1);  // shut down LCD (hw2)
+	
+	while (!G.onkey)
+		cpuidle(INT_3|INT_4);
+	
+	LCD_CONTROL |= (1<<1);
+	LCD_CONTRAST &= ~(1<<4);
+	LCD_ROW_SYNC = 0b00100001;
+	lcd_reset_contrast(); // contrast was reset when 0x60001d (LCD_CONTRAST) was modified
+	
+	G.powerstate = 0;
+	
+	spl7();
+	realtime.tv_sec = oldrt + G.seconds;
+	splx(x);
+}
+

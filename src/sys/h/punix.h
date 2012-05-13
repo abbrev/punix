@@ -150,6 +150,14 @@ int kprintf(const char *, ...);
 int inferior(struct proc const *);
 struct proc *pfind(int pid);
 
-void cpuidle(void);
+// interrupt mask values for cpuidle
+#define INT_1 0x01
+#define INT_2 0x02
+#define INT_3 0x04
+#define INT_4 0x08
+#define INT_5 0x10
+#define INT_ALL 0x1f
+
+void cpuidle(int intmask);
 
 #endif /* _SYS_PUNIX_H_ */

@@ -56,7 +56,7 @@ STARTUP(static void dspsync())
 	while (G.audio.play && !qisempty(&G.audio.q.q)) {
 		if (qused(&G.audio.q.q) < 4) { // XXX constant
 			// samples will be played before slp() would even finish
-			cpuidle();
+			cpuidle(INT_ALL);
 		} else {
 			G.audio.lowat = 0;
 			slp(&G.audio.q.q, 0);

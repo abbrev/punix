@@ -1,20 +1,49 @@
 .section .text, "x"
 
-| NB: cpuidle() works on both the TI-89 and TI-92+, but it doesn't power off
-| the FlashROM on the 92+
-| void cpuidle(void);
+| void cpuidle(int mask);
 .global cpuidle
 cpuidle:
 	move.w	%sr,%d1
 	move.w	#0x2700,%sr
-	move.w	#0x280,0x600018
-	moveq	#0x1f,%d0
-	move.b	%d0,0x600005 | shut off the cpu until an interrupt is triggered
+	move.w	#0x280,0x600018 | XXX: why do we do this?
+	move	4(%sp),%d2	| interrupt mask
+.ifdef TI89
+	move.b	%d2,0x600005 | shut off the cpu until an interrupt is triggered
 	nop
+.else
+	move	#(disable_flash_end-disable_flash)/2-1,%d0
+	lea	disable_flash,%a0
+	jbsr	exec_in_ram
+.endif
 	move.w	#0x2000,%sr  | let interrupt handlers run
 	move.w	%d1,%sr
 	rts
 
+.ifndef TI89
+| this must be run from RAM
+disable_flash:
+	move.w	0x185e00,%d0 | shut down flash rom
+	move.b	%d2,0x600005 | shut off the cpu until an interrupt is triggered
+	nop
+	move.w	%d0,0x185e00
+	nop
+	nop
+	rts
+disable_flash_end:
+.endif
+
+exec_ram = 0x5c00+4+8 | XXX see globals.h
+
+| input:
+|  %a0 = code to execute in ram
+|  %d0 = one less than the size of code, in 16-bit words, to execute in ram
+.global exec_in_ram
+exec_in_ram:
+	lea     exec_ram,%a1
+0:	move.w  (%a0)+,(%a1)+
+	dbra    %d0,0b
+
+	jbra     exec_ram        | Execute code in RAM
 
 | void delay(unsigned long n);
 .global delay
@@ -95,67 +124,6 @@ stacktrace:
 2:	sub.l	4(%sp),%a0
 	move.l	%a0,%d0
 	lsr.l	#2,%d0
-	rts
-
-G = 0x5c00
-
-| long seconds; /* XXX: see entry.s */
-| struct timespec _realtime;
-| 
-| /* all RAM below here can (should) be cleared on boot. see start.s */
-| char exec_ram[60]; /* XXX: see flash.s */
-| char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
-| int onkey; /* set to 1 when ON key is pressed. see entry.s */
-| int powerstate; /* set to 1 when power is off. see entry.s */
-
-seconds = G+0
-realtime = G+4
-onkey = G+4+8+60+9*16+5*4
-powerstate = onkey+2
-
-
-| power off the CPU and LCD, and maintain the realtime clock.
-| wake on int 6 (ON key), int 4 (link activity), and int 3 (1 Hz clock)
-| void cpupoweroff();
-.global cpupoweroff
-cpupoweroff:
-	move	%sr,%d0
-	move	#0x2700,%sr
-	move.l	realtime,%d2	| realtime.tv_sec
-	sub.l	seconds,%d2
-	move	%d0,%sr
-	
-	clr	onkey
-	move	#1,powerstate
-	
-	| turn off LCD
-	lea.l	0x600000,%a0
-	lea.l	0x700000,%a1
-	move.b	#0b00111100,0x1c(%a0)	| 0x60001c turn off row sync
-	bset.b	#4,0x1d(%a0)		| 0x60001d disable screen (hw1)
-	bclr.b	#1,0x1d(%a1)		| 0x70001d shut down LCD (hw2)
-	| LCD is off!
-
-0:	move.b	#0x0c,0x600005	| bit 3 => int 4, bit 2 => int 3
-	tst	onkey
-	beq	0b
-	
-	| turn screen back on
-	bset.b	#1,0x1d(%a1)
-	bclr.b	#4,0x1d(%a0)
-	move.b	#0b00100001,0x1c(%a0)
-	movem	%d0/%d2,-(%sp)
-	jbsr	lcd_reset_contrast	| contrast was reset when 0x60001d was modified
-	movem	(%sp)+,%d0/%d2
-	| LCD should be back on!
-
-
-	clr	powerstate
-	
-	move	#0x2700,%sr
-	add.l	seconds,%d2
-	move.l	%d2,realtime
-	move	%d0,%sr
 	rts
 
 | int trygetlock(char *lockp);
