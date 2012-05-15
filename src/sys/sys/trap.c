@@ -352,9 +352,9 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 		postsig(sig);
 }
 
-#define LCD_ROW_SYNC (*(char *)0x60001c)
-#define LCD_CONTRAST (*(char *)0x60001d)
-#define LCD_CONTROL  (*(char *)0x70001d)
+#define LCD_ROW_SYNC (*(volatile char *)0x60001c)
+#define LCD_CONTRAST (*(volatile char *)0x60001d)
+#define LCD_CONTROL  (*(volatile char *)0x70001d)
 
 void cpupoweroff()
 {
