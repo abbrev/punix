@@ -887,10 +887,19 @@ static void csi_dispatch(int ch, struct tty *tp)
 			case 5:
 				/* blink */
 				break;
+			case 3:
+				/* italic (treat it like reverse image) */
+				/* fall through */
 			case 7:
 				/* negative (reverse image) */
 				G.vt.gr |= GR_INVERSE;
-				;
+				break;
+			case 23:
+				/* italic off */
+			case 27:
+				/* negative image off */
+				G.vt.gr &= ~GR_INVERSE;
+				break;
 			}
 		}
 		
@@ -1205,7 +1214,7 @@ void vtinit()
 	showstatus();
 	qinit(&G.vt.vt[0].t_rawq.q, LOG2TTYQSIZE);
 	qinit(&G.vt.vt[0].t_canq.q, LOG2TTYQSIZE);
-	qinit(&G.vt.vt[0].t_outq.q, LOG2TTYQSIZE);
+	//qinit(&G.vt.vt[0].t_outq.q, LOG2TTYQSIZE);
 	kbinit();
 	kprintf("grayplanes[0]=%p\n", G.lcd.grayplanes[0]);
 	kprintf("grayplanes[1]=%p\n", G.lcd.grayplanes[1]);
@@ -1240,7 +1249,7 @@ static void dovtoutput(int ch, struct tty *tp)
 
 static void vtoutput(int ch, struct tty *tp)
 {
-#if 1
+#if 0
 	int c;
 	int x = spl7();
 	if (G.vt.lock) {
