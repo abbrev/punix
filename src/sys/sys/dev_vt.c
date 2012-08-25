@@ -1223,6 +1223,7 @@ void vtinit()
 /* FIXME: use the tty structure */
 static void dovtoutput(int ch, struct tty *tp)
 {
+	int x = spl7();
 	cursor(tp);
 	
 	/* process the "anywhere" pseudo-state */
@@ -1245,6 +1246,7 @@ static void dovtoutput(int ch, struct tty *tp)
 		G.vt.vtstate->event(ch, tp);
 	
 	cursor(tp);
+	splx(x);
 }
 
 static void vtoutput(int ch, struct tty *tp)
