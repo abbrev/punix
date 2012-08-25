@@ -132,6 +132,7 @@ STARTUP(void linkintr())
 		//kprintf("Rx ");
 		if (!G.link.open) {
 			//kprintf("not-open ");
+			rxoff();
 			ch = LINK_BUFFER; /* discard it */
 		} else if (x == 0) { /* no room for this byte */
 			//kprintf("<.. ");
@@ -142,6 +143,7 @@ STARTUP(void linkintr())
 			 * resumes receiving.
 			 */
 			G.link.readoverflow = 1;
+			rxoff();
 		} else {
 			recvbyte();
 			G.link.rxtx |= 2;
@@ -221,7 +223,9 @@ STARTUP(void linkread(dev_t dev))
 	
 	while (P.p_count) {
 		x = spl4();
+		rxon();
 		while ((ch = qgetc(&G.link.readq.q)) < 0) {
+			rxon();
 			if (count != P.p_count) {
 				/* we got some data already, so just return */
 				return;
