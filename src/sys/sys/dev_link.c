@@ -102,7 +102,6 @@ STARTUP(void linkintr())
 #if 0
 	++*(short *)(0x4c00+0xf00-30*2);
 #endif
-		//kprintf("ac ");
 		/* do nothing */
 		return;
 	}
@@ -111,7 +110,6 @@ STARTUP(void linkintr())
 #if 0
 	++*(short *)(0x4c00+0xf00-30*3);
 #endif
-		//kprintf("er ");
 		/* acknowledge the error */
 		
 		/* LC_AUTOSTART | LC_DIRECT | LC_TODISABLE */
@@ -134,11 +132,9 @@ STARTUP(void linkintr())
 		//kprintf("Rx ");
 		if (!G.link.open) {
 			//kprintf("not-open ");
-			rxoff();
 			ch = LINK_BUFFER; /* discard it */
 		} else if (x == 0) { /* no room for this byte */
 			//kprintf("<.. ");
-			//kprintf("full ");
 			/*
 			 * N.B. The link hardware will not interrupt us again
 			 * for LS_RXBYTE until after we read the existing byte.
@@ -146,7 +142,6 @@ STARTUP(void linkintr())
 			 * resumes receiving.
 			 */
 			G.link.readoverflow = 1;
-			rxoff();
 		} else {
 			recvbyte();
 			G.link.rxtx |= 2;
@@ -226,19 +221,18 @@ STARTUP(void linkread(dev_t dev))
 	
 	while (P.p_count) {
 		x = spl4();
-		if (G.link.readoverflow) {
-			G.link.readoverflow = 0;
-			recvbyte();
-		}
-		rxon();
 		while ((ch = qgetc(&G.link.readq.q)) < 0) {
-			rxon();
 			if (count != P.p_count) {
 				/* we got some data already, so just return */
 				return;
 			}
 			G.link.hiwat = 1;
 			slp(&G.link.readq.q, 1);
+		}
+		if (G.link.readoverflow) {
+			G.link.readoverflow = 0;
+			//kprintf("?");
+			recvbyte();
 		}
 		splx(x);
 		*P.p_base++ = ch;
