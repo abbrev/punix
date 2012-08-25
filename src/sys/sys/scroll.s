@@ -35,12 +35,11 @@ scrolldown:
 |not tested!
 .global scrollup
 scrollup:
-	move	4(%sp),%d1
+	move	4(%sp),%d1	| d1 = rows
 	beq	9f
-	move.l	6(%sp),%a1
+	move.l	6(%sp),%a1	| a1 = lcd
 	
 	mulu	#LCD_INCY*6,%d1
-	add	%d1,%d1
 	|lea.l	LCD_MEM,%a1	| src
 	move	#NUMCELLROWS*6*LCD_INCY,%d0
 	sub	%d1,%d0
@@ -57,3 +56,21 @@ scrollup:
 	dbra	%d1,0b
 	
 9:	rts
+
+/*
+| void memmove_reg(void *dest, const void *src, size_t count);
+memmove_reg:
+	cmp.l	%a0,%a1		| Src <= dest
+	bls	1f
+0:		move.b	(%a1)+,(%a0)+
+		subq.l	#1,%d0
+		bne	0b
+	rts
+1:
+	add.l	%d0,%a0
+	add.l	%d0,%a1
+0:		move.b	-(%a1),-(%a0)
+		subq.l	#1,%d0
+		bne	0b
+	rts
+	*/
