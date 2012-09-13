@@ -478,7 +478,7 @@ void doexit(int status)
 			if (q->p_flag & P_TRACED) {
 				q->p_flag &= ~P_TRACED;
 				procsignal(q, SIGKILL);
-			} else if (q->p_status == P_STOPPED) {
+			} else if (q->p_state == P_STOPPED) {
 				procsignal(q, SIGHUP);
 				procsignal(q, SIGCONT);
 			}
@@ -597,7 +597,7 @@ void sys_vfork()
 	
 	cp->p_kstack = kstack - kstacksize;
 	cp->p_flag |= P_VFORK;
-	cp->p_status = P_NEW;
+	cp->p_state = P_NEW;
 
 	void return_from_vfork();
 	cp->p_ctx = *P.p_syscall_ctx;
@@ -655,17 +655,17 @@ loop:
 		++nfound;
 		if (P.p_flag & P_NOCLDWAIT)
 			continue;
-		if ((options & WCONTINUED) && p->p_status == P_RUNNING && (p->p_flag & P_WAITED)) {
+		if ((options & WCONTINUED) && p->p_state == P_RUNNING && (p->p_flag & P_WAITED)) {
 			/* return with this proc */
 			p->p_flag &= ~P_WAITED;
 			goto found;
 		}
-		if ((options & WUNTRACED) && p->p_status == P_STOPPED && !(p->p_flag & P_WAITED)) {
+		if ((options & WUNTRACED) && p->p_state == P_STOPPED && !(p->p_flag & P_WAITED)) {
 			/* return with this proc */
 			p->p_flag |= P_WAITED;
 			goto found;
 		}
-		if (p->p_status == P_ZOMBIE) {
+		if (p->p_state == P_ZOMBIE) {
 			goto found;
 		}
 	}
@@ -696,7 +696,7 @@ found:
 			P.p_error = EFAULT;
 	}
 	
-	if (p->p_status == P_ZOMBIE) {
+	if (p->p_state == P_ZOMBIE) {
 		kruadd(&current->p_ckru, &p->p_kru);
 		list_del(&p->p_list);
 		pfree(p);

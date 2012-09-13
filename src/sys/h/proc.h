@@ -127,7 +127,7 @@ struct krusage {
 struct proc {
 	struct zombproc {
 		struct list_head p_list;
-		char p_status;	/* stopped, ready, running, zombie, etc. */
+		char p_state;	/* stopped, ready, running, zombie, etc. */
 
 		/* our resource usage */
 		struct krusage p_kru;
@@ -325,7 +325,7 @@ struct proc {
 
 void procinit();
 
-/* states for p_status */
+/* states for p_state */
 #define P_RUNNING   0	/* zero so tests are fast and small */
 #define P_SLEEPING  1	/* waiting for an event */
 #define P_STOPPED   2	/**/

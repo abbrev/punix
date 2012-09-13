@@ -148,7 +148,7 @@ static void proc_to_kinfo_proc(struct proc *pp, struct kinfo_proc *kp)
 	kp->kp_vsz = 0L; /* XXX */
 	kp->kp_pri = 0;
 	kp->kp_nice = pp->p_nice - NZERO;
-	kp->kp_state = pp->p_status;
+	kp->kp_state = pp->p_state;
 	kp->kp_pcpu = pp->p_pctcpu;
 	kp->kp_ctime = pp->p_kru.kru_utime + pp->p_kru.kru_stime;
 	kp->kp_cctime = pp->p_ckru.kru_utime + pp->p_ckru.kru_stime;
@@ -156,7 +156,7 @@ static void proc_to_kinfo_proc(struct proc *pp, struct kinfo_proc *kp)
 	kp->kp_tty = pp->p_ttydev;
 	strncpy(kp->kp_cmd, pp->p_name, MAXCMDLEN);
 	kp->kp_cmd[MAXCMDLEN] = '\0';
-	switch (pp->p_status) {
+	switch (pp->p_state) {
 	case P_RUNNING:
 		kp->kp_state = PRUN;
 		break;

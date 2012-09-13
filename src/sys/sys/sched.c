@@ -175,7 +175,7 @@ void sched_tick(void)
 /* set the state of the process to 'state' */
 static void set_state(struct proc *p, const int state)
 {
-	if (state == p->p_status) return;
+	if (state == p->p_state) return;
 	mask(&G.calloutlock);
 	if (state == P_RUNNING) {
 		++G.numrunning;
@@ -187,14 +187,14 @@ static void set_state(struct proc *p, const int state)
 		}
 		list_add_tail(&p->p_runlist, &G.runqueues[p->p_prio]);
 	} else {
-		if (p->p_status == P_RUNNING) {
+		if (p->p_state == P_RUNNING) {
 			--G.numrunning;
 			list_del(&p->p_runlist);
 		} else {
 			//kprintf("set_state from not P_RUNNING to another not P_RUNNING\n");
 		}
 	}
-	p->p_status = state;
+	p->p_state = state;
 	unmask(&G.calloutlock);
 	/* TODO: anything else? */
 }
@@ -206,12 +206,12 @@ void sched_run(struct proc *p)
 	mask(&G.calloutlock);
 	//kprintf("sched_run()\n");
 #if 0
-	if (p->p_status == P_RUNNING) {
+	if (p->p_state == P_RUNNING) {
 		kprintf("pid=%d cmd=%s\n", p->p_pid, p->p_name);
 		panic("trying to run an already running process");
 	}
 #endif
-	if (p->p_status == P_ZOMBIE)
+	if (p->p_state == P_ZOMBIE)
 		panic("trying to run a zombie");
 	set_state(p, P_RUNNING);
 	/* TODO: anything else? */

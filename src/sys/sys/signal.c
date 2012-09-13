@@ -178,10 +178,10 @@ STARTUP(void procsignal(struct proc *p, int sig))
 	}
 	p->p_signals.sig_pending |= mask;
 	
-	if (action == SIG_HOLD && (!(prop & SA_CONT) || p->p_status != P_STOPPED))
+	if (action == SIG_HOLD && (!(prop & SA_CONT) || p->p_state != P_STOPPED))
 		return;
 	s = spl7();
-	switch (p->p_status) {
+	switch (p->p_state) {
 	case P_SLEEPING:
 		if (!(p->p_flag & P_SINTR))
 			goto out;
@@ -217,7 +217,7 @@ STARTUP(void procsignal(struct proc *p, int sig))
 				p->p_signals.sig_pending &= ~mask;
 			if (action == SIG_CATCH || p->p_waitchan == 0)
 				goto run;
-			/* p->p_status = P_SLEEPING; */
+			/* p->p_state = P_SLEEPING; */
 			sched_sleep(p);
 			goto out;
 		}

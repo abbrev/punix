@@ -25,12 +25,12 @@ STARTUP(void setrun(struct proc *p))
 	mask(&G.calloutlock);
 	p->p_waitchan = NULL;
 #if 0
-	if (p->p_status == P_RUNNING) {
+	if (p->p_state == P_RUNNING) {
 		kprintf("setrun(): warning: process is already running\n");
 		return;
 	}
 #endif
-	if (p->p_status != P_ZOMBIE) {
+	if (p->p_state != P_ZOMBIE) {
 		sched_run(p);
 	}
 	unmask(&G.calloutlock);
@@ -56,7 +56,7 @@ STARTUP(static void endtsleep(void *vp))
 	
 	mask(&G.calloutlock);
 	if (p->p_waitchan) {
-		if (p->p_status == P_SLEEPING) {
+		if (p->p_state == P_SLEEPING) {
 			TRACE();
 			setrun(p);
 		} else {
@@ -106,7 +106,7 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 	}
 #endif
 #ifdef	DIAGNOSTIC
-	if (chan == NULL || p->p_status != P_RUNNING)
+	if (chan == NULL || p->p_state != P_RUNNING)
 		panic("tsleep");
 #endif
 	p->p_waitchan = chan;
@@ -135,7 +135,7 @@ STARTUP(int tsleep(void *chan, int intr, long timo))
 		p->p_flag &= ~P_SINTR;
 		sig = 0;
 	}
-	/* p->p_status = P_SLEEPING; */
+	/* p->p_state = P_SLEEPING; */
 	sched_sleep(p);
 	swtch();
 resume:
@@ -288,7 +288,7 @@ STARTUP(void procinit())
 	P.p_pid = 1;
 	P.p_ruid = P.p_euid = P.p_svuid = 0;
 	P.p_rgid = P.p_egid = P.p_svgid = 0;
-	P.p_status = P_NEW;
+	P.p_state = P_NEW;
 	P.p_nice = NZERO;
 	P.p_pptr = NULL;
 	P.p_sched_policy = SCHED_NORMAL;
