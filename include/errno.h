@@ -49,8 +49,9 @@
 #define ENOSYS	 	38		/* Syscall not implemented */
 #define ENOTEMPTY	39	/*-*/	/* Directory not empty */
 #define ELOOP		40	/*-*/	/* Too many symbolic links */
+#define EOVERFLOW       41
 
-#define __ERRORS	40
+#define __ERRORS	41
 
 /* FIXME: add the following error numbers to be POSIX-compliant:
  * EADDRINUSE
@@ -70,18 +71,26 @@
  * EINPROGRESS
  * EISCONN
  * EMSGSIZE
+ * EMULTIHOP
  * ENETDOWN
  * ENETRESET
  * ENETUNREACH
  * ENOBUFS
+ * ENODATA
+ * ENOLINK
+ * ENOPROTOOPT
+ * ENOSR
+ * ENOSTR
  * ENOTCONN
  * ENOTSOCK
  * ENOTSUP
- * ENXIO
+ * EOPNOTSUPP
  * EPROTO
  * EPROTONOSUPPORT
  * EPROTOTYPE
  * ESTALE
+ * ETIME
+ * ETIMEDOUT
  */
 
 #ifdef __KERNEL__

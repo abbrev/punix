@@ -186,11 +186,11 @@ STARTUP(void linkintr())
 	//kprintf("] ");
 }
 
-STARTUP(void linkopen(dev_t dev, int rw))
+STARTUP(int link_open(struct file *fp, struct inode *ip))
 {
 	if (ioport) {
 		P.p_error = EBUSY;
-		return;
+		return -1;
 	}
 	
 	qclear(&G.link.readq.q);
@@ -199,6 +199,7 @@ STARTUP(void linkopen(dev_t dev, int rw))
 	LINK_CONTROL = G.link.control = LC_AUTOSTART | LC_TRIGERR | LC_TRIGANY | LC_TRIGRX;
 	++ioport; /* block other uses of the IO port */
 	G.link.open = 1;
+	return 0;
 }
 
 /*
@@ -208,50 +209,57 @@ STARTUP(void linkopen(dev_t dev, int rw))
  * Perhaps a new ioctl could drain the write queue, but it would be
  * interruptible so the process can be killed.
  */
-STARTUP(void linkclose(dev_t dev, int flag))
+STARTUP(int link_close(struct file *fp))
 {
 	flush();
 	linkinit();
+	return 0;
 }
 
-STARTUP(void linkread(dev_t dev))
+// XXX link device should be a tty
+// we need to use ttyread and stuff here
+STARTUP(ssize_t link_read(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	/* read up to p_count bytes from the rx queue to p_base */
 	int ch;
 	int x;
-	size_t count = P.p_count;
+	size_t oldcount = count;
 	
-	while (P.p_count) {
-		x = spl4();
+	while (count) {
 		rxon();
 		while ((ch = qgetc(&G.link.readq.q)) < 0) {
-			rxon();
-			if (count != P.p_count) {
-				/* we got some data already, so just return */
-				return;
+#if 1
+			if (G.link.readoverflow) {
+				G.link.readoverflow = 0;
+				recvbyte();
+				continue;
 			}
+#endif
+			rxon();
+			if (oldcount != count) {
+				/* we got some data already, so just return */
+				goto out;
+			}
+			x = spl4();
 			G.link.hiwat = 1;
 			slp(&G.link.readq.q, 1);
+			splx(x);
 		}
-		if (G.link.readoverflow) {
-			G.link.readoverflow = 0;
-			//kprintf("?");
-			recvbyte();
-		}
-		splx(x);
-		*P.p_base++ = ch;
-		--P.p_count;
+		*(char *)buf++ = ch;
+		--count;
 	}
+out:
+	return oldcount - count;
 }
 
-STARTUP(void linkwrite(dev_t dev))
+STARTUP(ssize_t link_write(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	int ch;
 	int x;
-	size_t count = P.p_count;
+	size_t oldcount = count;
 	
-	for (; P.p_count; --P.p_count) {
-		ch = *P.p_base++;
+	for (; count; --count) {
+		ch = *(char *)buf++;
 		x = spl4();
 		txon();
 		while (qputc(ch, &G.link.writeq.q) < 0) {
@@ -261,8 +269,24 @@ STARTUP(void linkwrite(dev_t dev))
 		}
 		splx(x);
 	}
+	return oldcount - count;
 }
 
-STARTUP(void linkioctl(dev_t dev, int cmd, void *cmarg, int flag))
+STARTUP(int link_ioctl(struct file *fp, int request, void *arg))
 {
+	// TODO
+	P.p_error = EINVAL;
+	return -1;
 }
+
+off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
+const struct fileops link_fileops = {
+	.open = link_open,
+	.close = link_close,
+	.read = link_read,
+	.write = link_write,
+	.lseek = pipe_lseek,
+	.ioctl = link_ioctl,
+	.fstat = generic_file_fstat,
+};

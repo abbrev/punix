@@ -1,6 +1,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <termios.h>
+#include <errno.h>
 
 #include "punix.h"
 #include "buf.h"
@@ -83,12 +84,56 @@ void ttyioctl(dev_t dev, int cmd, void *cmarg)
 	/* FIXME */
 }
 
-/*
- * FIXME: make this behave like the tty in Linux in canonical mode.
- * The tty in Linux buffers up to QSIZE - 1 characters in a line to leave room
- * for a newline or end-of-file (^D) character, either of which will send the
- * current line to the process.
- */
+ssize_t tty_read(struct tty *tp, void *buf, size_t count)
+{
+	char ch;
+	int lflag = tp->t_lflag;
+	cc_t *cc = tp->t_termios.c_cc;
+	struct queue *qp;
+	int havec = 0;
+	size_t n = 0;
+
+	if (count == 0) return 0;
+
+	qp = (lflag & ICANON) ? &tp->t_canq : &tp->t_rawq;
+
+loop:
+	/* TODO: also check for the tty closing */
+	while (qisempty(qp)) {
+		slp(&tp->t_rawq, 1);
+	}
+
+	while (count > 0 && (ch = qgetc(qp)) >= 0) {
+		if ((lflag & ICANON)) {
+			int numc = tp->t_numc;
+			tp->t_numc = !TTBREAKC(ch);
+			if (ch == cc[VEOF]) {
+				if (numc && !havec) {
+					goto loop;
+				} else {
+					break;
+				}
+			}
+		}
+		havec = 1;
+		if (copyout(buf, &ch, 1)) {
+			if (n == 0) {
+				P.p_error = EFAULT;
+				return -1;
+			} else {
+				return n;
+			}
+		}
+		++buf;
+		++n;
+		--count;
+		if ((lflag & ICANON) && TTBREAKC(ch))
+			break;
+	}
+	return n;
+}
+
+// XXX old method
 void ttyread(struct tty *tp)
 {
 	int ch;

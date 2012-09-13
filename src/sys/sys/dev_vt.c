@@ -1569,14 +1569,15 @@ int kputchar(int ch)
 	return ch;
 }
 
-void vtopen(dev_t dev, int rw)
+int vt_open(struct file *fp, struct inode *ip)
 {
+	int dev = ip->i_rdev;
 	int minor = MINOR(dev);
 	struct tty *tp;
 	
 	if (minor >= NVT) {
 		P.p_error = ENXIO;
-		return;
+		return -1;
 	}
 	tp = &G.vt.vt[minor];
 	if (!(tp->t_state & ISOPEN)) {
@@ -1602,32 +1603,67 @@ local	ISIG|ICANON|IEXTEN|ECHO|ECHOE|ECHOK  |ECHOCTL|ECHOKE
 		ttychars(tp);
 	}
 	ttyopen(dev, tp);
+	return 0;
 }
 
-void vtclose(dev_t dev, int rw)
+ssize_t tty_read(struct tty *tp, void *buf, size_t count);
+ssize_t vt_read(struct file *fp, void *buf, size_t count, off_t *pos)
 {
+	dev_t dev = fp->f_inode->i_rdev;
+	return tty_read(&G.vt.vt[MINOR(dev)], buf, count);
 }
 
-void vtread(dev_t dev)
+size_t vt_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
-	ttyread(&G.vt.vt[MINOR(dev)]);
-}
-
-void vtwrite(dev_t dev)
-{
+	size_t n = 0;
+	char ch;
+	dev_t dev = fp->f_inode->i_rdev;
 	struct tty *tp = &G.vt.vt[MINOR(dev)];
-	int ch;
-	int whereami = G.whereami;
-	G.whereami = WHEREAMI_VTWRITE;
-	
-	if (!(tp->t_state & ISOPEN))
-		return;
-	
-	while ((ch = cpass()) >= 0)
+
+#if 0
+	/* we do need to be sure the tty device is open, but we'll ignore this
+	 * for now */
+	if (!(tp->t_state & ISOPEN)) {
+		P.p_error = ENXIO; // ???
+		return -1;
+	}
+#endif
+
+	while (count > 0) {
+		if (copyin(&ch, buf, 1)) {
+			if (n) return n;
+			P.p_error = EFAULT;
+			return -1;
+		}
 		ttyoutput(ch, tp);
-	G.whereami = whereami;
+		++buf;
+		++n;
+		--count;
+	}
+
+	return n;
 }
 
-void vtioctl(dev_t dev, int cmd, void *cmarg, int rw)
+int vt_close(struct file *fp)
 {
+	return 0;
 }
+
+int vt_ioctl(struct file *fp, int request, void *arg)
+{
+	// TODO: support tty ioctl's
+	P.p_error = EINVAL;
+	return -1;
+}
+
+off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
+const struct fileops vt_fileops = {
+	.open = vt_open,
+	.close = vt_close,
+	.read = vt_read,
+	.write = vt_write,
+	.lseek = pipe_lseek,
+	.ioctl = vt_ioctl,
+	.fstat = generic_file_fstat,
+};

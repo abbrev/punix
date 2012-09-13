@@ -43,57 +43,87 @@ STARTUP(void srand(unsigned s))
 	G.prngseed = s;
 }
 
-STARTUP(void miscopen(dev_t dev, int rw))
+int misc_open(struct file *fp, struct inode *ip)
 {
-	int minor = MINOR(dev);
+	int minor = MINOR(ip->i_rdev);
 	
 	if (minor > DEVLAST) {
 		P.p_error = ENXIO;
-		return;
+		return -1;
 	}
+
+	return 0;
 }
 
-STARTUP(void miscread(dev_t dev))
+int misc_close(struct file *fp)
 {
-	int minor = MINOR(dev);
-	
+	return 0;
+}
+
+ssize_t misc_read(struct file *fp, void *buf, size_t count, off_t *pos)
+{
+	int minor = MINOR(fp->f_inode->i_rdev);
+	size_t n;
+
+	if (badbuffer(buf, count)) {
+		P.p_error = EFAULT;
+		return -1;
+	}
+
 	switch (minor) {
+	case DEVNULL:
+		return 0;
 	case DEVZERO:
 	case DEVFULL:
-		if (!P.p_base) {
-			P.p_error = EFAULT;
-			return;
-		}
-		memset(P.p_base, 0, P.p_count);
-		P.p_count = 0;
+		memset(buf, 0, count);
 		break;
 	case DEVRANDOM:
-		while (passc((unsigned char)(rand() >> 7)) >= 0) /* XXX constant */
-			;
-		break;
+		n = count;
+		while (n--)
+			*(char *)buf++ = (rand() >> 7);
 	}
+	return count;
 }
 
-STARTUP(void miscwrite(dev_t dev))
+ssize_t misc_write(struct file *fp, void *buf, size_t count, off_t *pos)
 {
-	int minor = MINOR(dev);
-	int c;
-	
+	int minor = MINOR(fp->f_inode->i_rdev);
+	size_t n;
+
+	if (badbuffer(buf, count)) {
+		P.p_error = EFAULT;
+		return -1;
+	}
+
 	switch (minor) {
-	case DEVZERO:
-	case DEVNULL:
-		P.p_count = 0;
-		break;
 	case DEVFULL:
 		P.p_error = ENOSPC;
-		break;
+		return -1;
 	case DEVRANDOM:
 		/* stir the pot */
-		while ((c = cpass()) >= 0)
-			G.prngseed = G.prngseed * (c + 1103515245UL) + 12345UL;
+		n = count;
+		while (n--)
+			G.prngseed = G.prngseed *
+			  (*(unsigned char *)buf++ + 1103515245UL) + 12345UL;
 	}
+	return count;
 }
 
-STARTUP(void miscioctl(dev_t dev, int cmd, void *cmargs))
+int misc_ioctl(struct file *fp, int request, void *arg)
 {
+	P.p_error = EINVAL;
+	return -1;
 }
+
+off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
+const struct fileops misc_fileops = {
+	.open = misc_open,
+	.close = misc_close,
+	.read = misc_read,
+	.write = misc_write,
+	.lseek = pipe_lseek,
+	.ioctl = misc_ioctl,
+	.fstat = generic_file_fstat,
+};
+

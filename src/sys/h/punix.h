@@ -13,6 +13,8 @@
 #define OS_VERSION	"0.06"
 #endif
 
+extern int badbuffer(void *base, size_t size);
+
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
 

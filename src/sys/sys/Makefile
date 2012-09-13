@@ -49,14 +49,14 @@ CSRC	+= pipe.c sys_sig.c
 CSRC	+= dev.c dev_audio.c dev_flash.c dev_link.c dev_misc.c dev_vt.c
 CSRC	+= lcd.c dev_tty.c keyscan.c batt.c
 # helper routines
-CSRC	+= kputs.c fio.c
+CSRC	+= kputs.c
 CSRC	+= trap.c bio.c # rdwri.c
 SSRC	+= flash.s scroll.s copy.s m68k.s
 SSRC	+= context.s long.s fpuemu.s
-CSRC	+= subr.c tty.c inode.c process.c pfs_alloc.c pfs_bmap.c
+CSRC	+= subr.c tty.c inode.c process.c #pfs_alloc.c pfs_bmap.c
 CSRC	+= panic.c abort.c assert.c kprintf.c printf.c clock.c #globals.c
 CSRC	+= loadav.c heap.c sched.c bogomips.c
-CSRC	+= sysctl.c usermain.c qsort.c gray.c
+CSRC	+= sysctl.c usermain.c qsort.c gray.c file.c fs.c fs_tmpfs.c
 SSRC	+= userstart.s mulu64.s divu64.s drawglyph.s
 
 #OBJ = testvectors.o

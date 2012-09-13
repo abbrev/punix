@@ -62,6 +62,7 @@ STARTUP(void kmain())
 	procinit();
 	bufinit();
 	flashinit();
+	inodeinit();
 	loadavinit();
 	battinit();
 	usageinit();

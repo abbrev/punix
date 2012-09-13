@@ -14,6 +14,15 @@
 extern void slp(void *, int);
 
 
+off_t pipe_lseek(struct file *fp, off_t offset, int whence)
+{
+	P.p_error = ESPIPE;
+	return -1;
+}
+
+#if 0
+/* TODO: rewrite pipes */
+
 /* int pipe(int *fd); */
 STARTUP(void sys_pipe())
 {
@@ -49,7 +58,7 @@ STARTUP(void sys_pipe())
 	rfp->f_flag = FREAD;
 	
 	ip->i_count = 2;
-	ip->i_mode = IFREG;
+	ip->i_mode = S_IFREG;
 	ip->i_flag = IACC | IUPD | ICHG;
 	return;
 	
@@ -75,7 +84,7 @@ loop:
 		i_unlock(ip);
 		if (ip->i_count < 2)
 			return;
-		ip->i_mode |= IREAD;
+		//ip->i_mode |= IREAD;
 		slp(ip+2, 1);
 		goto loop;
 	}
@@ -87,10 +96,13 @@ loop:
 	if (fp->f_offset == ip->i_size) {
 		fp->f_offset = 0;
 		ip->i_size = 0;
+#warning IWRITE
+#if 0
 		if (ip->i_mode & IWRITE) {
 			ip->i_mode &= ~IWRITE;
 			wakeup(ip+1);
 		}
+#endif
 	}
 	i_unlock(ip);
 }
@@ -122,7 +134,7 @@ loop:
 	}
 	
 	if (ip->i_size >= PIPSIZ) {
-		ip->i_mode |= IWRITE;
+		//ip->i_mode |= IWRITE;
 		i_unlock(ip);
 		slp(ip+1, 1);
 		goto loop;
@@ -133,10 +145,14 @@ loop:
 	c -= P.p_count;
 	write_inode(ip);
 	i_unlock(ip);
+#warning IREAD
+#if 0
 	if (ip->i_mode & IREAD) {
 		ip->i_mode &= ~IREAD;
 		wakeup(ip+2);
 	}
+#endif
 	goto loop;
 }
 
+#endif

@@ -73,6 +73,7 @@
 #include "uio.h"
 */
 #include "inode.h"
+#include "fs.h"
 #include "queue.h"
 #include "globals.h"
 
@@ -81,30 +82,46 @@ STARTUP(void sys_getdtablesize())
 	P.p_retval = NOFILE;
 }
 
-struct rdwra {
+struct prdwra {
 	int fd;
 	void *buf;
 	size_t count;
+	off_t offset;
 };
 
-STARTUP(static void rdwr(int mode))
+/* values for whichoffset */
+enum {
+	OFFSET_FILE, /* use (and update) offset from file structure */
+	OFFSET_ARG, /* use offset from the syscall argument (pread/pwrite) */
+};
+
+STARTUP(static void rdwr(int mode, int whichoffset))
 {
-	struct rdwra *ap = (struct rdwra *)P.p_arg;
+	struct prdwra *ap = (struct prdwra *)P.p_arg;
 	struct file *fp;
+	off_t *offset = NULL;
 	
 	GETF(fp, ap->fd);
 	
-	if ((fp->f_flag & mode) == 0) {
+	if ((fp->f_flags & mode) == 0) {
 		P.p_error = EBADF;
 		return;
 	}
 	P.p_base = ap->buf;
 	P.p_count = ap->count;
+	ssize_t n;
 	
 	/* if we were interrupted by a signal, just return the byte count if
 	 * it's not zero, else return an error */
+	/*
+	 * XXX: this only works right if the read/write routine updates
+	 * P.p_count between interruptible sleeps. If the routine doesn't
+	 * update P.p_count, it needs to catch signals itself and return the
+	 * count or error condition, as we do here.
+	 */
 	if (setjmp(P.p_sigjmp)) {
-		if (P.p_count == ap->count) {
+		n = ap->count - P.p_count;
+		if (n == 0) {
 			//P.p_error = EINTR;
 			return;
 		} else {
@@ -113,83 +130,52 @@ STARTUP(static void rdwr(int mode))
 		}
 	}
 	
-	if (fp->f_type == DTYPE_PIPE) {
-		if (mode == FREAD)
-			readp(fp);
-		else
-			writep(fp);
-	} else {
-		struct inode *ip = fp->f_inode;
-		P.p_offset = fp->f_offset;
-		
-		if (!(ip->i_mode & IFCHR))
-			i_lock(ip);
-		
-		rdwr_inode(ip, mode);
-		
-		if (!(ip->i_mode & IFCHR))
-			i_unlock(ip);
-		
-		fp->f_offset += ap->count - P.p_count;
+	offset = (whichoffset == OFFSET_FILE) ? &fp->f_offset : &ap->offset;
+	if (*offset < 0) {
+		P.p_error = EINVAL;
+		return;
 	}
+
+	assert(fp->f_ops);
+	if (mode == FREAD) {
+		assert(fp->f_ops->read);
+		n = fp->f_ops->read(fp, ap->buf, ap->count, offset);
+	} else {
+		assert(fp->f_ops->write);
+#if 0
+		kprintf("%s (%d): fp->f_ops->write=%p\n",
+		        __FILE__, __LINE__, fp->f_ops->write);
+#endif
+		n = fp->f_ops->write(fp, ap->buf, ap->count, offset);
+	}
+
 out:
-	P.p_retval = ap->count - P.p_count;
+	P.p_retval = n;
 }
 
 STARTUP(void sys_read(void))
 {
-	rdwr(FREAD);
+	rdwr(FREAD, OFFSET_FILE);
 }
-
-#if 0
-/* modified from 4.4BSD-Lite */
-void sys_read(void)
-{
-	struct rdwr *ap = (struct rdwr *)P.p_arg;
-	
-	struct file *fp;
-	struct uio auio;
-	struct iovec aiov;
-	long cnt;
-	int error = 0;
-	
-	GETF(fp, ap->fd);
-	if (!(fp->f_flag & FREAD)) {
-		P.p_error = EBADF;
-		return;
-	}
-	
-	aiov.iov_base = ap->buf;
-	aiov.iov_len = ap->count;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_resid = ap->count;
-	auio.uio_rw = UIO_READ;
-#if 0
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = current;
-#endif
-	cnt = ap->count;
-	//error = f_read(fp, &auio);
-	if (error = (*fp->f_ops->fo_read)(fp, &auio, fp->f_cred))
-		if (auio.uio_resid != cnt && (error == ERESTART
-		     || error == EINTR || error == EWOULDBLOCK))
-			error = 0;
-	cnt -= auio.uio_resid;
-	*retval = cnt;
-	return (error);
-}
-
-#endif
 
 STARTUP(void sys_write())
 {
 	int whereami = G.whereami;
 	G.whereami = WHEREAMI_WRITE;
 	
-	rdwr(FWRITE);
+	rdwr(FWRITE, OFFSET_FILE);
 	
 	G.whereami = whereami;
+}
+
+STARTUP(void sys_pread(void))
+{
+	rdwr(FREAD, OFFSET_ARG);
+}
+
+STARTUP(void sys_pwrite(void))
+{
+	rdwr(FWRITE, OFFSET_ARG);
 }
 
 STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
@@ -200,13 +186,14 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 	int i;
 	int inomode;
 	
+#if 0
 	fd = falloc();
 	if (fd < 0)
 		return;
 	fp = P.p_ofile[fd];
-	fp->f_flag = flags & O_RDWR;
+	fp->f_flags = flags & O_RDWR;
 	fp->f_type = DTYPE_INODE;
-	mode = mode & 077777 & ~ISVTX;
+	mode = mode & 077777 & ~S_ISVTX;
 	
 	/* eliminate invalid flag combinations */
 	
@@ -215,7 +202,82 @@ STARTUP(static void doopen(const char *pathname, int flags, mode_t mode))
 		inomode = INO_CREATE;
 	
 	/* ... */
+#endif
 	P.p_error = EMFILE;
+}
+
+extern const struct fileops generic_file_fileops;
+extern const struct fileops generic_dir_fileops;
+extern const struct fileops generic_special_fileops;
+
+int fakefs_read_inode(struct inode *ip)
+{
+	return 0;
+}
+
+/*
+ * calling this namei0() because it's just a temporary placeholder for a real
+ * namei() function
+ */
+struct inode *namei0(const char *path)
+{
+	struct inode *ip;
+	const struct filesystem *fs = NULL;
+	dev_t dev;
+	ino_t inum;
+	struct file_list { const char *name; ino_t inum; dev_t dev; };
+	static const struct file_list file_list[] = {
+		{ "/dev/vt", 1, DEV_VT },
+		{ "/dev/audio", 2, DEV_AUDIO },
+		{ "/dev/link", 3, DEV_LINK },
+		{ "/dev/null", 4, DEV_MISC|0 },
+		{ "/dev/zero", 5, DEV_MISC|1 },
+		{ "/dev/full", 6, DEV_MISC|2 },
+		{ "/dev/random", 7, DEV_MISC|3 },
+		{ NULL, 0, 0 },
+	};
+	static const struct fsops fakefsops = {
+		.read_inode = fakefs_read_inode
+	};
+	static const struct filesystem fakefs = {
+		.fsops = &fakefsops
+	};
+
+	const struct file_list *flp;
+	
+	for (flp = &file_list[0]; flp->name; ++flp) {
+		if (!strcmp(path, flp->name)) {
+			fs = &fakefs;
+			inum = flp->inum;
+			dev = flp->dev;
+			break;
+		}
+	}
+	if (!fs) {
+		P.p_error = ENOENT;
+		return NULL;
+	}
+
+	ip = iget(fs, inum);
+	if (!ip) goto fail;
+	ip->i_rdev = dev;
+	ip->i_mode = S_IFCHR;
+
+	// XXX This should be set in each filesystem's read_inode() handler.
+	// The handler tables for regular files and directories would be
+	// defined for each file system too. The special file handler table
+	// would just be generic_special_fileops.
+	if (S_ISREG(ip->i_mode)) {
+		ip->i_fops = &generic_file_fileops;
+	} else if (S_ISDIR(ip->i_mode)) {
+		ip->i_fops = NULL; //&generic_dir_fileops;
+	} else {
+		ip->i_fops = &generic_special_fileops;
+	}
+
+	return ip;
+fail:
+	return NULL;
 }
 
 /* open system call */
@@ -233,42 +295,39 @@ STARTUP(void sys_open())
 	struct file *fp;
 	struct inode *ip;
 	
-	assert(G.nextinode < NINODE);
-	ip = &G.inode[G.nextinode]; /* XXX very hackish :) */
-	if (!strcmp(ap->pathname, "/dev/vt"))
-		ip->i_rdev = DEV_VT;
-	else if (!strcmp(ap->pathname, "/dev/audio"))
-		ip->i_rdev = DEV_AUDIO;
-	else if (!strcmp(ap->pathname, "/dev/link"))
-		ip->i_rdev = DEV_LINK;
-	else if (!strcmp(ap->pathname, "/dev/null"))
-		ip->i_rdev = DEV_MISC | 0;
-	else if (!strcmp(ap->pathname, "/dev/zero"))
-		ip->i_rdev = DEV_MISC | 1;
-	else if (!strcmp(ap->pathname, "/dev/full"))
-		ip->i_rdev = DEV_MISC | 2;
-	else if (!strcmp(ap->pathname, "/dev/random"))
-		ip->i_rdev = DEV_MISC | 3;
-	else {
-		P.p_error = ENOENT;
-		return;
-	}
-	cdevsw[MAJOR(ip->i_rdev)].d_open(ip->i_rdev,1);
-	if (P.p_error)
-		return;
-
-	ip->i_mode = IFCHR;
 	fd = falloc();
 	if (fd < 0)
 		return;
-	++G.nextinode;
 	
 	fp = P.p_ofile[fd];
-	fp->f_flag = O_RDWR;
+	ip = namei0(ap->pathname);
+	if (!ip) {
+		if (ap->flags & O_CREAT) {
+			P.p_error = EACCES; // XXX no way to create files yet
+		}
+		goto fail_file;
+	}
+	
+	fp->f_flags = ap->flags; // XXX: validate flags
 	fp->f_type = DTYPE_INODE;
 	fp->f_inode = ip;
+	if (ip->i_fops->open(fp, ip)) {
+		goto fail_inode;
+	}
+	assert(fp->f_ops);
+	assert(fp->f_ops->read);
+
+	iunlock(ip);
 	
 	P.p_retval = fd;
+	return;
+fail_inode:
+	iunlock(ip);
+	iput(ip);
+fail_file:
+	--fp->f_count; // XXX free the file structure
+	P.p_ofile[fd] = NULL;
+	;
 #else
 	doopen(ap->pathname, ap->flags, ap->mode);
 #endif
@@ -283,36 +342,6 @@ STARTUP(void sys_creat())
 	} *ap = (struct a *)P.p_arg;
 	
 	doopen(ap->pathname, O_CREAT | O_TRUNC | O_WRONLY, ap->mode);
-}
-
-/* Internal close routine. Decrement reference count on file structure
- * and call special file close routines on last close. */
-STARTUP(void closef(struct file *fp))
-{
-        struct inode *inop;
-        dev_t dev;
-        int major;
-        int rw;
-        
-	if (--fp->f_count > 0) return;
-	
-	inop = fp->f_inode;
-	dev = inop->i_rdev;
-	
-	i_lock(inop);
-	if (fp->f_type == DTYPE_PIPE) {
-		inop->i_mode &= ~(IREAD | IWRITE);
-		wakeup(inop); /* XXX */
-	}
-	i_unref(inop);
-	
-	switch (inop->i_mode & IFMT) {
-	case IFCHR:
-		cdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
-		break;
-	case IFBLK:
-		bdevsw[MAJOR(dev)].d_close(dev, fp->f_flag);
-	}
 }
 
 STARTUP(void sys_close())
@@ -330,7 +359,7 @@ STARTUP(void sys_close())
 		--P.p_lastfile;
 #endif
 	
-	closef(fp);
+	P.p_retval = closef(fp);
 }
 
 #define OFLAGIDX(num) ((num) >> 3) /* num/8 */
@@ -424,7 +453,7 @@ STARTUP(void sys_dup())
 STARTUP(void sys_dup2())
 {
 	struct dupa *ap = (struct dupa *)P.p_arg;
-	struct file *oldfp;
+	struct file *oldfp, *fp;
 	
 	GETF(oldfp, ap->oldfd);
 	
@@ -437,8 +466,9 @@ STARTUP(void sys_dup2())
 		return;
 	}
 	
-	if (P.p_ofile[ap->newfd])
-		closef(P.p_ofile[ap->newfd]);
+	fp = P.p_ofile[ap->newfd];
+	if (fp)
+		closef(fp);
 	
 	P.p_error = 0;
 	
@@ -457,28 +487,7 @@ STARTUP(void sys_lseek())
 	
 	GETF(fp, ap->fd);
 	
-	if (fp->f_type == DTYPE_PIPE) {
-		P.p_error = ESPIPE;
-		return;
-	}
-	
-	switch (ap->whence) {
-		case SEEK_SET:
-			pos = ap->offset;
-			break;
-		case SEEK_CUR:
-			pos = ap->offset + fp->f_offset;
-			break;
-		case SEEK_END:
-			pos = ap->offset + fp->f_inode->i_size;
-			break;
-		default:
-			P.p_error = EINVAL;
-			return;
-	}
-	fp->f_offset = pos;
-	
-	P.p_retval = (long)pos;
+	P.p_retval = fp->f_ops->lseek(fp, ap->offset, ap->whence);
 }
 
 /* umask system call */
@@ -586,16 +595,16 @@ STARTUP(void sys_fcntl())
 			break;
 		case F_GETFL:
 #define OFLAGS(x) ((x) - 1) /* FIXME: what is OFLAGS, really? */
-			P.p_retval = OFLAGS(fp->f_flag);
+			P.p_retval = OFLAGS(fp->f_flags);
 			break;
 #if 0
 		case F_SETFL:
 			/* FIXME: define all these macros */
-			fp->f_flag &= ~FCNTLFLAGS;
-			fp->f_flag |= (FFLAGS(ap->arg)) & FCNTLFLAGS;
-			if ((P.p_error = fset(fp, FNONBLOCK, fp->f_flag & NONBLOCK)))
+			fp->f_flags &= ~FCNTLFLAGS;
+			fp->f_flags |= (FFLAGS(ap->arg)) & FCNTLFLAGS;
+			if ((P.p_error = fset(fp, FNONBLOCK, fp->f_flags & NONBLOCK)))
 				break;
-			if ((P.p_error = fset(fp, O_ASYNC, fp->f_flag & O_ASYNC)))
+			if ((P.p_error = fset(fp, O_ASYNC, fp->f_flags & O_ASYNC)))
 				fset(fp, FNONBLOCK, 0);
 			break;
 #endif
@@ -622,11 +631,11 @@ STARTUP(void sys_ioctl())
 	
 	int fd;
 	struct file *fp;
-	int dev;
+	int major;
 	
 	GETF(fp, ap->d);
-	dev = fp->f_inode->i_rdev;
-	
-	cdevsw[MAJOR(dev)].d_ioctl(dev, ap->request, ap->arg);
+	major = MAJOR(fp->f_inode->i_rdev);
+
+	P.p_retval = fp->f_ops->ioctl(fp, ap->request, ap->arg);
 }
 

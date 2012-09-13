@@ -100,29 +100,34 @@ out:
 	}
 }
 
-STARTUP(void audioopen(dev_t dev, int rw))
+STARTUP(int audio_open(struct file *fp, struct inode *ip))
 {
 	if (ioport) {
 		P.p_error = EBUSY;
-		return;
+		return -1;
 	}
 	
 	++ioport; /* one reference for being open */
 	
 	qclear(&G.audio.q.q);
 	startaudio();
+
+	return 0;
 }
 
-STARTUP(void audioclose(dev_t dev, int flag))
+STARTUP(int audio_close(struct file *fp))
 {
 	dspsync();
 	stopaudio();
 	ioport = 0; /* no longer open */
+
+	return 0;
 }
 
 /* there is no reading from the audio device */
-STARTUP(void audioread(dev_t dev))
+STARTUP(ssize_t audio_read(struct file *fp, void *buf, size_t count, off_t *pos))
 {
+	return 0;
 }
 
 /*
@@ -136,34 +141,35 @@ STARTUP(void audioread(dev_t dev))
 #define MAXDRAIN (AUDIOQSIZE / 2)
 
 /* write audio samples to the audio queue */
-STARTUP(void audiowrite(dev_t dev))
+STARTUP(ssize_t audio_write(struct file *fp, void *buf, size_t count, off_t *pos))
 {
 	int x;
+	size_t oldcount = count;
 	size_t n;
 	unsigned long *spinner = (unsigned long *)(0x4c00+0xf00-6*30+4*4);
 
-	while (P.p_count) {
+	while (count) {
 		*spinner = 0xffffffff;
-		n = b_to_q(P.p_base, MIN(P.p_count, AUDIOQSIZE), &G.audio.q.q);
-		P.p_base += n;
-		P.p_count -= n;
+		n = b_to_q(buf, MIN(count, AUDIOQSIZE), &G.audio.q.q);
+		buf += n;
+		count -= n;
 
-		if (P.p_count == 0 || !G.audio.play) /* playback is halted */
+		if (count == 0 || !G.audio.play) /* playback is halted */
 			break;
-
+			
 		/*
 		 * we filled the buffer practically full, so wait until it
 		 * drains low enough for us to fill it up again
 		 */
 		*spinner = 0xffff0000;
-		
+	
 		x = spl1();
-		G.audio.lowat = AUDIOQSIZE - MIN(P.p_count, MAXDRAIN);
+		G.audio.lowat = AUDIOQSIZE - MIN(count, MAXDRAIN);
 		
 		slp(&G.audio.q.q, 1);
 		splx(x);
 	}
-	*spinner = 0x00000000;
+	return oldcount - count;
 }
 
 /* some OSS ioctl() codes to support:
@@ -177,12 +183,12 @@ STARTUP(void audiowrite(dev_t dev))
  */
 
 #if 1
-STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
+STARTUP(int audio_ioctl(struct file *fp, int request, void *arg))
 {
 	/*struct oss_count_t count;*/
 	int speed;
 	
-	switch (cmd) {
+	switch (request) {
 #if 0
 	case SNDCTL_DSP_SILENCE:
 		qclear(&G.audio.q.q);
@@ -196,7 +202,7 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 		count.samples = G.audio.optr;
 		count.fifo_samples = G.audio.q.q.q_count * SAMPLESPERBYTE;
 		splx(x);
-		copyout(cmarg, &count);
+		copyout(arg, &count);
 		break;
 	case SNDCTL_DSP_HALT:
 	case SNDCTL_DSP_HALT_OUTPUT:
@@ -205,7 +211,7 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 #endif
 	case SNDCTL_DSP_SPEED:
 		speed = SAMPLESPERSEC;
-		copyout(cmarg, &speed, sizeof(speed));
+		copyout(arg, &speed, sizeof(speed));
 		break;
 	case SNDCTL_DSP_SYNC:
 		dspsync();
@@ -213,9 +219,22 @@ STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 	default:
 		P.p_error = ENOSYS;
 	}
+	return 0;
 }
 #else
 STARTUP(void audioioctl(dev_t dev, int cmd, void *cmarg, int flag))
 {
 }
 #endif
+
+off_t pipe_lseek(struct file *, off_t, int);
+int generic_file_fstat(struct file *fp, struct stat *buf);
+const struct fileops audio_fileops = {
+	.open = audio_open,
+	.close = audio_close,
+	.read = audio_read,
+	.write = audio_write,
+	.lseek = pipe_lseek,
+	.ioctl = audio_ioctl,
+	.fstat = generic_file_fstat,
+};

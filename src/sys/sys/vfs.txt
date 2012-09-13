@@ -1,0 +1,86 @@
+Punix vfs will be similar to the Linux vfs.
+
+Filesystems contain an information block about the filesystem itself:
+
+name: name of the fs
+flags: flags
+read_filesystem: method to read the superblock from the device
+
+Filesystems implement the following inode methods:
+
+alloc_inode: allocate a new inode on the device
+free_inode: free an inode on the device
+read_inode: read an existing inode from the device
+write_inode: write an existing inode back to the device
+
+To operate on files themselves, filesystems implement the following methods:
+
+open: initialize file structure (some filesystems may redirect to a different filesystem here or set f_ops to a method table given the type of file (directory, regular, etc))
+read: read bytes from the file to the buffer
+write: write bytes from the buffer to the file
+lseek: move the read/write position
+ioctl: I/O control
+fstat: get stat info about the file
+
+
+TODO: need method(s) to search through a directory (readdir), add a directory entry (link to inode), etc
+
+Filesystem operations:
+
+search for file by path (namei function) -> return inode
+open existing file by inode
+write to file (write)
+read from file (read)
+read directory -> write directory entry/entries to buffer
+create new file in directory (need nameidata to create link)[1]
+add link to existing inode (need nameidata to create link)[1]
+remove link to inode (need nameidata to remove link)
+rename directory entry (need nameidata to rename link)
+get file stats by inode
+move read/write pointer (lseek)
+
+
+notes:
+[1] Creating a new file in a directory is the same as creating a new inode and adding a link to that inode in a directory, but these operations must be separate because some filesystems (eg, FAT) support only one link to a file. Therefore, creating a file must also create the first directory entry (link to the inode).
+
+
+
+misc notes:
+pread and pwrite fail for non-seekable files, such as pipes, sockets, and character devices. pread and pwrite can try an lseek with an offset of zero and bail out if that fails (and errno will be set by lseek). Otherwise there would have to be some other method or a flag somewhere that tells the vfs whether the file is seekable.
+
+
+namei notes:
+The main operation of namei is to look up a path name and return a pointer to the file's inode. There are a few sub-operations on top of this:
+
+* look for a path name with the intent to delete the name [1]
+* look for a path name with the intent to create the name [2]
+* look for a path name with the intent to rename
+* look for a path name with no other intentions
+
+The first three sub-operations leave information in the nameidata structure that is passed to namei that can be used to delete/create the entry if it does/does not exist already. In either of these two cases, the parent directory (the one that contains the leaf node in the path) is returned locked if the file does/does not exist so that namei's caller can subsequently delete/create the entry. The third case (intent to rename) is much trickier. It requires checking for the existence of two entries: the old name and the new name. Renaming can also involve moving an entry across mount boundaries, which is even trickier than a same-mount move.
+
+[1] deleting a directory entry could instead be a file operation supported by the file system directly. After locating the parent directory, the namei function can call the file system's remove method. Or the remove method could take a nameidata structure (a side-effect of a call to namei) as its argument.
+[2] likewise for creating an entry.
+
+remove file:
+call namei with intent to delete
+if inode is not returned, set errno to ENOENT
+else call fs remove method and then unlock and put the inode
+
+create file:
+call namei with intent to create
+if inode is returned, set errno to EEXIST
+else call fs create method and then unlock and put the inode
+
+namei also has other requirements:
+
+* bail out if too many symbolic links are followed, either recursively or serially
+* bail out if non-leaf name is not found or is not a directory
+
+
+more misc notes:
+an inode that is mounted on stays in main memory as long as it is still mounted
+
+ls appears to do lstat on all files--that is, it gets the information about a symbolic link itself, not the target of the link. If 'foo' is a symbolic link, running 'ls foo' gets information about the symlink. Running 'ls foo/' instead is the same as 'ls foo/.', so 'foo' is no longer the leaf in the path, and ls displays the link's target instead.
+
+

@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stddef.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "punix.h"
 #include "param.h"
@@ -12,9 +13,9 @@
 #include "user.h"
 */
 #include "inode.h"
+#include "fs.h"
 /*
 #include "mount.h"
-#include "fs.h"
 #include "conf.h"
 */
 #include "buf.h"
@@ -22,87 +23,158 @@
 #include "proc.h"
 #include "globals.h"
 
-void iput(struct inode *p);
-/*void iupdat(int *p, int *tm);*/
-void itrunc(struct inode *ip);
-struct inode *maknode(int mode);
-void wdir(struct inode *ip);
+/*
+ * TODO: put inodes on lists when they are allocated. Each filesystem object
+ * will have a list of inodes that belong to it. All inodes in these lists have
+ * non-zero reference counts. There will also be a global list of inodes that
+ * are currently unused (in LRU order) but kept around for some time as a
+ * cache (so they don't have to be read from device again). iget() will look
+ * through the filesystem's list first, and then look through the unused inode
+ * list second. If a usable inode is not found, a new inode will be allocated
+ * from the heap and added to the filesystem's inode list.
+ *
+ * The size of the unused inode list must be maintained in order to keep it
+ * under control. The size should be kept either as a percentage of the total
+ * inode count, or as an absolute maximum size, or both (limit the size to the
+ * minimum of both).
+ */
 
-struct dinode;
-
-/* create a new inode structure for the given device and inum
- * return with inode locked */
-struct inode *i_new(dev_t dev, ino_t ino)
+#if 0 // we're still using a fixed-sized array of inode structures
+/*
+ * create a new vfs inode object with fs and num initialized
+ * return with inode locked
+ */
+static struct inode *new_inode(struct filesystem *fs, ino_t num)
 {
 	struct inode *ip;
-	size_t isize = sizeof(struct inode);
-	ip = memalloc(&isize, 0);
+	size_t size = sizeof(struct inode);
+	ip = memalloc(&size, 0);
 	if (!ip) {
 		P.p_error = ENFILE;
 		return NULL;
 	}
-	ip->i_dev = dev;
-	ip->i_number = ino;
-	ip->i_fs = getfs(dev);
-	ip->i_flag = 0;
+	ip->i_fs = fs;
+	ip->i_num = num;
 	ip->i_count = 0;
-	i_ref(ip);
-	I_LOCK(ip);
-	list_add(&ip->i_list, &G.inode_list);
+	ip->i_flag = ILOCKED;
 	return ip;
 }
 
-/* delete an inode; assumes that it has no references */
-void i_delete(struct inode *ip)
+/* free a vfs inode object */
+static void delete_inode(struct inode *ip)
 {
-	list_del(&ip->i_list);
+	assert(ip->i_count == 0); // make sure nobody is referencing this inode
+	memfree(ip, 0);
 }
+#endif
 
-void i_trunc(struct inode *inop)
+void inodeinit()
 {
-	pfs_inode_trunc(inop->i_dev, inop->i_number);
-}
-
-/* allocate an inode on device and return with a locked inode */
-struct inode *i_alloc(dev_t dev)
-{
-	struct inode *inop;
-	ino_t ino;
-	ino = pfs_inode_alloc(dev);
-	if (!ino) return NULL;
-	
-	/* TODO: write this */
-	return NULL;
-	
-#if 0
 	struct inode *ip;
-	ino_t ino;
-	ino = pfs_inode_alloc(dev); /* XXX: vfs supports only PFS */
-	if (!ino) return NULL;
-	ip = i_new(dev, ino);
-	if (!ip) {
-		i_free(dev, ino);
+	for (ip = &G.fs.inode[0]; ip < &G.fs.inode[NINODE]; ++ip) {
+		ip->i_fs = NULL;
+		ip->i_flag = 0;
+		ip->i_count = 0;
+	}
+}
+
+/*
+ * Get an inode by filesystem/inum pair.
+ * If inode is already in memory, lock it and return it.
+ * Otherwise, read it in from the device, lock it, and return it.
+ * If the inode is mounted on, return the inode that covers it.
+ */
+struct inode *iget(struct filesystem *fs, ino_t num)
+{
+	struct inode *ip;
+	struct inode *freeip;
+
+retry:
+	freeip = NULL;
+	for (ip = &G.fs.inode[0]; ip < &G.fs.inode[NINODE]; ++ip) {
+		if (ip->i_fs == fs && ip->i_num == num) {
+			// we found our inode in the cache
+			// follow the mount
+			while (ip->i_mount)
+				ip = ip->i_mount;
+
+			fs = ip->i_fs;
+			num = ip->i_num;
+
+			/* try to lock it */
+			if (ip->i_flag & ILOCKED) {
+				ip->i_flag |= IWANTED;
+				slp(ip, 0);
+				goto retry;
+			}
+			goto out;
+		}
+		if (ip->i_count == 0)
+			freeip = ip;
+	}
+	if (!(ip = freeip)) {
+		kprintf("no free inodes!\n");
+		P.p_error = ENFILE;
 		return NULL;
 	}
+	ip->i_fs = fs;
+	ip->i_num = num;
+	ip->i_count = 0;
+	ip->i_mount = NULL;
+	ip->i_flag = 0;
+
+	if (!fs || !fs->fsops) {
+		P.p_error = EIO;
+		goto fail;
+	}
+	if (fs->fsops->read_inode(ip)) {
+		goto fail;
+	}
+out:
+	ip->i_flag |= ILOCKED;
+	++ip->i_count;
 	return ip;
-#endif
+
+fail:
+	ip->i_fs = NULL;
+	ip->i_num = -1;
+	return NULL;
 }
 
-void i_free(dev_t dev, ino_t ino)
+/*
+ * Decrement the reference count.
+ * If reference count becomes 0, write it out to
+ * the device or delete the file if nlink is also 0.
+ */
+void iput(struct inode *ip)
 {
-	pfs_inode_free(dev, ino); /* XXX: vfs supports only PFS */
+	struct filesystem *fs;
+	if (--ip->i_count) return;
+	if (ip->i_nlink == 0) {
+		// TODO: write this
+		return;
+	}
+	// write inode out if it's dirty
+	if (ip->i_flag & (ICHG|IMOD|IUPD)) { // XXX: any other flags?
+		fs = ip->i_fs;
+		assert(fs);
+		assert(fs->fsops);
+		assert(fs->fsops->write_inode);
+		fs->fsops->write_inode(ip);
+		ip->i_flag &= ~(ICHG|IMOD|IUPD);
+	}
 }
 
-STARTUP(void i_lock(struct inode *inop))
+STARTUP(void ilock(struct inode *inop))
 {
 	while (inop->i_flag & ILOCKED) {
 		inop->i_flag |= IWANTED;
-		slp(inop, PINOD);
+		slp(inop, 0);
 	}
 	inop->i_flag |= ILOCKED;
 }
 
-STARTUP(void i_unlock(struct inode *inop))
+STARTUP(void iunlock(struct inode *inop))
 {
 	inop->i_flag &= ~ILOCKED;
 	if (inop->i_flag & IWANTED) {
@@ -110,108 +182,4 @@ STARTUP(void i_unlock(struct inode *inop))
 		wakeup(inop);
 	}
 }
-// increase reference count
-void i_ref(struct inode *inop)
-{
-	++inop->i_count;
-}
 
-// decrease reference count, freeing it on disk if nlink=0
-void i_unref(struct inode *inop)
-{
-	if (--inop->i_count) return;
-	/* FIXME */
-	if (inop->i_nlink == 0) {
-		i_trunc(inop);
-		i_free(inop->i_dev, inop->i_number);
-	}
-}
-
-/* read the inode from device */
-int i_read(struct inode *ip)
-{
-	return pfs_readinode(ip);
-}
-
-/* get an inode, possibly reading it from disk, and return it locked */
-struct inode *i_open(dev_t dev, ino_t ino)
-{
-	struct inode *ip;
-	size_t isize = sizeof(struct inode);
-	
-	if (ino == NULLINO)
-		return i_alloc(dev);
-	
-	/* look for the specified inode in memory */
-	list_for_each_entry(ip, &G.inode_list, i_list) {
-		if (ip->i_dev == dev && ip->i_number == ino) {
-			/* we found it */
-			i_ref(ip);
-			I_LOCK(ip);
-			return ip;
-		}
-	}
-	
-	/* it's not in memory already.
-	 * make a new one and read it from the device */
-	ip = i_new(dev, ino);
-	if (!ip) return NULL;
-	if (i_read(ip)) {
-		i_delete(ip);
-		return NULL;
-	}
-	return ip;
-}
-
-/*
- * Check accessed and update flags on
- * an inode structure.
- * If either is on, update the inode
- * with the corresponding dates
- * set to the argument tm.
- */
-#if 0 /* REWRITE */
-STARTUP(void iupdat(struct inode *ip, time_t *ta, time_t *tm))
-{
-	/* body deleted */
-}
-#endif /* REWRITE */
-
-/*
- * Free all the disk blocks associated
- * with the specified inode structure.
- * The blocks of the file are removed
- * in reverse order. This FILO
- * algorithm will tend to maintain
- * a contiguous free list much longer
- * than FIFO.
- */
-#if 0 /* REWRITE */
-void itrunc(struct inode *ip)
-{
-	/* body deleted */
-}
-#endif /* REWRITE */
-
-/*
- * Make a new file.
- */
-#if 0 /* REWRITE */
-STARTUP(struct inode *maknode(int mode))
-{
-	/* body deleted */
-	return NULL;
-}
-#endif /* REWRITE */
-
-/*
- * Write a directory entry with
- * parameters left as side effects
- * to a call to namei.
- */
-#if 0 /* REWRITE */
-STARTUP(void wdir(struct inode *ip))
-{
-	/* body deleted */
-}
-#endif /* REWRITE */

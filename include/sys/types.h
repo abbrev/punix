@@ -13,7 +13,7 @@ typedef unsigned long  fsblkcnt_t;
 typedef unsigned long  fsfilcnt_t;
 typedef unsigned int   gid_t;
 typedef int            id_t;
-typedef unsigned short ino_t;
+typedef unsigned long  ino_t;
 typedef unsigned short mode_t;
 typedef unsigned int   nlink_t;
 typedef long           off_t;

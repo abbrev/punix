@@ -1,11 +1,11 @@
 Filesystem on Flash notes
 2010-03-26
 
-The Punix File System (PFS) will be mostly device-agnostic, but it will be designed for flash-type devices which can have bits cleared but not set between sector erases.
+The Punix File System (PFS) will be mostly device-agnostic, but it will be designed for flash-type devices which can have bits cleared but not set between sector erases. The storage mechanisms of the underlying block device (such as the flash device) are not specified here.
 
 Superblock
 
-The PFS superblock is located at the first block in the device (block 0). It includes all the information that is needed in the VFS superblock. It also includes PFS-specific information such as number of inodes in the filesystem (as PFS allows this number to vary as the filesystem grows and changes; see the Inodes section below for more about this). Following the first block are blcks that contain bitmaps of free blocks. Set bits indicate the blocks are free. With 128-byte blocks and 2MB device size, 16 blocks are needed to store this bitmap information.
+The PFS superblock is located at the first block in the device (block 0). It includes all the information that is needed in the VFS superblock. It also includes PFS-specific information such as number of inodes in the filesystem (as PFS allows this number to vary as the filesystem grows and changes; see the Inodes section below for more about this). Following the first block are blocks that contain bitmaps of free blocks. Set bits indicate the blocks are free. With 128-byte blocks and 2MB device size, 16 blocks are needed to store this bitmap information.
 
 Here is a preliminary layout of the PFS superblock as stored on the device:
 
@@ -34,7 +34,7 @@ Inodes
 
 The inode table is stored at the end of the device and grows downward. The number of inodes in the table is stored in the superblock. The first inode (number 1; 0 is reserved to indicate no inode) is stored in the last device block. Inodes are 32 bytes long, so with 128-byte blocks there are 4 inodes per block. This makes calculating the location of an inode given its number very straightforward.
 
-An inode stores a list of file blocks as extents. This is to attempt to minimize metadata size in the inode. An extent is made up of the starting block number (2 bytes) and a length field (1 byte). The length field indicates how many bytes follow the starting block, so an extent can be any length between 1 and 256 blocks. The inode also stores the field extent_depth which tells the filesystem how deep the extents are, or how indirect they are. If extent_depth is 0, the extents in the inode point directly to the file blocks. If extent_depth is 1, the extents in the inode point to blocks that contain extent lists, and those indirect extents point to the file blocks. This allows files to be arbitrarily large (limited by the size of the device) while minimizing metadata overhead; small files will typically require only the extents list in the inode itself, while larger files may need additional block(s) to contain extents list(s). (Using extents increases seek time over a flat index list, unfortunately).
+An inode stores a list of file blocks as extents. This is to attempt to minimize metadata size in the inode. An extent is made up of the starting block number (2 bytes) and a length field (1 byte). The length field indicates how many bytes follow the starting block, so an extent can be any length between 1 and 256 blocks. The inode also stores the field extent_depth which tells the filesystem how deep the extents are, or how indirect they are. If extent_depth is 0, the file data is stored directly in the space that would be occupied by the extents array (12 bytes or smaller file/symlink). If extent_depth is 1, the extents in the inode point directly to the file blocks (single indirect). If extent_depth is 2, the extents in the inode point to blocks that contain extent lists, and those indirect extents point to the file blocks (double indirect). The extent_depth can be as large as needed to store all file blocks (though with a 24-bit size field, the maximum depth needed would be 3). This allows files to be arbitrarily large (limited by the size of the device) while minimizing metadata overhead; small files will typically require only the extents list in the inode itself, while larger files may need additional block(s) to contain extents list(s). (Using extents increases seek time over a flat index list, unfortunately).
 
 Here is what a PFS inode looks like on the device:
 
@@ -56,33 +56,80 @@ Here is what a PFS inode looks like on the device:
 |               :                                               |
 +---------------+---------------+---------------+---------------+
 
+A special extent with a starting block of zero is used to store a hole in a file. The length field indicates how many more blocks are contained in the hole. For example, an extent of (0, 5) means a hole of 6 blocks. A hole, when read back, is filled with all zero bytes. The purpose of holes is to allow for sparse files, which theoretically permits a file to be larger than the device itself.
+
+Note: since an extents list is more complicated to implement and slower to scan (as mentioned above) than a flat index list, I might end up using a flat index list after all. I would still use the extent_depth field (renamed to something more appropriate for a block list) to indicate how deep the block list tree is, as I believe it is more useful than having a fixed number of singly-, doubly-, and triply-indirect blocks. Here are some example figures showing how much storage overhead a plain block list would have:
+
+file size   data blocks   pointer blocks   total blocks   total size   overhead (%) (includes slack)
+1           1             0                1              128          12700 (worst case)
+200         2             0                2              256          28
+500         4             0                4              512          2.4
+768         6             0                6              768          0 (largest size for depth 1)
+769         7             1                8              1024         33.16 (worst case for depth 2)
+800         7             1                8              1024         28
+1000        8             1                9              1152         15.2
+5000        40            1                41             5248         4.96
+8192        64            1                65             8320         1.5625
+8193        65            2                67             8576         4.67
+20000       157           3                160            20480        2.4
+700000      5469          86               5555           711040       1.58
+
+In comparison, here are example figures for extents:
+file size   data blocks   pointer blocks   total blocks   total size      overhead (%) (includes slack)
+1           1             0                1              128             12700
+200         2             0                2              256             28
+500         4             0                4              512             2.4
+768         6             0                6              768             0
+769         7             0-1              7-8            896-1024        16.5-33.16
+800         7             0-1              7-8            896-1024        12-28
+1000        8             0-1              8-9            1024-1152       2.4-15.2
+5000        40            0-1              40-41          5120-5248       2.4-4.96
+8192        64            0-2              64-66          8192-8448       0-3.125
+8193        65            0-2              65-67          8320-8576       1.55-4.67
+20000       157           0-4              157-161        20096-20608     0.48-3.04
+700000      5469          1-131            5470-5600      700160-716800   0.023-2.4
+
+
 Directories
 
 A directory is essentially the same as a regular file, except only the kernel can directly read and write it. A directory consists of a list of entries. Each entry is composed of an entry length, an inode number, and a zero (or 0xff?) padded filename string. The entry length is encoded in such a way so as to minimize flash wear. Here are the possible values and their meanings:
 
-value  entry length
-0xff   128
-0xfe   112
-0xfc   96
-0xf8   80
-0xf0   64
-0xe0   48
-0xc0   32
-0x80   16
-0x00   ?
+value   entry length
+0xffff  128
+0xfffe  136
+0xfffc  112
+0xfff8  120
+0xfff0  96
+0xffe0  88
+0xffc0  80
+0xff80  72
+0xff00  64
+0xfe00  56
+0xfc00  48
+0xf800  40
+0xf000  32
+0xe000  24
+0xc000  16
+0x8000  8
 
-This limits an entry to 128 bytes, which means a filename is limited to 125 bytes (or characters since the filesystem will probably be restricted to an eight-bit character encoding).
+This limits an entry to 128 bytes, which means a filename is limited to 124 bytes (or characters since the filesystem will probably be restricted to an eight-bit character encoding).
 
-Here is an example directory entry:
+Here are some example directory entries:
 
 offset  function  value
-0       length    0xc0 (32)
-1       inum      42
-3       name      "the-answer.txt"
-17      padding   0
-32      next entry
+0       length    0xe000 (24)
+2       inum      42
+4       name      "the-answer.txt"
+18      padding   0 (6 bytes)
 
-An inode number of 0xff means the entry is unused.
+24      length    0x8000 (8)
+26      inum      101
+28      name      "lol"
+31      padding   0 (1 byte)
+
+(note that "8.3" file names use only up to 16 bytes per entry)
+
+An inode number of 0xffff means the entry is unused.
 
 Here is a high-level view of a PFS filesystem as stored on the device:
 
@@ -108,6 +155,114 @@ Here is a high-level view of a PFS filesystem as stored on the device:
 | inode table                   |
 |                               |
 +-------------------------------+ high blocks
+
+
+Filesystem interfaces:
+
+Each filesystem exposes a certain set of functions and tables of functions that upper levels of Punix can call. The first structure to be used is:
+
+struct {
+	const char name[MAXFSNAMELEN];
+	int flags; /* eg, automount */
+	struct filesystem *read_superblock(dev_t);
+}
+
+Punix will maintain a list of pointers to such structures, one pointer for each different fstype (eg, PFS, tmpfs, procfs, VFAT, etc). If read_superblock can read the superblock on the given device, it will return a pointer to a filesystem structure:
+
+struct filesystem {
+	struct fsops *fsops;
+	ino_t root_inum;
+	/* other filesystem stuff */
+	/* union of filesystem-specific information */
+};
+
+The filesystem's read_superblock function will also fill in the fsops field in the filesystem structure:
+
+struct fsops {
+	struct inode *read_inode(struct filesystem *fs, ino_t inum);
+	void write_inode(struct filesystem *fs, struct inode *inode);
+	/* other operations, eg, get info about the fs */
+};
+
+To mount the fs, Punix needs to call read_inode() on the root inode number as given in the filesystem structure. If the inode is found on the filesystem, this will return a new inode structure and corresponding inodeops structure:
+
+struct inode {
+	struct inodeops *iops;
+	/* other inode stuff (mode, type, size, owner, etc) */
+	/* union of filesystem-specific information */
+};
+
+struct inodeops {
+	ssize_t read(struct inode *, off_t pos, void *buf, size_t count);
+	ssize_t write(struct inode *, off_t pos, void *buf, size_t count);
+	struct inode *lookup(struct inode *dirinode, const char *name, int follow);
+	/* other operations */
+};
+
+To read from an inode, Punix simply has to call
+
+	ip->iops->read(ip, pos, buf, count);
+
+To lookup an entry in a given directory, Punix does this:
+
+	fileip = dirip->iops->lookup(dirip, "filename", 0);
+
+If the file entry exists, a new inode pointer is returned. Thus a filesystem-agnostic pathname resolution function can be written.
+
+
+Here is a high-level overview of a filesystem, showing the heirarchy of the classes involved:
+
+File system
+  FS metadata ("super block")
+  inode
+    inode metadata (size, type, mode, owner, modification time, etc)
+    pointer to file data (eg, list of blocks)
+
+// in a Java-like syntax:
+class FileSystem {
+	// info about the file system here (size, used, available, etc)
+	unsigned long blocksize;
+	FileSystemType type;
+	BlockDevice bdev;
+	
+	//SuperOperations op;
+	Inode allocInode();
+	void destroyInode(Inode);
+	void readInode(Inode);
+	void writeInode(Inode);
+	int sync(int wait);
+}
+
+class FileSystemType {
+	public static abstract String name;
+	public abstract FileSystem read_superblock(int, String, void *data, Vfsmount);
+	public static abstract void kill_superblock(FileSystem);
+}
+
+
+class Inode {
+	unsigned long ino;
+	mode_t mode;
+	uid_t uid;
+	gid_t gid;
+	TimeSpec atime;
+	TimeSpec mtime;
+	TimeSpec ctime;
+
+	// inode_operations
+	int create(Dentry, nameiData);
+	Dentry lookup(Dentry, nameiData);
+	int mkdir(Dentry, int);
+	int rename(Dentry, Inode, Dentry);
+	// ...
+	// file_operations
+	ssize_t read(File, char *buf, size_t, off_t);
+	ssize_t write(File, char *buf, size_t, off_t);
+	int open(File);
+	// ...
+}
+
+
 
 
 

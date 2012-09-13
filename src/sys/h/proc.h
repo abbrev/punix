@@ -287,6 +287,8 @@ struct proc {
 	struct inode *p_rdir;	/* root directory */
 	struct tty *p_ttyp;	/* controlling tty pointer */
 	dev_t p_ttydev;		/* controlling tty device */
+
+	struct inode *p_tty;	/* controlling tty */
 	
 	mode_t p_cmask;		/* file creation mask */
 	
