@@ -79,6 +79,8 @@ garbage collect a page:
 notes about cache:
 Cache is in LRU order. Most-recently used block is at the head (index 0) of the cache list. This type of cache is vulnerable to scanning, where many blocks are accessed only once each. This pollutes the cache with blocks that will probably not be accessed again soon. A slight change to the cache should fix this: on the first access to a block, insert the block reference somewhere in the *middle* of the cache. On the next access, move the reference to the head. This will only pollute a smaller fraction of the cache toward the least-recently used end, and the cache will act as a normal LRU cache for blocks that are accessed more than once.
 
+An extension to this enhancement is to move the insertion point for first accesses dynamically. The insertion point will initially be in the middle (or thereabouts). For each first access (ie, cache miss), move the insertion point toward the most-recently-used side. For each existing access (ie, cache hit), move the insertion point toward the least-recently-used side. Another extension is to vary how far the insertion point is moved toward the least-recently-used end upon cache hits depending on where the entry was found in the cache. On second thought, these extensions might have the opposite (undesired) effect of polluting the cache further. On third thought, this is somewhat (but not quite) like the Adaptive Replacement Cache algorithm (http://en.wikipedia.org/wiki/Adaptive_Replacement_Cache).
+
 
 block is 128 bytes, block number is 2 bytes
 65536 / 130 = 504 blocks per page + 16 bytes
