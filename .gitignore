@@ -1,0 +1,7 @@
+*.o
+*.a
+*.89u
+*.9xu
+*.tib
+.dep
+*.sw[ponm]
