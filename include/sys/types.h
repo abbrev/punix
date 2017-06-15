@@ -21,7 +21,7 @@ typedef int            pid_t;
 typedef unsigned long  size_t;
 typedef long           ssize_t;
 typedef long           suseconds_t;
-typedef long           time_t;
+typedef long long      time_t;
 typedef unsigned int   uid_t;
 typedef unsigned long  useconds_t;
 

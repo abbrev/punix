@@ -96,7 +96,7 @@ boot_start:
 	bset.b	#1,0x1D(%a6)		| Enable LCD on HW2
 	move.w	#0xFFFF,0x1A(%a5)	| acknowledge AutoInt 6 & AutoInt 2
 	
-zero_start = 0x5c00+4+8
+zero_start = 0x5c00+4+12
 .if 1
 	| clear RAM starting after realtime_offset
 	move.l	#zero_start,%a0
