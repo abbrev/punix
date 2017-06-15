@@ -35,6 +35,7 @@ SYS_settimeofday = 122
 SYS_adjtime      = 140
 SYS_getloadavg1  = 160
 SYS_poweroff = 69
+SYS_clock_gettime = 161
 
 .macro	sys call
 	move	#SYS_\call,%d0

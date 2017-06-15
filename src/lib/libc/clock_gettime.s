@@ -1,3 +1,3 @@
 .include "syscalls.inc"
 
-mksyscall gettimeofday
+mksyscall clock_gettime

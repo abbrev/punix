@@ -91,4 +91,5 @@
 138 utime 4 0
 140 adjtime 4 0
 160 getloadavg1 3 0
-
+161 clock_gettime 3 0
+162 clock_settime 3 0
