@@ -66,7 +66,7 @@
 G = 0x5c00
 
 | long seconds; /* XXX: see entry.s */
-| struct timespec _realtime;
+| struct timespec realtime_offset;
 | 
 | /* all RAM below here can (should) be cleared on boot. see start.s */
 | char exec_ram[60]; /* XXX: see flash.s */

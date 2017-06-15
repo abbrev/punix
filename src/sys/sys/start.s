@@ -98,7 +98,7 @@ boot_start:
 	
 zero_start = 0x5c00+4+8
 .if 1
-	| clear RAM starting after realtime clock
+	| clear RAM starting after realtime_offset
 	move.l	#zero_start,%a0
 	move.l	#(0x40000-zero_start)/4-1,%d0
 0:	clr.l	(%a0)+

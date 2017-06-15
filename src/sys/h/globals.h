@@ -17,27 +17,37 @@
 #include "audio.h"
 #include "link.h"
 
+/*
+ * Monotonic time is a strictly monotonically increasing clock and is computed
+ * from seconds and monoticks in getmonotime(). rt.last_monotime is also used
+ * to ensure that it is strictly increasing. Monotonic time cannot be adjusted.
+ *
+ * Monotonic time is used with ITIMER_REAL timers and can be used with
+ * clock_gettime() when clk_id = CLOCK_MONOTONIC. Note: the absolute value of
+ * this clock is arbitrary. Only differences between values are meaningful.
+ *
+ * Real time (aka system time) is computed from the monotonic time by using an
+ * offset from monotonic time. When real time is adjusted, either gradually via
+ * adjtime() or with settimeofday(), the offset is modified.
+ */
 struct globals {
 	long seconds; /* XXX: see entry.s */
-	struct timespec _realtime;
+	struct timespec realtime_offset;
 	
 	/* all RAM below here can (should) be cleared on boot. see start.s */
+	/*
+	 * monoticks is incremented on each 256Hz clock tick and is reset to
+	 * zero on each 1Hz clock tick.
+	 */
+	volatile unsigned monoticks;
 	char exec_ram[60]; /* XXX: see flash.s */
 	char fpram[9*16+5*4]; /* XXX: see fpuemu.s */
 	int onkey; /* set to 1 when ON key is pressed. see entry.s */
 	int powerstate; /* set to 1 when power is off. see entry.s */
-	/*
-	 * realtime_mono monotonically increases and is never adjusted (only
-	 * incremented). This is used with ITIMER_REAL timers and can be used
-	 * with clock_gettime() when clk_id = CLOCK_MONOTONIC.
-	 * Note: the absolute value of this clock is arbitrary. Only
-	 * differences between values are meaningful.
-	 */
-	struct timespec _realtime_mono;
 	long _timeadj;
-	/* this is for getrealtime() */
+	/* this is for getmonotime() */
 	struct {
-		time_t lasttime;
+		struct timespec last_monotime;
 		long incr;
 	} rt;
 	
@@ -201,8 +211,6 @@ extern int updlock;
 # else
 
 #define G (*(struct globals *)0x5c00)
-#define realtime G._realtime
-#define realtime_mono G._realtime_mono
 #define timeadj  G._timeadj
 #define ioport   G._ioport
 #define updlock  G._updlock

@@ -135,6 +135,19 @@ STARTUP(void handle_exception(union exception_info *eip, int num))
 	} \
 } while (0)
 
+// allow both positive and negative amounts
+#define ADDNTIME(tv, nsec) do { \
+	(tv)->tv_nsec += (nsec); \
+	while ((tv)->tv_nsec >= SECOND) { \
+		(tv)->tv_nsec -= SECOND; \
+		(tv)->tv_sec++; \
+	} \
+	while ((tv)->tv_nsec < 0) { \
+		(tv)->tv_nsec += SECOND; \
+		(tv)->tv_sec--; \
+	} \
+} while (0)
+
 /* SLEWRATE is in microseconds per tick */
 #define SLEWRATE (512 / HZ) /* 512 ppm */
 #define BIGADJ 1000000L /* 1 s */
@@ -150,6 +163,7 @@ STARTUP(void hardclock(unsigned short ps))
 	
 	whereami = G.whereami;
 	++G.ticks;
+	++G.monoticks;
 
 	extern void updategray();
 	updategray();
@@ -184,11 +198,10 @@ STARTUP(void hardclock(unsigned short ps))
 		if (timeadj < 0) delta = -delta;
 		timeadj -= delta;
 		nsec += delta * 1000;
+		BUMPNTIME(&realtime_offset, nsec);
 	}
 #endif
 	
-	BUMPNTIME(&realtime, nsec);
-	BUMPNTIME(&realtime_mono, TICK);
 	BUMPNTIME(&uptime, TICK);
 	G.cumulrunning += G.numrunning;
 	
@@ -272,33 +285,11 @@ void usageinit()
  * Note 0: since this is a single increment instruction now, it can be easily
  * moved directly to the assembly-language interrupt handler (once global
  * variables work in TIGCC)
- *
- * Note 1: to keep realtime in sync when the calc powers down, we need to keep
- * track of the delta between realtime and seconds right before power down.
- * Some code to show what I mean:
- *
- * void power_off()
- * {
- * 	// other stuff that should be done before power-down (eg, sync())
- * 	delta = realtime.tv_sec - seconds;
- * 	power_down() // the low-level power-down routine
- * 	realtime.tv_sec = seconds + delta;
- * }
- *
- * If seconds doesn't increment while it is powered off (that is, if the calc
- * is powered off for less than a second), there will be some time loss
- * (<1 second) in the realtime clock. In fact, there will be time loss whenever
- * there is less time until the next "seconds" increment after power-on than
- * before power-off. On the flip side, there will be time gain when there is
- * more time until the next increment after power-on than at power-off.
- * However, these time gains and losses are symmetrical (each should happen 50%
- * of the time, theoretically), so any drift because of this should be
- * negligible (plus we are on a graphing calculator with probably inaccurate
- * hardware clock(s) anyway).
  */
 STARTUP(void updwalltime())
 {
 	++G.seconds;
+	G.monoticks = 0;
 }
 #endif
 
@@ -358,10 +349,6 @@ void return_from_int(unsigned short ps, void **pc, void **usp)
 
 void cpupoweroff()
 {
-	int x = spl7();
-	long oldrt = realtime.tv_sec - G.seconds;
-	splx(x);
-	
 	G.onkey = 0;
 	G.powerstate = 1;
 	
@@ -369,18 +356,49 @@ void cpupoweroff()
 	LCD_CONTRAST |= (1<<4);   // disable screen (hw1)
 	LCD_CONTROL &= ~(1<<1);  // shut down LCD (hw2)
 	
+	while (G.monoticks)
+		;
+	
+	long s = seconds; // start time of poweroff state
+
 	while (!G.onkey)
 		cpuidle(INT_3|INT_4);
+	
+	int splclock();
+	if (timeadj) {
+		/*
+		 * Continue the time adjustment made by adjtime() by stepping
+		 * realtime_offset by 5000ppm of the time the calculator was
+		 * turned off. This is equivalent to BIGSLEWRATE, defined
+		 * above.
+		 *
+		 * Untested and probably buggy!
+		 */
+		long sdelta = (s - seconds);
+		long t;
+		if (timeadj > 0) {
+			if (sdelta >= timeadj / 5000) {
+				t = timeadj;
+			} else {
+				t = sdelta * 5000;
+			}
+		} else /*if (timeadj < 0)*/ {
+			if (-sdelta <= timeadj / 5000) {
+				t = timeadj;
+			} else {
+				t = -sdelta * 5000;
+			}
+		}
+		ADDNTIME(&G.realtime_offset, t * 1000);
+		timeadj -= t;
+	}
+	splx(x);
 	
 	LCD_CONTROL |= (1<<1);
 	LCD_CONTRAST &= ~(1<<4);
 	LCD_ROW_SYNC = 0b00100001;
 	lcd_reset_contrast(); // contrast was reset when 0x60001d (LCD_CONTRAST) was modified
-	
+
 	G.powerstate = 0;
-	
-	spl7();
-	realtime.tv_sec = oldrt + G.seconds;
-	splx(x);
 }
 

@@ -80,12 +80,13 @@ STARTUP(void kmain())
 	 "under the terms of the GNU General Public License.\n"
 	 "\n");
 #endif
+	struct timespec realtime = getrealtime();
 	if (realtime.tv_sec < 1000000000L) { /* before ~2001 */
 		extern const unsigned long build_date;
 		realtime.tv_sec = build_date;
 		realtime.tv_nsec = 0;
+		setrealtime(&realtime);
 	}
-	G.seconds = realtime.tv_sec;
 	uptime.tv_sec = uptime.tv_nsec = 0;
 	spl0();
 	bogomips();

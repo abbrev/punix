@@ -552,7 +552,7 @@ static void teststrtol(int argc, char *argv[], char *envp[])
 
 static void testclock(int argc, char *argv[], char *envp[])
 {
-	printf("system clock:  %ld\n", realtime.tv_sec);
+	//printf("system clock:  %ld\n", realtime.tv_sec);
 	printf("seconds clock: %ld\n", G.seconds);
 	userpause();
 }

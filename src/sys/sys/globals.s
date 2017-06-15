@@ -7,14 +7,13 @@
  * These are variables that may be accessed in either C or assembly routines.
  */
 
-.global realtime, runrun, ioport, cputime, updlock, exec_ram
+.global runrun, ioport, cputime, updlock, exec_ram
 .global G
 
 .section notabsolute,"w"
 |.org 0x5c00
 
 .if 0
-realtime:	.skip	4
 runrun:	.skip	2
 ioport:	.skip	2
 cputime:	.skip	2
